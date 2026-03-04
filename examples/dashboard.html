@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard Premium de Crédito</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 p-6">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Título -->
+    <div class="text-center">
+      <h1 class="text-2xl font-bold">🔍 Insights Premium - Análise de Crédito</h1>
+      <p class="text-gray-500">Análise consultiva com base em dados comportamentais, cadastrais e preditivos</p>
+    </div>
+
+    <!-- Matriz de Risco -->
+    <div class="bg-white rounded-xl p-6 shadow-md">
+      <h2 class="text-xl font-semibold mb-2">📌 Matriz de Risco</h2>
+      <canvas id="matrizRisco" height="150"></canvas>
+      <p class="text-sm mt-2 text-gray-600">Cruzamento entre score, tempo de fundação e negativação.</p>
+    </div>
+
+    <!-- Cluster de Similaridade -->
+    <div class="bg-white rounded-xl p-6 shadow-md">
+      <h2 class="text-xl font-semibold mb-2">📊 Cluster de Similaridade</h2>
+      <canvas id="clusterSimilaridade" height="150"></canvas>
+      <p class="text-sm mt-2 text-gray-600">Comparação com empresas similares do mesmo setor e região.</p>
+    </div>
+
+    <!-- Previsão de Inadimplência -->
+    <div class="bg-white rounded-xl p-6 shadow-md">
+      <h2 class="text-xl font-semibold mb-2">📉 Previsão de Inadimplência</h2>
+      <canvas id="previsaoInadimplencia" height="150"></canvas>
+      <p class="text-sm mt-2 text-gray-600">Projeção de 3–6 meses com base em histórico de comportamento.</p>
+    </div>
+
+    <!-- Diagnóstico Final -->
+    <div class="bg-white rounded-xl p-6 shadow-md border-l-8 border-blue-600">
+      <h2 class="text-xl font-semibold text-blue-700 mb-2">✅ Diagnóstico Consultivo Final</h2>
+      <ul class="list-disc list-inside text-sm space-y-1">
+        <li><strong>Recomendação:</strong> Crédito Condicionado</li>
+        <li><strong>Motivos:</strong> Score alto, consultas recentes, bom histórico</li>
+        <li><strong>Ações sugeridas:</strong> Garantias leves e monitoramento mensal</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Scripts dos gráficos -->
+  <!-- <script src="https://xbot-app.s3.us-east-1.amazonaws.com/cdn/1.0.0/xbot.min.js"></script> -->
+   <script src="./../xbot.js"></script>
+  
+  <script>    
+    window.initXBot({
+      botName: "Dilsão da Xbot",      
+      botAvatar: "data:image/jpeg;base64,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",
+      launcherIcon: 'https://xbot.digital/lovable-uploads/bb25477e-ad2b-4098-8918-19310f719890.png',
+      themeColor: "black",
+      welcomeMessage: "Olá! Como posso te ajudar com o XBot?",
+      position: 'right',
+      token: "xbot_token_abc123",
+      offsetBottom: 100
+    });
+    
+    setTimeout(() => {
+      if (window.sendXBotMessage) {
+        window.sendXBotMessage("Você tem uma nova mensagem!");
+      } else {
+        console.error("❌ XBot ainda não foi carregado.");
+      }
+    }, 5000);
+  </script>
+
+  
+  
+
+  <script>
+    // Matriz de Risco
+    new Chart(document.getElementById("matrizRisco"), {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: 'Empresas',
+          data: [
+            { x: 636, y: 24 },  // Score x Tempo de fundação (em anos)
+            { x: 520, y: 10 },
+            { x: 720, y: 15 },
+          ],
+          backgroundColor: ['red', 'orange', 'green']
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: 'Score' }, min: 0, max: 1000 },
+          y: { title: { display: true, text: 'Anos de Fundação' } }
+        }
+      }
+    });
+
+    // Cluster de Similaridade
+    new Chart(document.getElementById("clusterSimilaridade"), {
+      type: 'radar',
+      data: {
+        labels: ['Score', 'Fundação', 'Consultas', 'Negativações', 'Similaridade'],
+        datasets: [{
+          label: 'Empresa Analisada',
+          data: [636, 24, 5, 0, 82],
+          backgroundColor: 'rgba(59, 130, 246, 0.2)',
+          borderColor: 'rgba(59, 130, 246, 1)'
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          r: { min: 0, max: 100 }
+        }
+      }
+    });
+
+    // Previsão de Inadimplência
+    new Chart(document.getElementById("previsaoInadimplencia"), {
+      type: 'line',
+      data: {
+        labels: ['Hoje', '30 dias', '60 dias', '90 dias'],
+        datasets: [{
+          label: 'Probabilidade de Inadimplência (%)',
+          data: [0.87, 1.5, 3.2, 7.2],
+          fill: false,
+          borderColor: 'rgb(255, 99, 132)',
+          tension: 0.3
+        }]
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: '%' }
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
