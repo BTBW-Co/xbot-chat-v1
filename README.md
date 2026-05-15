@@ -1,82 +1,40 @@
 # xbot-widget (XChat)
 
-Widget de chat para embed em sites. Conecta à API do XBot via **API key** (token com permissão XChat).
+Widget de chat para embed em sites. Conecta à API do XBot.
 
-## Instalação (sem npm)
+## Autenticação (recomendado)
 
-Inclua o script no seu site e chame `initXBot`. O script pode ser servido via **jsDelivr** (GitHub) ou outro CDN.
-
-### 1. Inclua o script (jsDelivr – GitHub)
-
-Substitua `ORGANIZACAO/REPO` e a tag `1.0.1` pela versão desejada:
+1. No painel XBot, crie um **API Client** em **Configurações → API Keys** com o escopo **`xchat:widget`** (guarde `client_id` e `client_secret` — o secret só aparece na criação).
+2. Crie um canal **XChat** em **Configurações → Conexões** e associe uma **pipeline** (comportamento do bot vem da pipeline).
+3. No site, use `channelId` (UUID do canal XChat), `clientId` e `token` (**client_secret**) via variáveis de ambiente no build — **não** commite o secret em repositório público.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/ORGANIZACAO/REPO@1.0.1/versions/1.0.1/xbot.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/ORGANIZACAO/REPO@1.0.2/versions/1.0.2/xbot.min.js"></script>
+<script>
+  window.initXBot({
+    channelId: "UUID-DO-CANAL-XCHAT",
+    clientId: "SEU_CLIENT_ID",
+    token: "SEU_CLIENT_SECRET",
+    apiBaseUrl: "https://api.xbot.digital",
+    position: "right",
+    themeColor: "#25D366"
+  });
+</script>
 ```
 
-### 2. Instancie o widget
+O widget envia `channel_id` no JSON de `/v1/xchat/message` e os cabeçalhos `Authorization: Bearer <client_secret>` e `X-XBot-Client-Id: <client_id>`.
 
-Para sites em **outro domínio** (fora do XBot), use `apiBaseUrl` apontando para a API do XBot. O `token` é a **API key** com permissão XChat.
+## Legado
+
+Canais antigos podem ainda usar apenas `token` igual ao segredo do canal (sem `clientId` / `channelId`). Prefira migrar para API Keys.
+
+## Desenvolvimento
+
+- Fonte: `app/xbot.js`
+- Build minificado (exemplo): `npx terser app/xbot.js -c -m -o versions/1.0.2/xbot.min.js`
+
+## Mensagens do sistema
 
 ```js
-window.initXBot({
-  token: "SUA_API_KEY_XCHAT",
-  apiBaseUrl: "https://api.xbot.digital",
-  botName: "Atendimento",
-  botAvatar: "",
-  launcherIcon: "https://xbot.digital/lovable-uploads/bb25477e-ad2b-4098-8918-19310f719890.png",
-  themeColor: "#25D366",
-  welcomeMessage: "Olá! Como posso te ajudar?",
-  position: "right"
-});
-```
-
-- **token**: API key com permissão XChat (obtida no painel ao criar o inbound XChat).
-- **apiBaseUrl**: URL base da API (ex.: `https://api.xbot.digital`). Quando informada, o widget chama `/v1/xchat/message` e `/v1/xchat/upload` nessa base.
-
-O XBot será exibido como um botão flutuante no canto da tela, e ao clicar, abrirá o chat com seu bot personalizado.
-
-🔔 3. Enviar mensagens do sistema:
-
-Você pode disparar mensagens diretamente via JavaScript:
-
-``` js
 window.sendXBotMessage("Você tem uma nova mensagem!");
 ```
-Essa chamada simula uma mensagem enviada pelo bot e ativa a notificação visual no botão flutuante.
-
-⚛️ **React**:
-
-Você pode criar o componente XbotWidget e importar normalmente em qualquer página da aplicação:
-```js
-import { useEffect } from 'react';
-
-export function XBotWidget() {
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://xbot-app.s3.us-east-1.amazonaws.com/cdn/1.0.0/xbot.min.js';
-    script.async = true;
-
-    script.onload = () => {
-      window.initXBot?.({
-        botName: 'nome desejado',
-        botAvatar: 'url da foto desejada',
-        launcherIcon: 'https://xbot.digital/lovable-uploads/bb25477e-ad2b-4098-8918-19310f719890.png',
-        themeColor: 'black',
-        welcomeMessage: 'Olá! Como posso te ajudar com o XBot?',
-        position: 'right',
-        token: 'xbot_token_abc123',
-      });
-    };
-
-    document.body.appendChild(script);
-
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
-
-  return null;
-}
-```
-

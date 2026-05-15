@@ -35,11 +35,28 @@
             launcherIcon = '',
             themeColor = '#25D366',
             position = 'right',
-            welcomeMessage = 'Olá! Como posso te ajudar?',
+            welcomeMessage = null,
             token = '',
+            clientId = '',
+            channelId = '',
             apiBaseUrl = '',
             offsetBottom = 20
         } = config;
+
+        function buildAuthHeaders(extra) {
+            const h = Object.assign({}, extra || {});
+            if (clientId && channelId && token) {
+                h['Authorization'] = 'Bearer ' + token;
+                h['X-XBot-Client-Id'] = clientId;
+                return h;
+            }
+            if (token) {
+                h['Authorization'] = 'Bearer ' + token;
+                return h;
+            }
+            return h;
+        }
+
         function getMessageUrl() {
             if (!apiBaseUrl || !apiBaseUrl.trim()) return '/api/xbot/message';
             return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/message';
@@ -390,8 +407,8 @@
                 button.style.backgroundImage = `url(${closeIcon})`;
 
                 // Mostrar mensagem de boas-vindas apenas uma vez
-                if (!welcomeShown && welcomeMessage) {
-                  appendMessage(welcomeMessage, 'bot');
+                if (!welcomeShown && welcomeMessage != null && String(welcomeMessage).trim()) {
+                  appendMessage(String(welcomeMessage).trim(), 'bot');
                   welcomeShown = true;
                 }
             } else {
@@ -456,13 +473,13 @@
           
             try {
                 const visitorId = getVisitorId();
+                const msgBody = { message: text };
+                if (visitorId) msgBody.visitor_id = visitorId;
+                if (channelId) msgBody.channel_id = channelId;
                 const response = await fetch(getMessageUrl(), {
                     method: 'POST',
-                    headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ message: text, visitor_id: visitorId || undefined })
+                    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(msgBody)
                 });
                 const data = await response.json();
                 if (data.visitor_id && visitorId !== data.visitor_id && typeof localStorage !== 'undefined') {
@@ -535,9 +552,12 @@
             messages.scrollTop = messages.scrollHeight;
         
             try {
+            if (window.__xbotConfig.channelId) {
+                formData.append('channel_id', window.__xbotConfig.channelId);
+            }
             const res = await fetch(getUploadUrl(), {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${window.__xbotConfig.token}` },
+                headers: buildAuthHeaders({}),
                 body: formData
             });
             const data = await res.json();
@@ -593,9 +613,12 @@
                 messages.scrollTop = messages.scrollHeight;
         
                 try {
-                const res = await fetch('/api/xbot/upload', {
+                if (window.__xbotConfig.channelId) {
+                    formData.append('channel_id', window.__xbotConfig.channelId);
+                }
+                const res = await fetch(getUploadUrl(), {
                     method: 'POST',
-                    headers: { Authorization: `Bearer ${window.__xbotConfig.token}` },
+                    headers: buildAuthHeaders({}),
                     body: formData
                 });
                 const data = await res.json();
