@@ -81,6 +81,8 @@ O painel XBot (**Conexões → XChat**) gera um snippet igual ao HTML acima para
 
 No painel: **Conexões → editar canal XChat** — defina nome exibido, cor do chat, ícone do botão (upload no bucket do tenant), avatares do assistente e do visitante.
 
+Se alguma imagem não for enviada, o widget usa os **ícones padrão XBot** (`assets/default/` no repositório, servidos via jsDelivr `@main`).
+
 O widget carrega essas preferências com `GET /v1/xchat/widget-config?channel_id=<UUID>` (mesma autenticação de `POST /message`).
 
 ---
