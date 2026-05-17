@@ -1,6 +1,7 @@
 (function () {
 
     var XBOT_WIDGET_VERSION = '__XBOT_WIDGET_VERSION__';
+    window.__XBOT_WIDGET_VERSION = XBOT_WIDGET_VERSION;
 
     var XBOT_DEFAULT_ASSETS_BASE =
       'https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default';
@@ -62,10 +63,10 @@
     }
 
     function widgetLog() {
-      if (typeof console === 'undefined' || !console.info) return;
+      if (typeof console === 'undefined' || !console.log) return;
       var args = ['[XBot Widget ' + XBOT_WIDGET_VERSION + ']'];
       for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
-      console.info.apply(console, args);
+      console.log.apply(console, args);
     }
 
     window.initXBot = function (config) {
