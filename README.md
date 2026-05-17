@@ -83,7 +83,16 @@ No painel: **Conexões → editar canal XChat** — defina nome exibido, cor do 
 
 Se alguma imagem não for enviada, o widget usa os **ícones padrão XBot** (`assets/default/` no repositório, servidos via jsDelivr `@main`).
 
+### Visual (v1.0.3+)
+
+- Cabeçalho escuro XBot com faixa na cor do tema
+- Botão flutuante maior, com anel de destaque e ícone SVG ao fechar
+- Ícones monocromáticos (anexo, microfone, enviar) — sem seletor de emoji
+- Balões de mensagem e área de composição redesenhados
+
 O widget carrega essas preferências com `GET /v1/xchat/widget-config?channel_id=<UUID>` (mesma autenticação de `POST /message`).
+
+A API aceita CORS em `/v1/xchat/*` a partir de qualquer origem HTTPS (sites dos clientes com o embed).
 
 ---
 

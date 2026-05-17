@@ -136,336 +136,453 @@
             } catch (e) { return null; }
         }
     
-        const closeIcon = "https://cdn-icons-png.flaticon.com/512/1828/1828843.png";
         const offset = offsetBottom || 20;
+
+        function hexToRgb(hex) {
+            var h = (hex || '#22c55e').replace('#', '').trim();
+            if (h.length === 3) {
+                h = h.split('').map(function (c) { return c + c; }).join('');
+            }
+            return {
+                r: parseInt(h.slice(0, 2), 16) || 34,
+                g: parseInt(h.slice(2, 4), 16) || 197,
+                b: parseInt(h.slice(4, 6), 16) || 94,
+            };
+        }
+        var rgb = hexToRgb(themeColor);
+        var themeRgb = rgb.r + ', ' + rgb.g + ', ' + rgb.b;
+
+        var XBOT_ICONS = {
+            close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+            send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+            attach: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
+            mic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>',
+            stop: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+        };
 
         let unreadCount = 0;
         let welcomeShown = false;
-        
+
+        const posH = position === 'left' ? 'left' : 'right';
 
         const style = document.createElement('style');
         style.innerHTML = `
-            .xbot-button {
-            position: fixed;
-            bottom: 20px;            
-            ${position === 'left' ? 'left: 20px;' : 'right: 20px;'}
-            width: 60px;
-            height: 60px;
-            background-color: ${themeColor};
-            border-radius: 50%;
-            border: none;
-            background-image: url('${launcherIcon}');
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            cursor: pointer;
-            z-index: 9999;
+            .xbot-root, .xbot-root * { box-sizing: border-box; }
+            .xbot-launcher {
+                position: fixed;
+                bottom: ${offset}px;
+                ${posH}: 20px;
+                width: 64px;
+                height: 64px;
+                padding: 0;
+                border: 3px solid #fff;
+                border-radius: 50%;
+                cursor: pointer;
+                z-index: 2147483000;
+                background: ${themeColor};
+                box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(${themeRgb}, 0.22);
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: visible;
             }
-    
-            .xbot-chatbox {
-            position: fixed;
-            bottom: 90px;
-            ${position === 'left' ? 'left: 20px;' : 'right: 20px;'}
-            width: 320px;
-            min-height: 300px;
-            max-height: 500px;
-            background: #fff;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            display: none;
-            flex-direction: column;
-            overflow: hidden;
-            z-index: 9999;
-            font-family: Arial, sans-serif;
+            .xbot-launcher:hover { transform: scale(1.06); }
+            .xbot-launcher__face {
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
             }
-    
-            .xbot-header {
-            background-color: ${themeColor};
-            color: white;
-            padding: 12px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: bold;
+            .xbot-launcher__close {
+                display: none;
+                color: #fff;
+                align-items: center;
+                justify-content: center;
             }
-    
-            .xbot-header img {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
+            .xbot-launcher.is-open {
+                background: #0f172a;
+                box-shadow: 0 12px 40px rgba(15, 23, 42, 0.35), 0 0 0 6px rgba(${themeRgb}, 0.15);
             }
-    
-            .xbot-messages {
-            flex: 1;
-            padding: 10px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            scroll-behavior: smooth;
-            }
-    
-            .xbot-message-content {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end; /* empurra a hora pra direita */
-            gap: 4px;
-            }
-
-            .xbot-text {
-            display: block;
-            word-wrap: break-word;
-            }
-
-            .xbot-time {
-            font-size: 10px;
-            font-weight: 300;
-            color: rgba(0, 0, 0, 0.5);
-            align-self: flex-end;
-            }         
-
-            .xbot-input-area {
-            display: flex;
-            border-top: 1px solid #ccc;
-            align-items: center;
-            padding: 5px;
-            }
-    
-            .xbot-input {
-            flex: 1;
-            border: none;
-            padding: 10px;
-            font-size: 14px;
-            resize: none;
-            overflow: hidden;
-            line-height: 1.4;
-            }
-    
-            .xbot-send {
-            background: ${themeColor};
-            color: white;
-            border-radius: 5px;
-            padding: 0 15px;
-            cursor: pointer;
-            margin-left: 5px;
-            height: 35px;
-            }
-
-            .xbot-toolbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 5px 10px;
-            border-top: 1px solid #eee;
-            }
-
-            .xbot-icons {
-            display: flex;
-            gap: 10px;
-            }
-
-            .xbot-toolbar button {
-            background: none;
-            border: none;
-            font-size: 18px;
-            cursor: pointer;
-            color: #888;
-            }
-
-            .xbot-powered {
-            font-size: 10px;
-            color: #aaa;
-            font-style: italic;
-            white-space: nowrap;
-            }
-    
-            .xbot-message {
-            margin: 5px 0;
-            padding: 8px 12px;
-            border-radius: 18px;
-            max-width: 80%;
-            font-size: 14px;
-            line-height: 1.4;
-            opacity: 0;
-            transform: translateY(10px);
-            animation: fadeInUp 0.3s ease forwards;
-            }
-
-            .xbot-input {
-            flex: 1;
-            border: 1px solid #ccc; /* borda padrão */
-            padding: 10px;
-            font-size: 14px;
-            resize: none;
-            overflow: hidden;
-            line-height: 1.4;
-            border-radius: 6px;
-            outline: none; /* remove o azul padrão */
-            }
+            .xbot-launcher.is-open .xbot-launcher__face { display: none; }
+            .xbot-launcher.is-open .xbot-launcher__close { display: flex; }
 
             .xbot-notification {
-            position: absolute;
-            top: -6px;
-            right: -6px;
-            background-color: red;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            display: none;
-            align-items: center;
-            justify-content: center;
+                position: absolute;
+                top: -4px;
+                right: -4px;
+                min-width: 20px;
+                height: 20px;
+                padding: 0 6px;
+                background: #ef4444;
+                color: #fff;
+                font-size: 11px;
+                font-weight: 700;
+                border-radius: 999px;
+                border: 2px solid #fff;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
             }
 
-            .xbot-input:focus-visible {
-            border-color: ${themeColor}; 
-            box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05); /* opcional */
-            }
-    
-            @keyframes fadeInUp {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-            }
-    
-            .xbot-message-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            max-width: 88%;
-            }
-            .xbot-message-row.user {
-            align-self: flex-end;
-            flex-direction: row-reverse;
-            }
-            .xbot-message-row.bot {
-            align-self: flex-start;
-            }
-            .xbot-msg-avatar {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            object-fit: cover;
-            flex-shrink: 0;
-            background: #e5e7eb;
-            }
-
-            .xbot-message.user {
-            background-color: #dcf8c6;
-            border-radius: 10px 10px 0px 10px;
-            }
-    
-            .xbot-message.bot {
-            background-color: #f1f0f0;
-            border-radius: 10px 10px 0px 10px;
-            }
-    
-            .xbot-message a {
-            color:rgb(246, 60, 147);
-            text-decoration: underline;
-            word-break: break-word;
-            }
-    
-            .xbot-typing {
-            font-size: 12px;
-            color: gray;
-            margin: 4px;
-            font-style: italic;
-            }
-    
-            @media screen and (max-width: 600px) {
             .xbot-chatbox {
-                width: 100vw;
-                height: 100vh;
-                bottom: 0;
-                right: 0;
-                border-radius: 0;
+                position: fixed;
+                bottom: ${offset + 84}px;
+                ${posH}: 20px;
+                width: 380px;
+                max-width: calc(100vw - 24px);
+                height: min(560px, calc(100vh - ${offset + 100}px));
+                background: #fff;
+                border-radius: 20px;
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.04);
+                display: none;
+                flex-direction: column;
+                overflow: hidden;
+                z-index: 2147482999;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                animation: xbotSlideIn 0.28s ease;
             }
+            @keyframes xbotSlideIn {
+                from { opacity: 0; transform: translateY(12px) scale(0.98); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+
+            .xbot-header {
+                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                color: #fff;
+                padding: 14px 16px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                border-bottom: 3px solid ${themeColor};
+                flex-shrink: 0;
+            }
+            .xbot-header img {
+                width: 40px;
+                height: 40px;
+                border-radius: 12px;
+                object-fit: cover;
+                border: 2px solid rgba(255,255,255,0.15);
+            }
+            .xbot-header-text { flex: 1; min-width: 0; }
+            .xbot-header-name {
+                display: block;
+                font-size: 15px;
+                font-weight: 600;
+                letter-spacing: -0.02em;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .xbot-header-status {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                color: rgba(255,255,255,0.72);
+                margin-top: 2px;
+            }
+            .xbot-status-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: #22c55e;
+                box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
+            }
+            .xbot-header-minimize {
+                width: 36px;
+                height: 36px;
+                border: none;
+                border-radius: 10px;
+                background: rgba(255,255,255,0.08);
+                color: #fff;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background 0.15s;
+            }
+            .xbot-header-minimize:hover { background: rgba(255,255,255,0.16); }
+
+            .xbot-messages {
+                flex: 1;
+                padding: 16px;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                scroll-behavior: smooth;
+                background: linear-gradient(180deg, #f8fafc 0%, #fff 48px);
+            }
+
+            .xbot-message-row {
+                display: flex;
+                align-items: flex-end;
+                gap: 8px;
+                max-width: 92%;
+            }
+            .xbot-message-row.user { align-self: flex-end; flex-direction: row-reverse; }
+            .xbot-message-row.bot { align-self: flex-start; }
+            .xbot-msg-avatar {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                object-fit: cover;
+                flex-shrink: 0;
+                background: #e2e8f0;
+            }
+
+            .xbot-message {
+                padding: 10px 14px;
+                border-radius: 16px;
+                font-size: 14px;
+                line-height: 1.45;
+                opacity: 0;
+                transform: translateY(8px);
+                animation: xbotFadeIn 0.28s ease forwards;
+            }
+            @keyframes xbotFadeIn {
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .xbot-message.user {
+                background: rgba(${themeRgb}, 0.12);
+                border: 1px solid rgba(${themeRgb}, 0.22);
+                color: #0f172a;
+                border-bottom-right-radius: 4px;
+            }
+            .xbot-message.bot {
+                background: #fff;
+                border: 1px solid #e2e8f0;
+                color: #334155;
+                border-bottom-left-radius: 4px;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            }
+            .xbot-message-content {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .xbot-message.user .xbot-message-content { align-items: flex-end; }
+            .xbot-text { display: block; word-wrap: break-word; }
+            .xbot-text p { margin: 0 0 0.35em; }
+            .xbot-text p:last-child { margin-bottom: 0; }
+            .xbot-time {
+                font-size: 10px;
+                color: #94a3b8;
+            }
+            .xbot-message a {
+                color: ${themeColor};
+                font-weight: 500;
+                text-decoration: none;
+                border-bottom: 1px solid rgba(${themeRgb}, 0.4);
+            }
+            .xbot-message a:hover { opacity: 0.85; }
+
+            .xbot-typing {
+                font-size: 12px;
+                color: #64748b;
+                padding: 4px 8px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .xbot-typing-dots span {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: ${themeColor};
+                display: inline-block;
+                animation: xbotDot 1.2s infinite ease-in-out;
+            }
+            .xbot-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+            .xbot-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+            @keyframes xbotDot {
+                0%, 80%, 100% { opacity: 0.35; transform: scale(0.85); }
+                40% { opacity: 1; transform: scale(1); }
+            }
+
+            .xbot-compose {
+                padding: 12px 14px 10px;
+                border-top: 1px solid #e2e8f0;
+                background: #fff;
+                flex-shrink: 0;
+            }
+            .xbot-compose-inner {
+                display: flex;
+                align-items: flex-end;
+                gap: 8px;
+                background: #f1f5f9;
+                border: 1px solid #e2e8f0;
+                border-radius: 14px;
+                padding: 6px 6px 6px 10px;
+                transition: border-color 0.15s, box-shadow 0.15s;
+            }
+            .xbot-compose-inner:focus-within {
+                border-color: rgba(${themeRgb}, 0.55);
+                box-shadow: 0 0 0 3px rgba(${themeRgb}, 0.12);
+                background: #fff;
+            }
+            .xbot-compose-tools {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                padding-bottom: 2px;
+            }
+            .xbot-icon-btn {
+                width: 32px;
+                height: 32px;
+                border: none;
+                border-radius: 8px;
+                background: transparent;
+                color: #64748b;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background 0.15s, color 0.15s;
+            }
+            .xbot-icon-btn:hover {
+                background: rgba(15, 23, 42, 0.06);
+                color: #0f172a;
+            }
+            .xbot-icon-btn.is-recording {
+                color: #ef4444;
+                background: rgba(239, 68, 68, 0.1);
+            }
+            .xbot-input {
+                flex: 1;
+                border: none;
+                background: transparent;
+                padding: 8px 4px;
+                font-size: 14px;
+                line-height: 1.45;
+                resize: none;
+                max-height: 120px;
+                outline: none;
+                font-family: inherit;
+                color: #0f172a;
+            }
+            .xbot-input::placeholder { color: #94a3b8; }
+            .xbot-send {
+                width: 40px;
+                height: 40px;
+                flex-shrink: 0;
+                border: none;
+                border-radius: 12px;
+                background: ${themeColor};
+                color: #fff;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: transform 0.15s, filter 0.15s;
+            }
+            .xbot-send:hover { filter: brightness(1.06); transform: scale(1.04); }
+            .xbot-send:active { transform: scale(0.96); }
+
+            .xbot-footer {
+                padding: 6px 14px 12px;
+                text-align: center;
+                background: #fff;
+                flex-shrink: 0;
+            }
+            .xbot-powered {
+                font-size: 11px;
+                color: #94a3b8;
+                text-decoration: none;
+                letter-spacing: 0.02em;
+            }
+            .xbot-powered strong {
+                color: #0f172a;
+                font-weight: 600;
+            }
+            .xbot-powered:hover strong { color: ${themeColor}; }
+
+            @media screen and (max-width: 600px) {
+                .xbot-chatbox {
+                    width: 100vw;
+                    max-width: 100vw;
+                    height: 100vh;
+                    bottom: 0 !important;
+                    ${posH}: 0 !important;
+                    border-radius: 0;
+                }
+                .xbot-launcher { bottom: 16px; ${posH}: 16px; }
             }
         `;
 
         document.head.appendChild(style);
     
-        const button = document.createElement('button');
-        button.className = 'xbot-button';
-                
-        const chatbox = document.createElement('div');
-        chatbox.className = 'xbot-chatbox';
-        chatbox.style.display = 'none'; 
-        chatbox.innerHTML = `
-            <div class="xbot-header">
-            ${botAvatar ? `<img src="${botAvatar}" alt="avatar" />` : ''}
-            <span>${botName}</span>
-            </div>
-            <div class="xbot-messages" id="xbot-messages"></div>            
-            <div class="xbot-input-area">
-                <textarea class="xbot-input" id="xbot-input" placeholder="Escreva sua mensagem..." rows="1"></textarea>
-                <button class="xbot-send" id="xbot-send">Enviar</button>
-            </div>
-            <div class="xbot-toolbar">
-                <div class="xbot-icons">                    
-                    <button id="xbot-emoji">😊</button>    
-                    <button id="xbot-upload">📎</button>
-                    <button id="xbot-audio">🎤</button>
-                </div>
-                <a class="xbot-powered" href="https://xbot.digital" target="_blank" rel="noopener noreferrer">
-                    powered by <strong>XBot</strong>
-                </a>
-            </div>            
-        `;
+        const launcher = document.createElement('button');
+        launcher.className = 'xbot-launcher xbot-root';
+        launcher.type = 'button';
+        launcher.setAttribute('aria-label', 'Abrir chat');
+        launcher.innerHTML =
+            '<span class="xbot-launcher__face"></span>' +
+            '<span class="xbot-launcher__close">' + XBOT_ICONS.close + '</span>';
+        launcher.querySelector('.xbot-launcher__face').style.backgroundImage =
+            "url('" + launcherIcon.replace(/'/g, "%27") + "')";
 
-        const emojiPopup = document.createElement('div');
-        emojiPopup.className = 'xbot-emoji-popup';
-        emojiPopup.style.display = 'none';
-        emojiPopup.style.position = 'absolute';
-        emojiPopup.style.bottom = '60px'; // altura do input
-        emojiPopup.style.left = '10px';
-        emojiPopup.style.right = '10px';
-        emojiPopup.style.background = '#fff';
-        emojiPopup.style.border = '1px solid #ddd';
-        emojiPopup.style.borderRadius = '8px';
-        emojiPopup.style.padding = '8px';
-        emojiPopup.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-        emojiPopup.style.zIndex = '2';
-        emojiPopup.style.display = 'flex';
-        emojiPopup.style.flexWrap = 'nowrap';
-        emojiPopup.style.overflowX = 'auto';
-        emojiPopup.style.maxWidth = '100%';
-        emojiPopup.style.gap = '10px';
-        emojiPopup.style.fontSize = '22px';
-        emojiPopup.style.scrollBehavior = 'smooth';
-        emojiPopup.style.alignItems = 'center';
-        emojiPopup.style.backgroundClip = 'padding-box';
-        
-        const emojis = ['😂','😍','🥰','🤣','😊','😭','😘','😎','😁','😉','👍','🙏'];
-        
-        emojis.forEach(emoji => {
-          const btn = document.createElement('button');
-          btn.textContent = emoji;
-          btn.style.border = 'none';
-          btn.style.background = 'transparent';
-          btn.style.cursor = 'pointer';
-          btn.onclick = () => {
-            input.value += emoji;
-            input.focus();
-            emojiPopup.style.display = 'none';
-          };
-          emojiPopup.appendChild(btn);
-        });
-        
         const notification = document.createElement('div');
         notification.className = 'xbot-notification';
         notification.textContent = '1';
+        launcher.appendChild(notification);
 
-        document.body.appendChild(emojiPopup);
-        document.body.appendChild(button);
-        button.style.bottom = `${offsetBottom || 20}px`;  
-        button.appendChild(notification);   
+        const chatbox = document.createElement('div');
+        chatbox.className = 'xbot-chatbox xbot-root';
+        chatbox.style.display = 'none';
+        chatbox.innerHTML =
+            '<div class="xbot-header">' +
+            (botAvatar ? '<img src="' + botAvatar + '" alt="" />' : '') +
+            '<div class="xbot-header-text">' +
+            '<span class="xbot-header-name"></span>' +
+            '<span class="xbot-header-status"><span class="xbot-status-dot"></span>Online agora</span>' +
+            '</div>' +
+            '<button type="button" class="xbot-header-minimize" aria-label="Minimizar">' +
+            XBOT_ICONS.close +
+            '</button></div>' +
+            '<div class="xbot-messages" id="xbot-messages"></div>' +
+            '<div class="xbot-compose">' +
+            '<div class="xbot-compose-inner">' +
+            '<div class="xbot-compose-tools">' +
+            '<button type="button" class="xbot-icon-btn" id="xbot-upload" aria-label="Anexar arquivo">' +
+            XBOT_ICONS.attach +
+            '</button>' +
+            '<button type="button" class="xbot-icon-btn" id="xbot-audio" aria-label="Gravar áudio">' +
+            XBOT_ICONS.mic +
+            '</button></div>' +
+            '<textarea class="xbot-input" id="xbot-input" placeholder="Escreva sua mensagem…" rows="1"></textarea>' +
+            '<button type="button" class="xbot-send" id="xbot-send" aria-label="Enviar">' +
+            XBOT_ICONS.send +
+            '</button></div></div>' +
+            '<div class="xbot-footer">' +
+            '<a class="xbot-powered" href="https://www.xbotone.com" target="_blank" rel="noopener noreferrer">' +
+            'Powered by <strong>XBot</strong></a></div>';
 
+        chatbox.querySelector('.xbot-header-name').textContent = botName;
+
+        document.body.appendChild(launcher);
         document.body.appendChild(chatbox);
-        chatbox.style.bottom = `${(offsetBottom || 20) + 70}px`;
+
+        function setChatOpen(open) {
+            chatbox.style.display = open ? 'flex' : 'none';
+            chatbox.style.flexDirection = 'column';
+            launcher.classList.toggle('is-open', open);
+            launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
+            if (open) {
+                unreadCount = 0;
+                notification.style.display = 'none';
+                if (!welcomeShown && welcomeMessage != null && String(welcomeMessage).trim()) {
+                    appendMessage(String(welcomeMessage).trim(), 'bot');
+                    welcomeShown = true;
+                }
+                input.focus();
+            }
+        }
 
         DOMPurify.addHook('afterSanitizeAttributes', function (node) {
             if (node.tagName === 'A') {
@@ -474,44 +591,33 @@
             }
         });
 
-        button.addEventListener('click', () => {
-            const isOpen = chatbox.style.display === 'flex';
-            chatbox.style.display = isOpen ? 'none' : 'flex';
-            chatbox.style.flexDirection = 'column';
-
-            if (!isOpen) {
-                unreadCount = 0;
-                emojiPopup.style.display = 'none';                
-                notification.style.display = 'none';
-                button.style.backgroundImage = `url(${closeIcon})`;
-
-                // Mostrar mensagem de boas-vindas apenas uma vez
-                if (!welcomeShown && welcomeMessage != null && String(welcomeMessage).trim()) {
-                  appendMessage(String(welcomeMessage).trim(), 'bot');
-                  welcomeShown = true;
-                }
-            } else {
-                button.style.backgroundImage = `url(${launcherIcon})`;                
-            }       
+        launcher.addEventListener('click', function () {
+            setChatOpen(chatbox.style.display !== 'flex');
         });
 
-        // As próximas etapas incluem: handlers de emoji, upload, e gravação de áudio...
-        const emojiBtn = document.getElementById('xbot-emoji');
+        chatbox.querySelector('.xbot-header-minimize').addEventListener('click', function () {
+            setChatOpen(false);
+        });
+
         const uploadBtn = document.getElementById('xbot-upload');
         const audioBtn = document.getElementById('xbot-audio');
         const input = document.getElementById('xbot-input');
         const messages = document.getElementById('xbot-messages');
-        
-        const send = chatbox.querySelector('#xbot-send');        
+
+        const send = chatbox.querySelector('#xbot-send');
         send.addEventListener('click', handleSendMessage);
 
-        input.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-          }
-        });        
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
 
+        input.addEventListener('input', function () {
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        });
 
         function appendMessage(text, from = 'user') {
             const row = document.createElement('div');
@@ -556,7 +662,7 @@
           
             const typing = document.createElement('div');
             typing.className = 'xbot-typing';
-            typing.textContent = `${botName} está digitando...`;
+            typing.innerHTML = botName + ' está digitando <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
             messages.appendChild(typing);
             messages.scrollTop = messages.scrollHeight;
           
@@ -584,7 +690,7 @@
             } catch (err) {
                 setTimeout(() => {
                     messages.removeChild(typing);
-                    appendMessage('Sua configuração está **muito próxima de ser concluída** 😊. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..', 'bot');
+                    appendMessage('Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..', 'bot');
                 }, 1000);
             }
         }     
@@ -602,12 +708,6 @@
               notificationSound?.play().catch(() => {});
             }
         };        
-        
-        chatbox.appendChild(emojiPopup);
-
-        emojiBtn.addEventListener('click', () => {            
-            emojiPopup.style.display = emojiPopup.style.display === 'none' ? 'flex' : 'none';
-        });        
         
         // Upload de Arquivos (pdf, imagens)
         const fileInput = document.createElement('input');
@@ -635,7 +735,7 @@
             img.style.borderRadius = '10px';
             preview.appendChild(img);
             } else {
-            preview.innerHTML = `📎 ${file.name}`;
+            preview.textContent = 'Anexo: ' + file.name;
             }
             messages.appendChild(preview);
             messages.scrollTop = messages.scrollHeight;
@@ -671,7 +771,8 @@
         audioBtn.addEventListener('click', async () => {
             if (isRecording) {
             mediaRecorder.stop();
-            audioBtn.textContent = '🎤';
+            audioBtn.classList.remove('is-recording');
+            audioBtn.innerHTML = XBOT_ICONS.mic;
             isRecording = false;
             return;
             }
@@ -726,7 +827,8 @@
         
             mediaRecorder.start();
             isRecording = true;
-            audioBtn.textContent = '⏹️';
+            audioBtn.classList.add('is-recording');
+            audioBtn.innerHTML = XBOT_ICONS.stop;
             } catch (err) {
             alert('Erro ao iniciar gravação de áudio.');
             }
