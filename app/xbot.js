@@ -143,10 +143,134 @@
             return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/messages';
         }
 
+        function getStreamUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/stream';
+        }
+
+        function getHistoryUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/history';
+        }
+
         var lastBotPollAt = null;
+        var lastBotMessageId = null;
         var seenBotMessageKeys = {};
         var pollTimer = null;
         var XCHAT_POLL_MS = 3000;
+        var sseAbortController = null;
+        var sseActive = false;
+        var sseFailCount = 0;
+        var pendingTypingEl = null;
+
+        function pollStorageKey() {
+            var vid = getVisitorId();
+            if (!channelId || !vid) return null;
+            return 'xbot_last_bot_poll_' + channelId + '_' + vid;
+        }
+
+        function formatPollAfter(value) {
+            if (!value) return null;
+            try {
+                var d = value instanceof Date ? value : new Date(value);
+                if (isNaN(d.getTime())) return null;
+                return d.toISOString();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function loadLastBotPollAt() {
+            try {
+                var key = pollStorageKey();
+                if (!key || typeof sessionStorage === 'undefined') return null;
+                return sessionStorage.getItem(key);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function saveLastBotPollAt(iso) {
+            var normalized = formatPollAfter(iso);
+            if (!normalized) return;
+            lastBotPollAt = normalized;
+            try {
+                var key = pollStorageKey();
+                if (key && typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem(key, normalized);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function lastBotMessageIdKey() {
+            var vid = getVisitorId();
+            if (!channelId || !vid) return null;
+            return 'xbot_last_bot_msg_id_' + channelId + '_' + vid;
+        }
+
+        function saveLastBotMessageId(id) {
+            if (!id) return;
+            lastBotMessageId = String(id);
+            try {
+                var key = lastBotMessageIdKey();
+                if (key && typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem(key, lastBotMessageId);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function loadLastBotMessageId() {
+            try {
+                var key = lastBotMessageIdKey();
+                if (!key || typeof sessionStorage === 'undefined') return null;
+                return sessionStorage.getItem(key);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function clearPendingTyping() {
+            if (pendingTypingEl && pendingTypingEl.parentNode) {
+                pendingTypingEl.parentNode.removeChild(pendingTypingEl);
+            }
+            pendingTypingEl = null;
+        }
+
+        function ingestBotPayload(item, content) {
+            var body = (content || '').trim();
+            if (!body) return;
+            if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
+            if (seenBotMessageKeys['c:' + body]) return;
+            clearPendingTyping();
+            appendMessage(body, 'bot');
+            rememberBotMessage(item, body);
+            if (item && item.id) saveLastBotMessageId(item.id);
+        }
+
+        function rememberBotMessage(item, content) {
+            if (item && item.id) seenBotMessageKeys['id:' + item.id] = true;
+            var body = (content || '').trim();
+            if (body) seenBotMessageKeys['c:' + body] = true;
+            if (item && item.created_at) saveLastBotPollAt(item.created_at);
+        }
+
+        function parseSseFrames(buffer) {
+            var events = [];
+            var parts = buffer.split('\n\n');
+            var rest = parts.pop() || '';
+            for (var i = 0; i < parts.length; i++) {
+                var block = parts[i].trim();
+                if (!block || block.indexOf(':') === 0) continue;
+                var ev = 'message';
+                var dataLines = [];
+                block.split('\n').forEach(function (line) {
+                    if (line.indexOf('event:') === 0) ev = line.slice(6).trim();
+                    else if (line.indexOf('data:') === 0) dataLines.push(line.slice(5).trim());
+                });
+                events.push({ event: ev, data: dataLines.join('\n') });
+            }
+            return { events: events, rest: rest };
+        }
 
         function stopBotPoll() {
             if (pollTimer) {
@@ -155,11 +279,95 @@
             }
         }
 
-        function rememberBotMessage(item, content) {
-            if (item && item.id) seenBotMessageKeys['id:' + item.id] = true;
-            var body = (content || '').trim();
-            if (body) seenBotMessageKeys['c:' + body] = true;
-            if (item && item.created_at) lastBotPollAt = item.created_at;
+        function stopXchatSse() {
+            if (sseAbortController) {
+                try { sseAbortController.abort(); } catch (e) { /* ignore */ }
+                sseAbortController = null;
+            }
+            sseActive = false;
+        }
+
+        async function runXchatSse() {
+            if (!apiBaseUrl || !channelId || typeof fetch === 'undefined') return;
+            while (apiBaseUrl && channelId) {
+                var vid = getVisitorId();
+                if (!vid) return;
+                var url = getStreamUrl()
+                    + '?channel_id=' + encodeURIComponent(channelId)
+                    + '&visitor_id=' + encodeURIComponent(vid);
+                var lastId = lastBotMessageId || loadLastBotMessageId();
+                if (lastId) url += '&last_message_id=' + encodeURIComponent(lastId);
+
+                stopXchatSse();
+                sseAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                try {
+                    var fetchOpts = {
+                        headers: buildAuthHeaders({ Accept: 'text/event-stream' }),
+                    };
+                    if (sseAbortController) fetchOpts.signal = sseAbortController.signal;
+                    var res = await fetch(url, fetchOpts);
+                    if (!res.ok || !res.body || !res.body.getReader) {
+                        throw new Error('sse_unavailable');
+                    }
+                    sseActive = true;
+                    sseFailCount = 0;
+                    stopBotPoll();
+
+                    var reader = res.body.getReader();
+                    var decoder = new TextDecoder();
+                    var buffer = '';
+                    while (true) {
+                        var chunk = await reader.read();
+                        if (chunk.done) break;
+                        buffer += decoder.decode(chunk.value, { stream: true });
+                        var parsed = parseSseFrames(buffer);
+                        buffer = parsed.rest;
+                        parsed.events.forEach(function (frame) {
+                            if (frame.event === 'message' && frame.data) {
+                                try {
+                                    var payload = JSON.parse(frame.data);
+                                    ingestBotPayload(payload, payload.content);
+                                } catch (e) { /* ignore */ }
+                            } else if (frame.event === 'timeout') {
+                                throw new Error('sse_timeout');
+                            }
+                        });
+                    }
+                    throw new Error('sse_closed');
+                } catch (err) {
+                    sseActive = false;
+                    if (err && err.name === 'AbortError') return;
+                    sseFailCount += 1;
+                    if (sseFailCount >= 2) startBotPoll();
+                    await new Promise(function (r) { setTimeout(r, 1500); });
+                }
+            }
+        }
+
+        async function loadChatHistory() {
+            if (!apiBaseUrl || !channelId) return;
+            var vid = getVisitorId();
+            if (!vid) return;
+            var url = getHistoryUrl()
+                + '?channel_id=' + encodeURIComponent(channelId)
+                + '&visitor_id=' + encodeURIComponent(vid)
+                + '&limit=50';
+            try {
+                var res = await fetch(url, { headers: buildAuthHeaders({}) });
+                if (!res.ok) return;
+                var data = await res.json();
+                var list = data.messages || [];
+                for (var i = 0; i < list.length; i++) {
+                    var item = list[i];
+                    var body = (item.content || '').trim();
+                    if (!body) continue;
+                    if ((item.sender || 'bot') === 'user') {
+                        appendMessage(body, 'user');
+                    } else {
+                        ingestBotPayload(item, body);
+                    }
+                }
+            } catch (e) { /* ignore */ }
         }
 
         async function pollBotMessages() {
@@ -169,8 +377,9 @@
             var url = getMessagesPollUrl()
                 + '?channel_id=' + encodeURIComponent(channelId)
                 + '&visitor_id=' + encodeURIComponent(vid);
-            if (lastBotPollAt) {
-                url += '&after=' + encodeURIComponent(lastBotPollAt);
+            var afterIso = formatPollAfter(lastBotPollAt);
+            if (afterIso) {
+                url += '&after=' + encodeURIComponent(afterIso);
             }
             try {
                 var res = await fetch(url, { headers: buildAuthHeaders({}) });
@@ -184,16 +393,16 @@
                     var item = list[i];
                     var body = (item.content || '').trim();
                     if (!body) continue;
-                    if (item.id && seenBotMessageKeys['id:' + item.id]) continue;
-                    if (seenBotMessageKeys['c:' + body]) continue;
-                    appendMessage(body, 'bot');
-                    rememberBotMessage(item, body);
+                    ingestBotPayload(item, body);
                 }
             } catch (e) { /* poll silencioso */ }
         }
 
         function startBotPoll() {
-            if (pollTimer || !apiBaseUrl || !channelId) return;
+            if (pollTimer || !apiBaseUrl || !channelId || sseActive) return;
+            if (!lastBotPollAt) {
+                lastBotPollAt = loadLastBotPollAt();
+            }
             pollBotMessages();
             pollTimer = setInterval(pollBotMessages, XCHAT_POLL_MS);
         }
@@ -853,9 +1062,6 @@
                     }
                 }
                 input.focus();
-                startBotPoll();
-            } else {
-                stopBotPoll();
             }
         }
 
@@ -940,6 +1146,7 @@
             typing.innerHTML = botName + ' está digitando <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
             messages.appendChild(typing);
             messages.scrollTop = messages.scrollHeight;
+            pendingTypingEl = typing;
           
             try {
                 const visitorId = getVisitorId();
@@ -955,17 +1162,16 @@
                 if (data.visitor_id && visitorId !== data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
-                if (typing.parentNode) messages.removeChild(typing);
                 if (data.reply) {
                     var replyText = String(data.reply).trim();
-                    if (replyText) {
-                        appendMessage(replyText, 'bot');
-                        rememberBotMessage(null, replyText);
-                    }
+                    if (replyText) ingestBotPayload(null, replyText);
+                    else clearPendingTyping();
+                } else {
+                    setTimeout(function () { clearPendingTyping(); }, 25000);
                 }
 
             } catch (err) {
-                if (typing.parentNode) messages.removeChild(typing);
+                clearPendingTyping();
                 var errText = 'Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..';
                 appendMessage(errText, 'bot');
                 rememberBotMessage(null, errText);
@@ -1114,6 +1320,14 @@
         setTimeout(function () {
             deliverWelcomeOnPageLoad();
         }, 500);
+
+        lastBotMessageId = loadLastBotMessageId();
+        loadChatHistory().finally(function () {
+            runXchatSse();
+            setTimeout(function () {
+                if (!sseActive) startBotPoll();
+            }, 2500);
+        });
         
     });
 

@@ -170,6 +170,23 @@ A API aceita CORS em `/v1/xchat/*` a partir de qualquer origem HTTPS (sites dos 
 
 ---
 
+## Entrega de respostas (operador / bot → visitante)
+
+| Canal | Mecanismo |
+|-------|-----------|
+| **App** [app.xbotone.com/chat](https://app.xbotone.com/chat) | **SSE** (`GET /v1/events/stream` com JWT do tenant) |
+| **Widget no site** | **SSE** `GET /v1/xchat/stream` (fetch + `Authorization`, ~300ms) com **fallback** poll `GET /v1/xchat/messages` (~3s) |
+
+Operador ou bot grava resposta com `sender=bot` na sessão do visitante. O widget recebe pelo stream; se o SSE falhar (proxy antigo, rede), usa poll.
+
+Endpoints extras (widget ≥ 1.0.6):
+
+- `GET /v1/xchat/stream` — eventos SSE: `connected`, `message`, `heartbeat`, `timeout` (reconectar após timeout)
+- `GET /v1/xchat/history` — restaura conversa ao recarregar a página
+- `POST /v1/xchat/message` — não bloqueia mais ~18s; resposta vem pelo stream/poll
+
+Requisitos em produção: API atualizada + widget **≥ 1.0.6** (ou `@main/versions/latest`).
+
 ## API (referência)
 
 O widget chama `POST /v1/xchat/message` com:
@@ -177,6 +194,12 @@ O widget chama `POST /v1/xchat/message` com:
 - `Authorization: Bearer <client_secret>`
 - `X-XBot-Client-Id: <client_id>`
 - Body: `{ "message", "channel_id", "visitor_id?" }`
+
+Poll (`GET /v1/xchat/messages`): `channel_id`, `visitor_id`, `after?` (ISO-8601).
+
+SSE (`GET /v1/xchat/stream`): mesma auth; query `channel_id`, `visitor_id`, `last_message_id?`.
+
+Histórico (`GET /v1/xchat/history`): `channel_id`, `visitor_id`, `limit?` (padrão 50).
 
 ---
 
