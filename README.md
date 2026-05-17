@@ -25,7 +25,7 @@ Cole antes de `</body>`:
     channelId: "UUID-DO-CANAL-XCHAT",
     clientId: "SEU_CLIENT_ID",
     token: "SEU_CLIENT_SECRET",
-    apiBaseUrl: "https://api.xbot.digital",
+    apiBaseUrl: "https://api.xbotone.com",
     position: "right",
     themeColor: "#25D366"
   });
@@ -37,7 +37,7 @@ Cole antes de `</body>`:
 | `channelId` | UUID do canal XChat |
 | `clientId` | Client ID da API Key |
 | `token` | Client secret da API Key |
-| `apiBaseUrl` | URL da API (produção: `https://api.xbot.digital`) |
+| `apiBaseUrl` | URL da API (produção: `https://api.xbotone.com`) |
 | `position` | `right` ou `left` |
 | `themeColor` | Cor do botão (ex.: `#25D366`) |
 
@@ -60,7 +60,7 @@ O site já inclui o componente no layout. Basta configurar o `.env`:
 XBOT_XCHAT_CHANNEL_ID=uuid-do-canal
 XBOT_XCHAT_CLIENT_ID=seu_client_id
 XBOT_XCHAT_SECRET=seu_client_secret
-XBOT_XCHAT_API_BASE_URL=https://api.xbot.digital
+XBOT_XCHAT_API_BASE_URL=https://api.xbotone.com
 XBOT_XCHAT_SCRIPT_CDN=https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@1.0.2/versions/1.0.2/xbot.min.js
 ```
 
