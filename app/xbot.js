@@ -135,6 +135,66 @@
                 return id;
             } catch (e) { return null; }
         }
+
+        function getMessagesPollUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/messages';
+        }
+
+        var lastBotPollAt = null;
+        var seenBotMessageKeys = {};
+        var pollTimer = null;
+        var XCHAT_POLL_MS = 3000;
+
+        function stopBotPoll() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        function rememberBotMessage(item, content) {
+            if (item && item.id) seenBotMessageKeys['id:' + item.id] = true;
+            var body = (content || '').trim();
+            if (body) seenBotMessageKeys['c:' + body] = true;
+            if (item && item.created_at) lastBotPollAt = item.created_at;
+        }
+
+        async function pollBotMessages() {
+            if (!apiBaseUrl || !channelId) return;
+            var vid = getVisitorId();
+            if (!vid) return;
+            var url = getMessagesPollUrl()
+                + '?channel_id=' + encodeURIComponent(channelId)
+                + '&visitor_id=' + encodeURIComponent(vid);
+            if (lastBotPollAt) {
+                url += '&after=' + encodeURIComponent(lastBotPollAt);
+            }
+            try {
+                var res = await fetch(url, { headers: buildAuthHeaders({}) });
+                if (!res.ok) return;
+                var data = await res.json();
+                if (data.visitor_id && vid !== data.visitor_id && typeof localStorage !== 'undefined') {
+                    try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
+                }
+                var list = data.messages || [];
+                for (var i = 0; i < list.length; i++) {
+                    var item = list[i];
+                    var body = (item.content || '').trim();
+                    if (!body) continue;
+                    if (item.id && seenBotMessageKeys['id:' + item.id]) continue;
+                    if (seenBotMessageKeys['c:' + body]) continue;
+                    appendMessage(body, 'bot');
+                    rememberBotMessage(item, body);
+                }
+            } catch (e) { /* poll silencioso */ }
+        }
+
+        function startBotPoll() {
+            if (pollTimer || !apiBaseUrl || !channelId) return;
+            pollBotMessages();
+            pollTimer = setInterval(pollBotMessages, XCHAT_POLL_MS);
+        }
     
         const offset = offsetBottom || 20;
 
@@ -581,6 +641,9 @@
                     welcomeShown = true;
                 }
                 input.focus();
+                startBotPoll();
+            } else {
+                stopBotPoll();
             }
         }
 
@@ -680,18 +743,20 @@
                 if (data.visitor_id && visitorId !== data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
-                setTimeout(() => {
-                    if (data.reply) {
-                        appendMessage(data.reply, 'bot');
+                if (typing.parentNode) messages.removeChild(typing);
+                if (data.reply) {
+                    var replyText = String(data.reply).trim();
+                    if (replyText) {
+                        appendMessage(replyText, 'bot');
+                        rememberBotMessage(null, replyText);
                     }
-                    messages.removeChild(typing);
-                }, 1000);
+                }
 
             } catch (err) {
-                setTimeout(() => {
-                    messages.removeChild(typing);
-                    appendMessage('Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..', 'bot');
-                }, 1000);
+                if (typing.parentNode) messages.removeChild(typing);
+                var errText = 'Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..';
+                appendMessage(errText, 'bot');
+                rememberBotMessage(null, errText);
             }
         }     
 
