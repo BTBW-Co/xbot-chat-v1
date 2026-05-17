@@ -1,0 +1,10 @@
+{
+  "name": "xbot-chat-v1",
+  "private": true,
+  "version": "1.0.3",
+  "description": "Widget XChat embeddable",
+  "scripts": {
+    "build": "bash scripts/build-widget.sh",
+    "build:min": "npx --yes terser app/xbot.js -c -m"
+  }
+}
