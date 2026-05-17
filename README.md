@@ -79,7 +79,7 @@ O painel XBot (**Conexões → XChat**) gera um snippet igual ao HTML acima para
 
 ## Aparência (cor e avatares)
 
-No painel: **Conexões → editar canal XChat** — defina cor do chat, avatar do assistente e avatar do visitante.
+No painel: **Conexões → editar canal XChat** — defina nome exibido, cor do chat, ícone do botão (upload no bucket do tenant), avatares do assistente e do visitante.
 
 O widget carrega essas preferências com `GET /v1/xchat/widget-config?channel_id=<UUID>` (mesma autenticação de `POST /message`).
 
