@@ -47,7 +47,9 @@
               userAvatar: data.user_avatar_url || cfg.userAvatar,
               botName: data.bot_name || cfg.botName,
               welcomeMessage:
-                data.welcome_message != null ? data.welcome_message : cfg.welcomeMessage,
+                (cfg.welcomeMessage != null && String(cfg.welcomeMessage).trim())
+                  ? cfg.welcomeMessage
+                  : (data.welcome_message != null ? data.welcome_message : cfg.welcomeMessage),
               launcherIcon: data.launcher_icon_url || cfg.launcherIcon,
             })
           );
@@ -222,6 +224,112 @@
 
         let unreadCount = 0;
         let welcomeShown = false;
+        let pendingWelcomeText = null;
+        let welcomeTeaserEl = null;
+
+        function getWelcomeText() {
+            var cfg = window.__xbotConfig || config || {};
+            var raw = cfg.welcomeMessage;
+            if (raw == null || raw === '') return '';
+            return String(raw).trim();
+        }
+
+        function welcomeSessionKey() {
+            return channelId ? 'xbot_welcome_delivered_' + channelId : 'xbot_welcome_delivered';
+        }
+
+        function wasWelcomeDeliveredThisSession() {
+            try {
+                return typeof sessionStorage !== 'undefined' &&
+                    sessionStorage.getItem(welcomeSessionKey()) === '1';
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function markWelcomeDeliveredThisSession() {
+            try {
+                if (typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem(welcomeSessionKey(), '1');
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function clearWelcomeAlertUi() {
+            launcher.classList.remove('has-welcome-alert');
+            hideWelcomeTeaser();
+        }
+
+        function hideWelcomeTeaser() {
+            if (!welcomeTeaserEl || !welcomeTeaserEl.parentNode) return;
+            welcomeTeaserEl.style.animation = 'xbotTeaserOut 0.22s ease forwards';
+            var el = welcomeTeaserEl;
+            setTimeout(function () {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, 220);
+            welcomeTeaserEl = null;
+        }
+
+        function showWelcomeTeaser(text) {
+            hideWelcomeTeaser();
+            var teaser = document.createElement('button');
+            teaser.type = 'button';
+            teaser.className = 'xbot-welcome-teaser xbot-root';
+            teaser.setAttribute('aria-label', 'Abrir mensagem de boas-vindas');
+
+            var headWrap = document.createElement('div');
+            headWrap.className = 'xbot-welcome-teaser__head';
+            if (botAvatar) {
+                var img = document.createElement('img');
+                img.className = 'xbot-welcome-teaser__avatar';
+                img.src = botAvatar;
+                img.alt = '';
+                headWrap.appendChild(img);
+            }
+            var nameEl = document.createElement('span');
+            nameEl.className = 'xbot-welcome-teaser__name';
+            nameEl.textContent = botName;
+            headWrap.appendChild(nameEl);
+            teaser.appendChild(headWrap);
+
+            var plain = text.replace(/\*\*/g, '').replace(/\*/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+            var body = document.createElement('p');
+            body.className = 'xbot-welcome-teaser__text';
+            body.textContent = plain.length > 160 ? plain.slice(0, 157) + '…' : plain;
+            teaser.appendChild(body);
+
+            var cta = document.createElement('span');
+            cta.className = 'xbot-welcome-teaser__cta';
+            cta.textContent = 'Toque para responder';
+            teaser.appendChild(cta);
+
+            teaser.addEventListener('click', function () {
+                setChatOpen(true);
+            });
+
+            document.body.appendChild(teaser);
+            welcomeTeaserEl = teaser;
+        }
+
+        function notifyWelcomeArrival() {
+            launcher.classList.add('has-welcome-alert');
+            unreadCount = Math.max(unreadCount, 1);
+            notification.textContent = String(unreadCount);
+            notification.style.display = 'flex';
+            notificationSound.play().catch(function () {});
+        }
+
+        function deliverWelcomeOnPageLoad() {
+            if (welcomeShown || wasWelcomeDeliveredThisSession()) return;
+            var text = getWelcomeText();
+            if (!text) return;
+            if (chatbox.style.display === 'flex') return;
+
+            pendingWelcomeText = text;
+            markWelcomeDeliveredThisSession();
+            showWelcomeTeaser(text);
+            notifyWelcomeArrival();
+        }
 
         const posH = position === 'left' ? 'left' : 'right';
 
@@ -286,6 +394,104 @@
                 align-items: center;
                 justify-content: center;
                 font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+                animation: xbotBadgePop 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
+            }
+            @keyframes xbotBadgePop {
+                0% { transform: scale(0); opacity: 0; }
+                70% { transform: scale(1.15); }
+                100% { transform: scale(1); opacity: 1; }
+            }
+
+            .xbot-launcher.has-welcome-alert {
+                animation: xbotLauncherPulse 1.8s ease-in-out infinite;
+            }
+            .xbot-launcher.has-welcome-alert::before {
+                content: '';
+                position: absolute;
+                inset: -6px;
+                border-radius: 50%;
+                border: 2px solid rgba(${themeRgb}, 0.65);
+                animation: xbotLauncherRing 1.8s ease-out infinite;
+                pointer-events: none;
+            }
+            @keyframes xbotLauncherPulse {
+                0%, 100% { transform: scale(1); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(${themeRgb}, 0.22); }
+                50% { transform: scale(1.07); box-shadow: 0 16px 48px rgba(15, 23, 42, 0.32), 0 0 0 10px rgba(${themeRgb}, 0.35); }
+            }
+            @keyframes xbotLauncherRing {
+                0% { transform: scale(0.92); opacity: 0.85; }
+                100% { transform: scale(1.35); opacity: 0; }
+            }
+
+            .xbot-welcome-teaser {
+                position: fixed;
+                bottom: ${offset + 8}px;
+                ${posH}: 96px;
+                max-width: min(280px, calc(100vw - 120px));
+                padding: 12px 14px;
+                background: #fff;
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 16px;
+                border-bottom-${posH === 'left' ? 'right' : 'left'}-radius: 6px;
+                box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+                z-index: 2147482998;
+                cursor: pointer;
+                font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+                opacity: 0;
+                transform: translateY(10px) scale(0.96);
+                animation: xbotTeaserIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            }
+            .xbot-welcome-teaser::after {
+                content: '';
+                position: absolute;
+                bottom: 18px;
+                ${posH === 'left' ? 'left' : 'right'}: -7px;
+                width: 14px;
+                height: 14px;
+                background: #fff;
+                border-right: 1px solid rgba(15, 23, 42, 0.08);
+                border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+                transform: rotate(-45deg);
+            }
+            .xbot-welcome-teaser__head {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+            }
+            .xbot-welcome-teaser__avatar {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                object-fit: cover;
+                background: #e2e8f0;
+                flex-shrink: 0;
+            }
+            .xbot-welcome-teaser__name {
+                font-size: 13px;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            .xbot-welcome-teaser__text {
+                font-size: 13px;
+                line-height: 1.45;
+                color: #475569;
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .xbot-welcome-teaser__cta {
+                margin-top: 8px;
+                font-size: 11px;
+                font-weight: 600;
+                color: ${themeColor};
+            }
+            @keyframes xbotTeaserIn {
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @keyframes xbotTeaserOut {
+                to { opacity: 0; transform: translateY(8px) scale(0.96); }
             }
 
             .xbot-chatbox {
@@ -636,9 +842,15 @@
             if (open) {
                 unreadCount = 0;
                 notification.style.display = 'none';
-                if (!welcomeShown && welcomeMessage != null && String(welcomeMessage).trim()) {
-                    appendMessage(String(welcomeMessage).trim(), 'bot');
-                    welcomeShown = true;
+                clearWelcomeAlertUi();
+                if (!welcomeShown) {
+                    var welcomeText = pendingWelcomeText || getWelcomeText();
+                    if (welcomeText) {
+                        appendMessage(welcomeText, 'bot');
+                        rememberBotMessage(null, welcomeText);
+                        welcomeShown = true;
+                        pendingWelcomeText = null;
+                    }
                 }
                 input.focus();
                 startBotPoll();
@@ -898,6 +1110,10 @@
             alert('Erro ao iniciar gravação de áudio.');
             }
         });
+
+        setTimeout(function () {
+            deliverWelcomeOnPageLoad();
+        }, 500);
         
     });
 

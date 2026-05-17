@@ -91,8 +91,37 @@ Cole antes de `</body>`:
 | `apiBaseUrl` | URL da API (produção: `https://api.xbotone.com`) |
 | `position` | `right` ou `left` |
 | `themeColor` | Cor do botão (ex.: `#25D366`) |
+| `welcomeMessage` | *(opcional)* Texto de boas-vindas exibido ao carregar o site (balão ao lado do botão + animação no launcher; mensagem completa ao abrir o chat) |
 
 **Não commite o `client_secret` em repositório público.** Em apps com build (Next, Vite), use variáveis de ambiente.
+
+### Mensagem de boas-vindas (`welcomeMessage`)
+
+Parâmetro **opcional** no `initXBot`. Quando definido:
+
+1. **Ao carregar a página** do site hospedeiro (uma vez por aba/sessão do navegador), o widget:
+   - mostra um **balão de prévia** com o texto (truncado) ao lado do botão flutuante;
+   - aplica **animação** no launcher (pulso, anel e badge vermelho);
+   - reproduz o **som de notificação** (mesmo das novas mensagens com o chat fechado).
+2. **Ao abrir o chat**, o visitante vê a mensagem completa no histórico (suporta Markdown leve: `**negrito**`, links).
+
+```html
+<script>
+  window.initXBot({
+    channelId: "UUID-DO-CANAL-XCHAT",
+    clientId: "SEU_CLIENT_ID",
+    token: "SEU_CLIENT_SECRET",
+    apiBaseUrl: "https://api.xbotone.com",
+    position: "right",
+    themeColor: "#25D366",
+    welcomeMessage: "Olá! 👋 Sou o assistente da sua loja. Em que posso ajudar?"
+  });
+</script>
+```
+
+- O valor definido no **embed do site** tem prioridade sobre `welcome_message` da API (quando a API não envia texto).
+- A entrega proativa na carga da página usa `sessionStorage` por canal (`xbot_welcome_delivered_<channelId>`), para não repetir o alerta a cada navegação interna na mesma aba.
+- Para disparar mensagens depois (ex.: promo), use `window.sendXBotMessage("...")` (ver abaixo).
 
 ---
 
@@ -165,11 +194,13 @@ npm run build
 
 4. (Opcional) Tag Git para pin semver: `git tag 1.0.4 && git push origin 1.0.4`
 
-### Mensagem do sistema (opcional)
+### Mensagem programática após o carregamento (opcional)
 
 ```js
 window.sendXBotMessage("Você tem uma nova mensagem!");
 ```
+
+Dispara animação de badge/som se o chat estiver fechado (comportamento igual a nova mensagem do bot).
 
 ---
 
