@@ -1,4 +1,23 @@
 (function () {
+
+    var XBOT_DEFAULT_ASSETS_BASE =
+      'https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default';
+
+    function xbotDefaultAssetUrl(file) {
+      return XBOT_DEFAULT_ASSETS_BASE + '/' + file;
+    }
+
+    function applyXbotAssetDefaults(cfg) {
+      cfg = cfg || {};
+      var launcher = (cfg.launcherIcon || '').trim();
+      var bot = (cfg.botAvatar || '').trim();
+      var user = (cfg.userAvatar || '').trim();
+      return Object.assign({}, cfg, {
+        launcherIcon: launcher || xbotDefaultAssetUrl('launcher.svg'),
+        botAvatar: bot || xbotDefaultAssetUrl('bot-avatar.svg'),
+        userAvatar: user || xbotDefaultAssetUrl('user-avatar.svg'),
+      });
+    }
     
     window.__xbotConfig = null;
     window.__xbotAppearanceReady = true;
@@ -21,20 +40,25 @@
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (data) {
           if (!data) return;
-          window.__xbotConfig = Object.assign({}, cfg, {
-            themeColor: data.theme_color || cfg.themeColor,
-            botAvatar: data.bot_avatar_url || cfg.botAvatar,
-            userAvatar: data.user_avatar_url || cfg.userAvatar,
-            botName: data.bot_name || cfg.botName,
-            welcomeMessage: data.welcome_message != null ? data.welcome_message : cfg.welcomeMessage,
-            launcherIcon: data.launcher_icon_url || data.bot_avatar_url || cfg.launcherIcon,
-          });
+          window.__xbotConfig = applyXbotAssetDefaults(
+            Object.assign({}, cfg, {
+              themeColor: data.theme_color || cfg.themeColor,
+              botAvatar: data.bot_avatar_url || cfg.botAvatar,
+              userAvatar: data.user_avatar_url || cfg.userAvatar,
+              botName: data.bot_name || cfg.botName,
+              welcomeMessage:
+                data.welcome_message != null ? data.welcome_message : cfg.welcomeMessage,
+              launcherIcon: data.launcher_icon_url || cfg.launcherIcon,
+            })
+          );
         })
-        .catch(function () {});
+        .catch(function () {
+          window.__xbotConfig = applyXbotAssetDefaults(window.__xbotConfig || {});
+        });
     }
 
     window.initXBot = function (config) {
-      window.__xbotConfig = config || {};
+      window.__xbotConfig = applyXbotAssetDefaults(config || {});
       window.__xbotAppearanceReady = false;
       fetchWidgetAppearance().finally(function () {
         window.__xbotAppearanceReady = true;
@@ -62,7 +86,7 @@
     }
   
     waitForLibs(() => {
-        const config = window.__xbotConfig || {};
+        const config = applyXbotAssetDefaults(window.__xbotConfig || {});
         const {
             botName = 'XBot',
             botAvatar = '',
