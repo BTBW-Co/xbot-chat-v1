@@ -1,9 +1,44 @@
 (function () {
     
     window.__xbotConfig = null;
-  
+    window.__xbotAppearanceReady = true;
+
+    function fetchWidgetAppearance() {
+      const cfg = window.__xbotConfig || {};
+      const base = (cfg.apiBaseUrl || '').replace(/\/$/, '');
+      if (!base || !cfg.channelId) {
+        return Promise.resolve();
+      }
+      const url = base + '/v1/xchat/widget-config?channel_id=' + encodeURIComponent(cfg.channelId);
+      const headers = {};
+      if (cfg.clientId && cfg.channelId && cfg.token) {
+        headers['Authorization'] = 'Bearer ' + cfg.token;
+        headers['X-XBot-Client-Id'] = cfg.clientId;
+      } else if (cfg.token) {
+        headers['Authorization'] = 'Bearer ' + cfg.token;
+      }
+      return fetch(url, { headers })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          if (!data) return;
+          window.__xbotConfig = Object.assign({}, cfg, {
+            themeColor: data.theme_color || cfg.themeColor,
+            botAvatar: data.bot_avatar_url || cfg.botAvatar,
+            userAvatar: data.user_avatar_url || cfg.userAvatar,
+            botName: data.bot_name || cfg.botName,
+            welcomeMessage: data.welcome_message != null ? data.welcome_message : cfg.welcomeMessage,
+            launcherIcon: data.launcher_icon_url || data.bot_avatar_url || cfg.launcherIcon,
+          });
+        })
+        .catch(function () {});
+    }
+
     window.initXBot = function (config) {
-      window.__xbotConfig = config;
+      window.__xbotConfig = config || {};
+      window.__xbotAppearanceReady = false;
+      fetchWidgetAppearance().finally(function () {
+        window.__xbotAppearanceReady = true;
+      });
     };
   
     const markedScript = document.createElement('script');
@@ -19,8 +54,7 @@
 
     function waitForLibs(callback) {
       const interval = setInterval(() => {
-        // && window.EmojiButton        
-        if (window.marked && window.DOMPurify && window.__xbotConfig) {
+        if (window.marked && window.DOMPurify && window.__xbotConfig && window.__xbotAppearanceReady) {
           clearInterval(interval);
           callback();
         }
@@ -32,6 +66,7 @@
         const {
             botName = 'XBot',
             botAvatar = '',
+            userAvatar = '',
             launcherIcon = '',
             themeColor = '#25D366',
             position = 'right',
@@ -271,15 +306,35 @@
             }
             }
     
+            .xbot-message-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            max-width: 88%;
+            }
+            .xbot-message-row.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+            }
+            .xbot-message-row.bot {
+            align-self: flex-start;
+            }
+            .xbot-msg-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: #e5e7eb;
+            }
+
             .xbot-message.user {
             background-color: #dcf8c6;
-            align-self: flex-end;
             border-radius: 10px 10px 0px 10px;
             }
     
             .xbot-message.bot {
             background-color: #f1f0f0;
-            align-self: flex-start;
             border-radius: 10px 10px 0px 10px;
             }
     
@@ -317,7 +372,7 @@
         chatbox.style.display = 'none'; 
         chatbox.innerHTML = `
             <div class="xbot-header">
-            <img src="${botAvatar}" alt="avatar" />
+            ${botAvatar ? `<img src="${botAvatar}" alt="avatar" />` : ''}
             <span>${botName}</span>
             </div>
             <div class="xbot-messages" id="xbot-messages"></div>            
@@ -435,6 +490,16 @@
 
 
         function appendMessage(text, from = 'user') {
+            const row = document.createElement('div');
+            row.className = `xbot-message-row ${from}`;
+            const avatarUrl = from === 'user' ? userAvatar : botAvatar;
+            if (avatarUrl) {
+              const av = document.createElement('img');
+              av.className = 'xbot-msg-avatar';
+              av.src = avatarUrl;
+              av.alt = '';
+              row.appendChild(av);
+            }
             const msg = document.createElement('div');
             msg.className = `xbot-message ${from}`;
             const unsafeHTML = window.marked.parse(text);
@@ -446,8 +511,8 @@
                     <div class="xbot-time">${timestamp}</div>
                 </div>
             `;
-            
-            messages.appendChild(msg);
+            row.appendChild(msg);
+            messages.appendChild(row);
             messages.scrollTop = messages.scrollHeight;
 
             if (from === 'bot' && chatbox.style.display === 'none') {

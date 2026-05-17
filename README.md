@@ -77,6 +77,14 @@ O painel XBot (**Conexões → XChat**) gera um snippet igual ao HTML acima para
 
 ---
 
+## Aparência (cor e avatares)
+
+No painel: **Conexões → editar canal XChat** — defina cor do chat, avatar do assistente e avatar do visitante.
+
+O widget carrega essas preferências com `GET /v1/xchat/widget-config?channel_id=<UUID>` (mesma autenticação de `POST /message`).
+
+---
+
 ## API (referência)
 
 O widget chama `POST /v1/xchat/message` com:
@@ -90,7 +98,7 @@ O widget chama `POST /v1/xchat/message` com:
 ## Desenvolvimento do widget
 
 - Fonte: `app/xbot.js`
-- Build: `npx terser app/xbot.js -c -m -o versions/1.0.2/xbot.min.js`
+- Build: `npx terser app/xbot.js -c -m -o versions/1.0.3/xbot.min.js`
 
 ### Mensagem do sistema (opcional)
 
