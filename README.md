@@ -185,7 +185,20 @@ Endpoints extras (widget ≥ 1.0.6):
 - `GET /v1/xchat/history` — restaura conversa ao recarregar a página
 - `POST /v1/xchat/message` — não bloqueia mais ~18s; resposta vem pelo stream/poll
 
-Requisitos em produção: API atualizada + widget **≥ 1.0.6** (ou `@main/versions/latest`).
+Requisitos em produção: API atualizada + widget **≥ 1.0.7** (ou `@main/versions/latest`).
+
+### Log de versão no console (debug)
+
+Ao carregar o site hospedeiro, o widget escreve no **DevTools → Console**:
+
+```text
+[XBot Widget 1.0.7] init { channelId, apiBaseUrl, ... }
+[XBot Widget 1.0.7] UI pronta { visitorId, transporte: "sse+poll" }
+[XBot Widget 1.0.7] poll ativo ...
+[XBot Widget 1.0.7] mensagem recebida { via: "poll"|"sse", ... }
+```
+
+Se aparecer `poll falhou` com `status: 404`, a API em produção ainda não tem `/v1/xchat/messages` — faça deploy da API.
 
 ## API (referência)
 

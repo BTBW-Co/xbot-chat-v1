@@ -1,5 +1,7 @@
 (function () {
 
+    var XBOT_WIDGET_VERSION = '__XBOT_WIDGET_VERSION__';
+
     var XBOT_DEFAULT_ASSETS_BASE =
       'https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default';
 
@@ -59,9 +61,25 @@
         });
     }
 
+    function widgetLog() {
+      if (typeof console === 'undefined' || !console.info) return;
+      var args = ['[XBot Widget ' + XBOT_WIDGET_VERSION + ']'];
+      for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
+      console.info.apply(console, args);
+    }
+
     window.initXBot = function (config) {
-      window.__xbotConfig = applyXbotAssetDefaults(config || {});
+      config = config || {};
+      window.__xbotConfig = applyXbotAssetDefaults(config);
       window.__xbotAppearanceReady = false;
+      widgetLog(
+        'init',
+        {
+          channelId: config.channelId || null,
+          apiBaseUrl: config.apiBaseUrl || null,
+          hasClientId: !!(config.clientId && String(config.clientId).trim()),
+        }
+      );
       fetchWidgetAppearance().finally(function () {
         window.__xbotAppearanceReady = true;
       });
@@ -236,7 +254,7 @@
             pendingTypingEl = null;
         }
 
-        function ingestBotPayload(item, content) {
+        function ingestBotPayload(item, content, source) {
             var body = (content || '').trim();
             if (!body) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
@@ -245,6 +263,7 @@
             appendMessage(body, 'bot');
             rememberBotMessage(item, body);
             if (item && item.id) saveLastBotMessageId(item.id);
+            widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, len: body.length });
         }
 
         function rememberBotMessage(item, content) {
@@ -311,7 +330,7 @@
                     }
                     sseActive = true;
                     sseFailCount = 0;
-                    stopBotPoll();
+                    widgetLog('SSE conectado');
 
                     var reader = res.body.getReader();
                     var decoder = new TextDecoder();
@@ -326,9 +345,10 @@
                             if (frame.event === 'message' && frame.data) {
                                 try {
                                     var payload = JSON.parse(frame.data);
-                                    ingestBotPayload(payload, payload.content);
+                                    ingestBotPayload(payload, payload.content, 'sse');
                                 } catch (e) { /* ignore */ }
                             } else if (frame.event === 'timeout') {
+                                widgetLog('SSE timeout — reconectando');
                                 throw new Error('sse_timeout');
                             }
                         });
@@ -338,7 +358,7 @@
                     sseActive = false;
                     if (err && err.name === 'AbortError') return;
                     sseFailCount += 1;
-                    if (sseFailCount >= 2) startBotPoll();
+                    widgetLog('SSE indisponível, usando poll', { erro: err && err.message, tentativa: sseFailCount });
                     await new Promise(function (r) { setTimeout(r, 1500); });
                 }
             }
@@ -354,9 +374,13 @@
                 + '&limit=50';
             try {
                 var res = await fetch(url, { headers: buildAuthHeaders({}) });
-                if (!res.ok) return;
+                if (!res.ok) {
+                    widgetLog('histórico falhou', { status: res.status });
+                    return;
+                }
                 var data = await res.json();
                 var list = data.messages || [];
+                widgetLog('histórico carregado', { mensagens: list.length });
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
@@ -364,10 +388,12 @@
                     if ((item.sender || 'bot') === 'user') {
                         appendMessage(body, 'user');
                     } else {
-                        ingestBotPayload(item, body);
+                        ingestBotPayload(item, body, 'history');
                     }
                 }
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                widgetLog('histórico erro', e && e.message);
+            }
         }
 
         async function pollBotMessages() {
@@ -383,26 +409,33 @@
             }
             try {
                 var res = await fetch(url, { headers: buildAuthHeaders({}) });
-                if (!res.ok) return;
+                if (!res.ok) {
+                    widgetLog('poll falhou', { status: res.status, url: getMessagesPollUrl() });
+                    return;
+                }
                 var data = await res.json();
                 if (data.visitor_id && vid !== data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
                 var list = data.messages || [];
+                if (list.length) widgetLog('poll', { novas: list.length });
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
                     if (!body) continue;
-                    ingestBotPayload(item, body);
+                    ingestBotPayload(item, body, 'poll');
                 }
-            } catch (e) { /* poll silencioso */ }
+            } catch (e) {
+                widgetLog('poll erro', e && e.message);
+            }
         }
 
         function startBotPoll() {
-            if (pollTimer || !apiBaseUrl || !channelId || sseActive) return;
+            if (pollTimer || !apiBaseUrl || !channelId) return;
             if (!lastBotPollAt) {
                 lastBotPollAt = loadLastBotPollAt();
             }
+            widgetLog('poll ativo (intervalo ' + XCHAT_POLL_MS + 'ms)');
             pollBotMessages();
             pollTimer = setInterval(pollBotMessages, XCHAT_POLL_MS);
         }
@@ -1164,7 +1197,7 @@
                 }
                 if (data.reply) {
                     var replyText = String(data.reply).trim();
-                    if (replyText) ingestBotPayload(null, replyText);
+                    if (replyText) ingestBotPayload(null, replyText, 'post');
                     else clearPendingTyping();
                 } else {
                     setTimeout(function () { clearPendingTyping(); }, 25000);
@@ -1322,11 +1355,14 @@
         }, 500);
 
         lastBotMessageId = loadLastBotMessageId();
+        widgetLog('UI pronta', {
+            visitorId: getVisitorId(),
+            channelId: channelId,
+            transporte: 'sse+poll',
+        });
+        startBotPoll();
         loadChatHistory().finally(function () {
             runXchatSse();
-            setTimeout(function () {
-                if (!sseActive) startBotPoll();
-            }, 2500);
         });
         
     });

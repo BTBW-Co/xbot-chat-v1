@@ -10,7 +10,10 @@ OUT_FILE="${OUT_DIR}/xbot.min.js"
 LATEST="versions/latest/xbot.min.js"
 
 mkdir -p "$OUT_DIR" versions/latest
-npx --yes terser app/xbot.js -c -m -o "$OUT_FILE"
+TMP_SRC="$(mktemp)"
+sed "s/__XBOT_WIDGET_VERSION__/${VERSION}/g" app/xbot.js > "$TMP_SRC"
+npx --yes terser "$TMP_SRC" -c -m -o "$OUT_FILE"
+rm -f "$TMP_SRC"
 cp "$OUT_FILE" "$LATEST"
 
 echo "Built ${OUT_FILE} and ${LATEST} (v${VERSION})"
