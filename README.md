@@ -226,9 +226,11 @@ npm run build
 # ou: bash scripts/build-widget.sh 1.0.4
 ```
 
-3. Commit e push em `main` — quem usa a URL estável (`@main/versions/latest/xbot.min.js`) passa a receber o novo JS (cache do jsDelivr pode levar alguns minutos)
+3. Na raiz do monorepo: `make git` — faz build, commit/push em `main` e **tag + push** com a versão do `package.json` (ex.: `1.0.8` → jsDelivr `@1.0.8/versions/1.0.8/...`)
 
-4. (Opcional) Tag Git para pin semver: `git tag 1.0.4 && git push origin 1.0.4`
+4. Quem usa a URL estável (`@main/versions/latest/xbot.min.js`) passa a receber o novo JS após o push (cache do jsDelivr pode levar alguns minutos)
+
+Tag manual (só se precisar): `git tag 1.0.8 && git push origin 1.0.8`
 
 ### Mensagem programática após o carregamento (opcional)
 
