@@ -442,6 +442,12 @@
         }
     
         const offset = offsetBottom || 20;
+        const LAUNCHER_SIZE = 64;
+        const LAUNCHER_GAP = 28;
+        /** Base do painel acima do botão flutuante (launcher). */
+        const chatboxStackBottom = offset + LAUNCHER_SIZE + LAUNCHER_GAP;
+        const mobileLauncherOffset = 16;
+        const mobileStackBottom = mobileLauncherOffset + LAUNCHER_SIZE + LAUNCHER_GAP;
 
         function hexToRgb(hex) {
             var h = (hex || '#22c55e').replace('#', '').trim();
@@ -668,7 +674,7 @@
 
             .xbot-welcome-teaser {
                 position: fixed;
-                bottom: ${offset + 8}px;
+                bottom: ${offset + LAUNCHER_SIZE + 12}px;
                 ${posH}: 96px;
                 max-width: min(280px, calc(100vw - 120px));
                 padding: 12px 14px;
@@ -739,11 +745,11 @@
 
             .xbot-chatbox {
                 position: fixed;
-                bottom: ${offset + 84}px;
+                bottom: ${chatboxStackBottom}px;
                 ${posH}: 20px;
                 width: 380px;
                 max-width: calc(100vw - 24px);
-                height: min(560px, calc(100vh - ${offset + 100}px));
+                height: min(560px, calc(100vh - ${chatboxStackBottom + 16}px));
                 background: #fff;
                 border-radius: 20px;
                 border: 1px solid rgba(15, 23, 42, 0.08);
@@ -937,13 +943,14 @@
             }
             .xbot-compose-tools {
                 display: flex;
-                flex-direction: column;
-                gap: 2px;
-                padding-bottom: 2px;
+                flex-direction: row;
+                align-items: center;
+                gap: 0;
+                flex-shrink: 0;
             }
             .xbot-icon-btn {
-                width: 32px;
-                height: 32px;
+                width: 30px;
+                height: 30px;
                 border: none;
                 border-radius: 8px;
                 background: transparent;
@@ -1015,12 +1022,21 @@
                 .xbot-chatbox {
                     width: 100vw;
                     max-width: 100vw;
-                    height: 100vh;
-                    bottom: 0 !important;
+                    height: calc(100dvh - ${mobileStackBottom}px - env(safe-area-inset-bottom, 0px));
+                    max-height: calc(100dvh - ${mobileStackBottom}px - env(safe-area-inset-bottom, 0px));
+                    bottom: ${mobileStackBottom}px !important;
                     ${posH}: 0 !important;
-                    border-radius: 0;
+                    border-radius: 16px 16px 0 0;
                 }
-                .xbot-launcher { bottom: 16px; ${posH}: 16px; }
+                .xbot-launcher {
+                    bottom: calc(${mobileLauncherOffset}px + env(safe-area-inset-bottom, 0px));
+                    ${posH}: 16px;
+                }
+                .xbot-welcome-teaser {
+                    bottom: calc(${mobileStackBottom + 8}px + env(safe-area-inset-bottom, 0px));
+                    ${posH}: 16px;
+                    max-width: min(280px, calc(100vw - 96px));
+                }
             }
         `;
 
@@ -1080,6 +1096,7 @@
         function setChatOpen(open) {
             chatbox.style.display = open ? 'flex' : 'none';
             chatbox.style.flexDirection = 'column';
+            chatbox.classList.toggle('is-open', open);
             launcher.classList.toggle('is-open', open);
             launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
             if (open) {
