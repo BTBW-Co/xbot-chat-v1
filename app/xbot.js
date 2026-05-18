@@ -447,7 +447,10 @@
         /** Base do painel acima do botão flutuante (launcher). */
         const chatboxStackBottom = offset + LAUNCHER_SIZE + LAUNCHER_GAP;
         const mobileLauncherOffset = 16;
+        const mobileLauncherOpenSize = 44;
         const mobileStackBottom = mobileLauncherOffset + LAUNCHER_SIZE + LAUNCHER_GAP;
+        const mobileOpenStackBottom = mobileLauncherOffset + mobileLauncherOpenSize + LAUNCHER_GAP;
+        const MOBILE_PANEL_VH = 70;
 
         function hexToRgb(hex) {
             var h = (hex || '#22c55e').replace('#', '').trim();
@@ -620,11 +623,23 @@
                 justify-content: center;
             }
             .xbot-launcher.is-open {
+                width: 48px;
+                height: 48px;
                 background: #0f172a;
-                box-shadow: 0 12px 40px rgba(15, 23, 42, 0.35), 0 0 0 6px rgba(${themeRgb}, 0.15);
+                border-width: 2px;
+                box-shadow: 0 10px 28px rgba(15, 23, 42, 0.32), 0 0 0 4px rgba(${themeRgb}, 0.12);
             }
+            .xbot-launcher.is-open:hover { transform: scale(1.04); }
             .xbot-launcher.is-open .xbot-launcher__face { display: none; }
             .xbot-launcher.is-open .xbot-launcher__close { display: flex; }
+            .xbot-launcher.is-open .xbot-launcher__close svg {
+                width: 16px;
+                height: 16px;
+            }
+            html.xbot-chat-open {
+                touch-action: manipulation;
+                -webkit-text-size-adjust: 100%;
+            }
 
             .xbot-notification {
                 position: absolute;
@@ -1022,15 +1037,26 @@
                 .xbot-chatbox {
                     width: 100vw;
                     max-width: 100vw;
-                    height: calc(100dvh - ${mobileStackBottom}px - env(safe-area-inset-bottom, 0px));
-                    max-height: calc(100dvh - ${mobileStackBottom}px - env(safe-area-inset-bottom, 0px));
+                    height: ${MOBILE_PANEL_VH}dvh;
+                    max-height: ${MOBILE_PANEL_VH}dvh;
                     bottom: ${mobileStackBottom}px !important;
                     ${posH}: 0 !important;
                     border-radius: 16px 16px 0 0;
                 }
+                .xbot-chatbox.is-open {
+                    bottom: calc(${mobileOpenStackBottom}px + env(safe-area-inset-bottom, 0px)) !important;
+                }
                 .xbot-launcher {
                     bottom: calc(${mobileLauncherOffset}px + env(safe-area-inset-bottom, 0px));
                     ${posH}: 16px;
+                }
+                .xbot-launcher.is-open {
+                    width: ${mobileLauncherOpenSize}px;
+                    height: ${mobileLauncherOpenSize}px;
+                }
+                .xbot-launcher.is-open .xbot-launcher__close svg {
+                    width: 14px;
+                    height: 14px;
                 }
                 .xbot-welcome-teaser {
                     bottom: calc(${mobileStackBottom + 8}px + env(safe-area-inset-bottom, 0px));
@@ -1093,11 +1119,49 @@
         document.body.appendChild(launcher);
         document.body.appendChild(chatbox);
 
+        var savedViewportContent = null;
+
+        function setViewportZoomLocked(locked) {
+            var meta = document.querySelector('meta[name="viewport"]');
+            if (!meta) {
+                if (!locked) return;
+                meta = document.createElement('meta');
+                meta.name = 'viewport';
+                document.head.appendChild(meta);
+            }
+            if (locked) {
+                if (savedViewportContent === null) {
+                    savedViewportContent = meta.getAttribute('content') || 'width=device-width, initial-scale=1';
+                }
+                var base = savedViewportContent;
+                var next = base;
+                if (/maximum-scale/i.test(base)) {
+                    next = base.replace(/maximum-scale\s*=\s*[^,]+/gi, 'maximum-scale=1');
+                } else {
+                    next = base + ', maximum-scale=1';
+                }
+                if (/user-scalable/i.test(next)) {
+                    next = next.replace(/user-scalable\s*=\s*[^,]+/gi, 'user-scalable=no');
+                } else {
+                    next = next + ', user-scalable=no';
+                }
+                meta.setAttribute('content', next);
+                document.documentElement.classList.add('xbot-chat-open');
+            } else {
+                if (savedViewportContent !== null) {
+                    meta.setAttribute('content', savedViewportContent);
+                    savedViewportContent = null;
+                }
+                document.documentElement.classList.remove('xbot-chat-open');
+            }
+        }
+
         function setChatOpen(open) {
             chatbox.style.display = open ? 'flex' : 'none';
             chatbox.style.flexDirection = 'column';
             chatbox.classList.toggle('is-open', open);
             launcher.classList.toggle('is-open', open);
+            setViewportZoomLocked(!!open);
             launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
             if (open) {
                 unreadCount = 0;
