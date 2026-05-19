@@ -261,7 +261,7 @@
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
             if (seenBotMessageKeys['c:' + body]) return;
             clearPendingTyping();
-            appendMessage(body, 'bot');
+            appendMessage(body, 'bot', { countUnread: source !== 'history' });
             rememberBotMessage(item, body);
             if (item && item.id) saveLastBotMessageId(item.id);
             widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, len: body.length });
@@ -394,6 +394,8 @@
                 }
             } catch (e) {
                 widgetLog('histórico erro', e && e.message);
+            } finally {
+                scheduleScrollMessagesToBottom();
             }
         }
 
@@ -664,6 +666,9 @@
                 0% { transform: scale(0); opacity: 0; }
                 70% { transform: scale(1.15); }
                 100% { transform: scale(1); opacity: 1; }
+            }
+            .xbot-launcher.is-open .xbot-notification {
+                display: none !important;
             }
 
             .xbot-launcher.has-welcome-alert {
@@ -1156,6 +1161,18 @@
             }
         }
 
+        function scrollMessagesToBottom() {
+            var el = document.getElementById('xbot-messages');
+            if (!el) return;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function scheduleScrollMessagesToBottom() {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(scrollMessagesToBottom);
+            });
+        }
+
         function setChatOpen(open) {
             chatbox.style.display = open ? 'flex' : 'none';
             chatbox.style.flexDirection = 'column';
@@ -1165,17 +1182,19 @@
             launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
             if (open) {
                 unreadCount = 0;
+                notification.textContent = '';
                 notification.style.display = 'none';
                 clearWelcomeAlertUi();
                 if (!welcomeShown) {
                     var welcomeText = pendingWelcomeText || getWelcomeText();
                     if (welcomeText) {
-                        appendMessage(welcomeText, 'bot');
+                        appendMessage(welcomeText, 'bot', { countUnread: false });
                         rememberBotMessage(null, welcomeText);
                         welcomeShown = true;
                         pendingWelcomeText = null;
                     }
                 }
+                scheduleScrollMessagesToBottom();
                 input.focus();
             }
         }
@@ -1215,7 +1234,9 @@
             input.style.height = Math.min(input.scrollHeight, 120) + 'px';
         });
 
-        function appendMessage(text, from = 'user') {
+        function appendMessage(text, from, opts) {
+            if (from === undefined) from = 'user';
+            opts = opts || {};
             const row = document.createElement('div');
             row.className = `xbot-message-row ${from}`;
             const avatarUrl = from === 'user' ? userAvatar : botAvatar;
@@ -1239,14 +1260,17 @@
             `;
             row.appendChild(msg);
             messages.appendChild(row);
-            messages.scrollTop = messages.scrollHeight;
+            if (opts.scroll !== false) {
+                scrollMessagesToBottom();
+            }
 
-            if (from === 'bot' && chatbox.style.display === 'none') {
+            var countUnread = opts.countUnread !== false;
+            if (from === 'bot' && countUnread && chatbox.style.display === 'none') {
                 unreadCount++;
-                notification.textContent = unreadCount;
+                notification.textContent = String(unreadCount);
                 notification.style.display = 'flex';
-                notificationSound.play().catch(() => {});
-            }            
+                notificationSound.play().catch(function () {});
+            }
         }     
         
         async function handleSendMessage() {
@@ -1295,16 +1319,7 @@
 
         window.sendXBotMessage = function(message) {
             if (typeof appendMessage !== 'function') return;
-          
             appendMessage(message, 'bot');
-          
-            if (chatbox.style.display === 'none') {
-              unreadCount++;
-              notification.textContent = unreadCount;
-              notification.style.display = 'flex';
-          
-              notificationSound?.play().catch(() => {});
-            }
         };        
         
         // Upload de Arquivos (pdf, imagens)
