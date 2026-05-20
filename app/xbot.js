@@ -5,9 +5,24 @@
 
     var XBOT_DEFAULT_ASSETS_BASE =
       'https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default';
+    var XBOT_WORKFORCE_ICON_KEYS = ['bb8', 'obiwan', 'threepio', 'r2d2'];
 
     function xbotDefaultAssetUrl(file) {
       return XBOT_DEFAULT_ASSETS_BASE + '/' + file;
+    }
+
+    function xbotWorkforceIconKey(channelId) {
+      if (!channelId) return 'bb8';
+      var hex = String(channelId).replace(/-/g, '').slice(0, 8);
+      var n = parseInt(hex, 16);
+      if (isNaN(n)) return 'bb8';
+      return XBOT_WORKFORCE_ICON_KEYS[n % XBOT_WORKFORCE_ICON_KEYS.length];
+    }
+
+    function xbotWorkforceAssetUrl(iconKey) {
+      var key = iconKey || 'bb8';
+      if (XBOT_WORKFORCE_ICON_KEYS.indexOf(key) < 0) key = 'bb8';
+      return XBOT_DEFAULT_ASSETS_BASE + '/workforce/' + key + '.svg';
     }
 
     function applyXbotAssetDefaults(cfg) {
@@ -15,9 +30,11 @@
       var launcher = (cfg.launcherIcon || '').trim();
       var bot = (cfg.botAvatar || '').trim();
       var user = (cfg.userAvatar || '').trim();
+      var workforceKey = xbotWorkforceIconKey(cfg.channelId);
+      var workforceUrl = xbotWorkforceAssetUrl(workforceKey);
       return Object.assign({}, cfg, {
-        launcherIcon: launcher || xbotDefaultAssetUrl('launcher.svg'),
-        botAvatar: bot || xbotDefaultAssetUrl('bot-avatar.svg'),
+        launcherIcon: launcher || workforceUrl,
+        botAvatar: bot || workforceUrl,
         userAvatar: user || xbotDefaultAssetUrl('user-avatar.svg'),
       });
     }
