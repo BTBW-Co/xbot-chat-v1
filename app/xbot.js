@@ -189,6 +189,16 @@
             return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/history';
         }
 
+        function getSessionStatusUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/session-status';
+        }
+
+        function getKeepAliveUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/keep-alive';
+        }
+
         var lastBotPollAt = null;
         var lastBotMessageId = null;
         var seenBotMessageKeys = {};
@@ -198,6 +208,12 @@
         var sseActive = false;
         var sseFailCount = 0;
         var pendingTypingEl = null;
+        var sessionStatusTimer = null;
+        var SESSION_STATUS_POLL_MS = 2000;
+        var keepAliveInFlight = false;
+        var inactivityBar = null;
+        var inactivityCountdownEl = null;
+        var inactivityKeepBtn = null;
 
         function pollStorageKey() {
             var vid = getVisitorId();
@@ -295,6 +311,119 @@
                 'Sua conversa foi encerrada por inatividade ou prazo de atendimento. ' +
                 'Envie uma nova mensagem para recomeçar do início.';
             appendMessage(hint, 'bot', { countUnread: false });
+        }
+
+        function formatInactivityCountdown(totalSec) {
+            var sec = Math.max(0, parseInt(totalSec, 10) || 0);
+            var m = Math.floor(sec / 60);
+            var s = sec % 60;
+            return m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
+        function updateInactivityBarUI(status) {
+            if (!inactivityBar) return;
+            if (!status || !status.inactivity_enabled) {
+                inactivityBar.hidden = true;
+                return;
+            }
+            if (!status.session_active) {
+                inactivityBar.hidden = true;
+                handleSessionExpiredByInactivity();
+                return;
+            }
+            var sec = status.seconds_until_close;
+            var threshold = status.warning_threshold_seconds || 60;
+            if (sec == null || sec > threshold) {
+                inactivityBar.hidden = true;
+                return;
+            }
+            if (sec <= 0) {
+                inactivityBar.hidden = true;
+                handleSessionExpiredByInactivity();
+                return;
+            }
+            inactivityBar.hidden = false;
+            if (inactivityCountdownEl) {
+                inactivityCountdownEl.textContent = formatInactivityCountdown(sec);
+            }
+        }
+
+        function handleSessionExpiredByInactivity() {
+            stopSessionStatusPoll();
+            resetXchatEpisodeLocalState(true);
+            showSessionEndedNoticeIfNeeded();
+            welcomeShown = false;
+        }
+
+        async function pollSessionInactivity() {
+            if (!apiBaseUrl || !channelId || chatbox.style.display !== 'flex') return;
+            var vid = getVisitorId();
+            if (!vid) return;
+            var url =
+                getSessionStatusUrl() +
+                '?channel_id=' +
+                encodeURIComponent(channelId) +
+                '&visitor_id=' +
+                encodeURIComponent(vid);
+            try {
+                var res = await fetch(url, { headers: buildAuthHeaders({}) });
+                if (!res.ok) return;
+                var status = await res.json();
+                updateInactivityBarUI(status);
+            } catch (e) {
+                widgetLog('session-status erro', e && e.message);
+            }
+        }
+
+        function startSessionStatusPoll() {
+            stopSessionStatusPoll();
+            if (!apiBaseUrl || !channelId) return;
+            pollSessionInactivity();
+            sessionStatusTimer = setInterval(pollSessionInactivity, SESSION_STATUS_POLL_MS);
+        }
+
+        function stopSessionStatusPoll() {
+            if (sessionStatusTimer) {
+                clearInterval(sessionStatusTimer);
+                sessionStatusTimer = null;
+            }
+            if (inactivityBar) inactivityBar.hidden = true;
+        }
+
+        async function keepSessionAlive() {
+            if (keepAliveInFlight || !apiBaseUrl || !channelId) return;
+            var vid = getVisitorId();
+            if (!vid) return;
+            keepAliveInFlight = true;
+            if (inactivityKeepBtn) {
+                inactivityKeepBtn.disabled = true;
+                inactivityKeepBtn.textContent = 'Renovando…';
+            }
+            try {
+                var res = await fetch(getKeepAliveUrl(), {
+                    method: 'POST',
+                    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        visitor_id: vid,
+                        channel_id: channelId,
+                    }),
+                });
+                if (!res.ok) {
+                    widgetLog('keep-alive falhou', { status: res.status });
+                    return;
+                }
+                var status = await res.json();
+                updateInactivityBarUI(status);
+                widgetLog('sessão renovada', { seconds_until_close: status.seconds_until_close });
+            } catch (e) {
+                widgetLog('keep-alive erro', e && e.message);
+            } finally {
+                keepAliveInFlight = false;
+                if (inactivityKeepBtn) {
+                    inactivityKeepBtn.disabled = false;
+                    inactivityKeepBtn.textContent = 'Manter conversa ativa';
+                }
+            }
         }
 
         function clearPendingTyping() {
@@ -956,6 +1085,43 @@
             }
             .xbot-header-minimize:hover { background: rgba(255,255,255,0.16); }
 
+            .xbot-inactivity-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                flex-wrap: wrap;
+                padding: 10px 14px;
+                background: linear-gradient(90deg, #fff7ed 0%, #ffedd5 100%);
+                border-bottom: 1px solid #fed7aa;
+                font-size: 12px;
+                color: #9a3412;
+                flex-shrink: 0;
+            }
+            .xbot-inactivity-bar[hidden] { display: none !important; }
+            .xbot-inactivity-text {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex: 1;
+                min-width: 140px;
+            }
+            .xbot-inactivity-icon { font-size: 14px; }
+            .xbot-inactivity-btn {
+                border: none;
+                border-radius: 10px;
+                padding: 8px 12px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                background: rgb(${themeRgb});
+                color: #fff;
+                white-space: nowrap;
+                transition: opacity 0.15s, transform 0.1s;
+            }
+            .xbot-inactivity-btn:hover:not(:disabled) { opacity: 0.92; }
+            .xbot-inactivity-btn:disabled { opacity: 0.65; cursor: wait; }
+
             .xbot-messages {
                 flex: 1;
                 padding: 16px;
@@ -1244,6 +1410,14 @@
             '<button type="button" class="xbot-header-minimize" aria-label="Minimizar">' +
             XBOT_ICONS.close +
             '</button></div>' +
+            '<div class="xbot-inactivity-bar" id="xbot-inactivity-bar" hidden role="status" aria-live="polite">' +
+            '<div class="xbot-inactivity-text">' +
+            '<span class="xbot-inactivity-icon" aria-hidden="true">⏱</span>' +
+            '<span>A sessão encerra em <strong id="xbot-inactivity-countdown">1:00</strong></span>' +
+            '</div>' +
+            '<button type="button" class="xbot-inactivity-btn" id="xbot-inactivity-keep">' +
+            'Manter conversa ativa' +
+            '</button></div>' +
             '<div class="xbot-messages" id="xbot-messages"></div>' +
             '<div class="xbot-compose">' +
             '<div class="xbot-compose-inner">' +
@@ -1324,6 +1498,7 @@
             setViewportZoomLocked(!!open);
             launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
             if (open) {
+                startSessionStatusPoll();
                 unreadCount = 0;
                 notification.textContent = '';
                 notification.style.display = 'none';
@@ -1343,8 +1518,18 @@
                 }
                 input.focus();
             } else {
+                stopSessionStatusPoll();
                 clearMobilePanelStyles();
             }
+        }
+
+        inactivityBar = document.getElementById('xbot-inactivity-bar');
+        inactivityCountdownEl = document.getElementById('xbot-inactivity-countdown');
+        inactivityKeepBtn = document.getElementById('xbot-inactivity-keep');
+        if (inactivityKeepBtn) {
+            inactivityKeepBtn.addEventListener('click', function () {
+                keepSessionAlive();
+            });
         }
 
         DOMPurify.addHook('afterSanitizeAttributes', function (node) {
@@ -1515,6 +1700,7 @@
           
             appendMessage(text, 'user');
             input.value = '';
+            pollSessionInactivity();
 
             // Garante um único indicador de "digitando" mesmo com envios rápidos em sequência
             clearPendingTyping();
