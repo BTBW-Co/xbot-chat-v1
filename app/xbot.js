@@ -295,14 +295,42 @@
 
         function ingestBotPayload(item, content, source) {
             var body = (content || '').trim();
-            if (!body) return;
+            var meta = (item && item.metadata && typeof item.metadata === 'object') ? item.metadata : {};
+            var ct = (item && item.content_type ? String(item.content_type) : 'text').toLowerCase();
+            var mediaUrl = meta.media_url || '';
+            var isMedia = !!mediaUrl && (ct === 'image' || ct === 'file' || ct === 'video' || ct === 'audio');
+            if (!body && !isMedia) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
-            if (seenBotMessageKeys['c:' + body]) return;
+            var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
+            if (seenBotMessageKeys['c:' + dedupKey]) return;
             clearPendingTyping();
-            appendMessage(body, 'bot', { countUnread: source !== 'history' });
-            rememberBotMessage(item, body);
+            if (isMedia) {
+                appendBotMedia(ct, mediaUrl, body, meta, { countUnread: source !== 'history' });
+            } else {
+                appendMessage(body, 'bot', { countUnread: source !== 'history' });
+            }
+            rememberBotMessage(item, dedupKey);
             if (item && item.id) saveLastBotMessageId(item.id);
-            widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, len: body.length });
+            widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, tipo: ct, len: body.length });
+        }
+
+        // Renderiza mensagem do bot com mídia (imagem do produto, arquivo, etc.)
+        function appendBotMedia(ct, url, caption, meta, opts) {
+            var cap = (caption || '').trim();
+            if (ct === 'image') {
+                var lines = cap ? cap.split('\n') : [];
+                var alt = (lines[0] || 'imagem').replace(/[\[\]]/g, '');
+                // Markdown: imagem + 1ª linha (nome/preço em negrito) + descrição (linha normal)
+                var md = '![' + alt + '](' + url + ')';
+                if (lines.length) {
+                    md += '\n\n**' + lines[0] + '**';
+                    if (lines.length > 1) md += '\n\n' + lines.slice(1).join('\n');
+                }
+                appendMessage(md, 'bot', opts);
+            } else {
+                var label = cap || (meta && meta.filename) || 'Arquivo';
+                appendMessage('[📎 ' + label + '](' + url + ')', 'bot', opts);
+            }
         }
 
         function rememberBotMessage(item, content) {
@@ -435,9 +463,15 @@
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
-                    if (!body) continue;
+                    var histMeta = (item.metadata && typeof item.metadata === 'object') ? item.metadata : {};
+                    var histMedia = histMeta.media_url || '';
+                    if (!body && !histMedia) continue;
                     if ((item.sender || 'bot') === 'user') {
-                        appendMessage(body, 'user');
+                        if (histMedia && String(item.content_type || '').toLowerCase() === 'image') {
+                            appendMessage('![imagem](' + histMedia + ')' + (body ? '\n\n' + body : ''), 'user');
+                        } else {
+                            appendMessage(body, 'user');
+                        }
                     } else {
                         ingestBotPayload(item, body, 'history');
                     }
@@ -475,7 +509,8 @@
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
-                    if (!body) continue;
+                    var hasMedia = item.metadata && typeof item.metadata === 'object' && item.metadata.media_url;
+                    if (!body && !hasMedia) continue;
                     ingestBotPayload(item, body, 'poll');
                 }
             } catch (e) {
@@ -932,6 +967,13 @@
             }
             @keyframes xbotFadeIn {
                 to { opacity: 1; transform: translateY(0); }
+            }
+            .xbot-message img {
+                max-width: 100%;
+                height: auto;
+                border-radius: 12px;
+                display: block;
+                margin: 2px 0 6px;
             }
             .xbot-message.user {
                 background: rgba(${themeRgb}, 0.12);
