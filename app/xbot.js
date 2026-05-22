@@ -280,7 +280,14 @@
         }
 
         function clearPendingTyping() {
-            if (pendingTypingEl && pendingTypingEl.parentNode) {
+            // Remove TODOS os indicadores de "digitando" (envios rápidos podem criar mais de um).
+            var container = document.getElementById('xbot-messages');
+            if (container && container.querySelectorAll) {
+                var nodes = container.querySelectorAll('.xbot-typing');
+                for (var i = 0; i < nodes.length; i++) {
+                    if (nodes[i].parentNode) nodes[i].parentNode.removeChild(nodes[i]);
+                }
+            } else if (pendingTypingEl && pendingTypingEl.parentNode) {
                 pendingTypingEl.parentNode.removeChild(pendingTypingEl);
             }
             pendingTypingEl = null;
@@ -1421,7 +1428,9 @@
           
             appendMessage(text, 'user');
             input.value = '';
-          
+
+            // Garante um único indicador de "digitando" mesmo com envios rápidos em sequência
+            clearPendingTyping();
             const typing = document.createElement('div');
             typing.className = 'xbot-typing';
             typing.innerHTML = botName + ' está digitando <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
