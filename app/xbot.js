@@ -265,6 +265,20 @@
             }
         }
 
+        function resetXchatEpisodeLocalState() {
+            lastBotPollAt = null;
+            lastBotMessageId = null;
+            seenBotMessageKeys = {};
+            try {
+                var pollKey = pollStorageKey();
+                var msgKey = lastBotMessageIdKey();
+                if (typeof sessionStorage !== 'undefined') {
+                    if (pollKey) sessionStorage.removeItem(pollKey);
+                    if (msgKey) sessionStorage.removeItem(msgKey);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
         function clearPendingTyping() {
             if (pendingTypingEl && pendingTypingEl.parentNode) {
                 pendingTypingEl.parentNode.removeChild(pendingTypingEl);
@@ -360,7 +374,14 @@
                         var parsed = parseSseFrames(buffer);
                         buffer = parsed.rest;
                         parsed.events.forEach(function (frame) {
-                            if (frame.event === 'message' && frame.data) {
+                            if (frame.event === 'connected' && frame.data) {
+                                try {
+                                    var conn = JSON.parse(frame.data);
+                                    if (conn.session_active === false) {
+                                        resetXchatEpisodeLocalState();
+                                    }
+                                } catch (e) { /* ignore */ }
+                            } else if (frame.event === 'message' && frame.data) {
                                 try {
                                     var payload = JSON.parse(frame.data);
                                     ingestBotPayload(payload, payload.content, 'sse');
@@ -397,8 +418,13 @@
                     return;
                 }
                 var data = await res.json();
+                if (data.session_active === false) {
+                    resetXchatEpisodeLocalState();
+                    widgetLog('sessão encerrada (SLA/timeout) — histórico não restaurado');
+                    return;
+                }
                 var list = data.messages || [];
-                widgetLog('histórico carregado', { mensagens: list.length });
+                widgetLog('histórico carregado', { mensagens: list.length, session_active: data.session_active });
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
