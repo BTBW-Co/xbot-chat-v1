@@ -265,7 +265,9 @@
             }
         }
 
-        function resetXchatEpisodeLocalState() {
+        var sessionEndedNoticeShown = false;
+
+        function resetXchatEpisodeLocalState(clearUi) {
             lastBotPollAt = null;
             lastBotMessageId = null;
             seenBotMessageKeys = {};
@@ -277,6 +279,22 @@
                     if (msgKey) sessionStorage.removeItem(msgKey);
                 }
             } catch (e) { /* ignore */ }
+            if (clearUi) {
+                var container = document.getElementById('xbot-messages');
+                if (container) {
+                    container.innerHTML = '';
+                    sessionEndedNoticeShown = false;
+                }
+            }
+        }
+
+        function showSessionEndedNoticeIfNeeded() {
+            if (sessionEndedNoticeShown) return;
+            sessionEndedNoticeShown = true;
+            var hint =
+                'Sua conversa foi encerrada por inatividade ou prazo de atendimento. ' +
+                'Envie uma nova mensagem para recomeçar do início.';
+            appendMessage(hint, 'bot', { countUnread: false });
         }
 
         function clearPendingTyping() {
@@ -327,6 +345,13 @@
                     if (lines.length > 1) md += '\n\n' + lines.slice(1).join('\n');
                 }
                 appendMessage(md, 'bot', opts);
+            } else if (ct === 'video') {
+                var vlabel = cap || 'vídeo';
+                var vhtml =
+                    '<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px;margin:4px 0 8px">' +
+                    '<source src="' + url.replace(/"/g, '&quot;') + '"></video>';
+                if (cap) vhtml += '<p>' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+                appendMessage(vhtml, 'bot', Object.assign({}, opts, { rawHtml: true }));
             } else {
                 var label = cap || (meta && meta.filename) || 'Arquivo';
                 appendMessage('[📎 ' + label + '](' + url + ')', 'bot', opts);
@@ -413,7 +438,8 @@
                                 try {
                                     var conn = JSON.parse(frame.data);
                                     if (conn.session_active === false) {
-                                        resetXchatEpisodeLocalState();
+                                        resetXchatEpisodeLocalState(true);
+                                        showSessionEndedNoticeIfNeeded();
                                     }
                                 } catch (e) { /* ignore */ }
                             } else if (frame.event === 'message' && frame.data) {
@@ -454,10 +480,12 @@
                 }
                 var data = await res.json();
                 if (data.session_active === false) {
-                    resetXchatEpisodeLocalState();
+                    resetXchatEpisodeLocalState(true);
+                    showSessionEndedNoticeIfNeeded();
                     widgetLog('sessão encerrada (SLA/timeout) — histórico não restaurado');
                     return;
                 }
+                sessionEndedNoticeShown = false;
                 var list = data.messages || [];
                 widgetLog('histórico carregado', { mensagens: list.length, session_active: data.session_active });
                 for (var i = 0; i < list.length; i++) {
@@ -995,8 +1023,17 @@
             }
             .xbot-message.user .xbot-message-content { align-items: flex-end; }
             .xbot-text { display: block; word-wrap: break-word; }
-            .xbot-text p { margin: 0 0 0.35em; }
+            .xbot-text p { margin: 0 0 0.55em; line-height: 1.5; }
             .xbot-text p:last-child { margin-bottom: 0; }
+            .xbot-text ul, .xbot-text ol { margin: 0.35em 0 0.55em 1.1em; padding: 0; }
+            .xbot-text li { margin-bottom: 0.25em; }
+            .xbot-text strong { font-weight: 600; }
+            .xbot-message video {
+                max-width: 100%;
+                border-radius: 12px;
+                display: block;
+                margin: 4px 0 8px;
+            }
             .xbot-time {
                 font-size: 10px;
                 color: #94a3b8;
@@ -1440,8 +1477,16 @@
             }
             const msg = document.createElement('div');
             msg.className = `xbot-message ${from}`;
-            const unsafeHTML = window.marked.parse(text);
-            const sanitized = window.DOMPurify.sanitize(unsafeHTML);
+            var unsafeHTML;
+            if (opts.rawHtml) {
+                unsafeHTML = text;
+            } else {
+                unsafeHTML = window.marked.parse(text);
+            }
+            var sanitized = window.DOMPurify.sanitize(unsafeHTML, {
+                ADD_TAGS: ['video', 'source'],
+                ADD_ATTR: ['controls', 'playsinline', 'preload', 'src', 'style']
+            });
             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             msg.innerHTML = `
                 <div class="xbot-message-content">
@@ -1518,7 +1563,7 @@
         // Upload de Arquivos (pdf, imagens)
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
-        fileInput.accept = '.pdf,.jpg,.jpeg,.png,.gif';
+        fileInput.accept = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov';
         fileInput.style.display = 'none';
         document.body.appendChild(fileInput);
         
@@ -1540,6 +1585,13 @@
             img.style.maxWidth = '100%';
             img.style.borderRadius = '10px';
             preview.appendChild(img);
+            } else if (file.type.startsWith('video/')) {
+            const vid = document.createElement('video');
+            vid.src = URL.createObjectURL(file);
+            vid.controls = true;
+            vid.style.maxWidth = '100%';
+            vid.style.borderRadius = '10px';
+            preview.appendChild(vid);
             } else {
             preview.textContent = 'Anexo: ' + file.name;
             }
