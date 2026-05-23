@@ -493,13 +493,62 @@
             var cap = (caption || '').trim();
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
-                // Usar HTML direto para evitar que URLs de presigned S3 (com & e ?) quebrem o markdown
-                var html = '<img src="' + _escHtml(url) + '" alt="' + _escHtml(lines[0] || 'imagem') + '" loading="lazy" style="max-width:100%;height:auto;border-radius:12px;display:block;margin:2px 0 6px">';
-                if (lines.length > 0) {
-                    html += '<p style="margin:2px 0 0"><strong>' + _escHtml(lines[0]) + '</strong></p>';
-                    if (lines.length > 1) html += '<p style="margin:2px 0 0">' + _escHtml(lines.slice(1).join('\n')) + '</p>';
+                // Constrói DOM diretamente para poder anexar onerror —
+                // DOMPurify remove event handlers de strings HTML (onerror seria stripped).
+                var row = document.createElement('div');
+                row.className = 'xbot-message-row bot';
+                if (botAvatar) {
+                    var av = document.createElement('img');
+                    av.className = 'xbot-msg-avatar';
+                    av.src = botAvatar;
+                    av.alt = '';
+                    row.appendChild(av);
                 }
-                appendMessage(html, 'bot', Object.assign({}, opts, { rawHtml: true }));
+                var msgDiv = document.createElement('div');
+                msgDiv.className = 'xbot-message bot';
+                var contentDiv = document.createElement('div');
+                contentDiv.className = 'xbot-message-content';
+                var textDiv = document.createElement('div');
+                textDiv.className = 'xbot-text';
+                // Imagem com onerror: se a URL (ex: presigned S3) falhar, esconde silenciosamente
+                var img = document.createElement('img');
+                img.src = url;
+                img.alt = lines[0] || 'imagem';
+                img.loading = 'lazy';
+                img.style.cssText = 'max-width:100%;height:auto;border-radius:12px;display:block;margin:2px 0 6px';
+                img.onerror = function() { this.style.display = 'none'; };
+                textDiv.appendChild(img);
+                if (lines.length > 0) {
+                    var p1 = document.createElement('p');
+                    p1.style.margin = '2px 0 0';
+                    var strong = document.createElement('strong');
+                    strong.textContent = lines[0];
+                    p1.appendChild(strong);
+                    textDiv.appendChild(p1);
+                }
+                if (lines.length > 1) {
+                    var p2 = document.createElement('p');
+                    p2.style.margin = '2px 0 0';
+                    p2.textContent = lines.slice(1).join('\n');
+                    textDiv.appendChild(p2);
+                }
+                var timeDiv = document.createElement('div');
+                timeDiv.className = 'xbot-time';
+                timeDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                contentDiv.appendChild(textDiv);
+                contentDiv.appendChild(timeDiv);
+                msgDiv.appendChild(contentDiv);
+                row.appendChild(msgDiv);
+                messages.appendChild(row);
+                scrollMessagesToBottom();
+                var countUnread = !opts || opts.countUnread !== false;
+                if (countUnread && chatbox.style.display === 'none') {
+                    unreadCount++;
+                    notification.textContent = String(unreadCount);
+                    notification.style.display = 'flex';
+                    notificationSound.play().catch(function() {});
+                }
+                return;
             } else if (ct === 'video') {
                 var vlabel = cap || 'vídeo';
                 var vhtml =
