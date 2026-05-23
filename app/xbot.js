@@ -426,6 +426,8 @@
             }
         }
 
+        var pendingSendCount = 0;
+
         function clearPendingTyping() {
             // Remove TODOS os indicadores de "digitando" (envios rápidos podem criar mais de um).
             var container = document.getElementById('xbot-messages');
@@ -438,6 +440,27 @@
                 pendingTypingEl.parentNode.removeChild(pendingTypingEl);
             }
             pendingTypingEl = null;
+        }
+
+        // Move o indicador existente para o final (sem piscar) ou cria um novo se não existir.
+        function _moveOrShowTyping() {
+            var container = document.getElementById('xbot-messages');
+            if (!container) return;
+            // Remover duplicatas espúrias (nunca deve haver mais de um)
+            var all = container.querySelectorAll ? container.querySelectorAll('.xbot-typing') : [];
+            for (var i = 0; i < all.length; i++) {
+                if (all[i] !== pendingTypingEl && all[i].parentNode) all[i].parentNode.removeChild(all[i]);
+            }
+            if (pendingTypingEl && pendingTypingEl.parentNode) {
+                container.appendChild(pendingTypingEl); // reposiciona no final
+            } else {
+                var el = document.createElement('div');
+                el.className = 'xbot-typing';
+                el.innerHTML = botName + ' está digitando <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
+                container.appendChild(el);
+                pendingTypingEl = el;
+            }
+            container.scrollTop = container.scrollHeight;
         }
 
         function ingestBotPayload(item, content, source) {
@@ -1700,20 +1723,15 @@
         async function handleSendMessage() {
             const text = input.value.trim();
             if (!text) return;
-          
+
             appendMessage(text, 'user');
             input.value = '';
             pollSessionInactivity();
 
-            // Garante um único indicador de "digitando" mesmo com envios rápidos em sequência
-            clearPendingTyping();
-            const typing = document.createElement('div');
-            typing.className = 'xbot-typing';
-            typing.innerHTML = botName + ' está digitando <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
-            messages.appendChild(typing);
-            messages.scrollTop = messages.scrollHeight;
-            pendingTypingEl = typing;
-          
+            // Incrementa contador e reposiciona (ou cria) o indicador no final — sem piscar
+            pendingSendCount++;
+            _moveOrShowTyping();
+
             try {
                 const visitorId = getVisitorId();
                 const msgBody = { message: text };
@@ -1730,14 +1748,23 @@
                 }
                 if (data.reply) {
                     var replyText = String(data.reply).trim();
+                    pendingSendCount = Math.max(0, pendingSendCount - 1);
                     if (replyText) ingestBotPayload(null, replyText, 'post');
-                    else clearPendingTyping();
+                    else if (pendingSendCount === 0) clearPendingTyping();
                 } else {
-                    setTimeout(function () { clearPendingTyping(); }, 25000);
+                    // Resposta assíncrona (SSE/poll): decrementa agora; indicador permanece até o bot responder
+                    pendingSendCount = Math.max(0, pendingSendCount - 1);
+                    // Fallback: limpa se o bot não responder em 30s e não houver outras mensagens pendentes
+                    (function (snapshot) {
+                        setTimeout(function () {
+                            if (pendingSendCount === 0) clearPendingTyping();
+                        }, 30000);
+                    })(pendingSendCount);
                 }
 
             } catch (err) {
-                clearPendingTyping();
+                pendingSendCount = Math.max(0, pendingSendCount - 1);
+                if (pendingSendCount === 0) clearPendingTyping();
                 var errText = 'Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..';
                 appendMessage(errText, 'bot');
                 rememberBotMessage(null, errText);
