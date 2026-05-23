@@ -461,19 +461,22 @@
             widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, tipo: ct, len: body.length });
         }
 
+        function _escHtml(s) {
+            return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
         // Renderiza mensagem do bot com mídia (imagem do produto, arquivo, etc.)
         function appendBotMedia(ct, url, caption, meta, opts) {
             var cap = (caption || '').trim();
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
-                var alt = (lines[0] || 'imagem').replace(/[\[\]]/g, '');
-                // Markdown: imagem + 1ª linha (nome/preço em negrito) + descrição (linha normal)
-                var md = '![' + alt + '](' + url + ')';
-                if (lines.length) {
-                    md += '\n\n**' + lines[0] + '**';
-                    if (lines.length > 1) md += '\n\n' + lines.slice(1).join('\n');
+                // Usar HTML direto para evitar que URLs de presigned S3 (com & e ?) quebrem o markdown
+                var html = '<img src="' + _escHtml(url) + '" alt="' + _escHtml(lines[0] || 'imagem') + '" loading="lazy" style="max-width:100%;height:auto;border-radius:12px;display:block;margin:2px 0 6px">';
+                if (lines.length > 0) {
+                    html += '<p style="margin:2px 0 0"><strong>' + _escHtml(lines[0]) + '</strong></p>';
+                    if (lines.length > 1) html += '<p style="margin:2px 0 0">' + _escHtml(lines.slice(1).join('\n')) + '</p>';
                 }
-                appendMessage(md, 'bot', opts);
+                appendMessage(html, 'bot', Object.assign({}, opts, { rawHtml: true }));
             } else if (ct === 'video') {
                 var vlabel = cap || 'vídeo';
                 var vhtml =
@@ -1670,7 +1673,7 @@
             }
             var sanitized = window.DOMPurify.sanitize(unsafeHTML, {
                 ADD_TAGS: ['video', 'source'],
-                ADD_ATTR: ['controls', 'playsinline', 'preload', 'src', 'style']
+                ADD_ATTR: ['controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt']
             });
             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             msg.innerHTML = `
