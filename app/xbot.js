@@ -528,7 +528,8 @@
                 }
                 if (lines.length > 1) {
                     var p2 = document.createElement('p');
-                    p2.style.margin = '2px 0 0';
+                    // pre-line preserva as quebras de linha do bloco de descrição (desc + variações)
+                    p2.style.cssText = 'margin:2px 0 0;white-space:pre-line';
                     p2.textContent = lines.slice(1).join('\n');
                     textDiv.appendChild(p2);
                 }
