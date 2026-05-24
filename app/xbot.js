@@ -693,6 +693,11 @@
                 sessionEndedNoticeShown = false;
                 var list = data.messages || [];
                 widgetLog('histórico carregado', { mensagens: list.length, session_active: data.session_active });
+                // Histórico é a fonte única da render inicial: limpa o que estiver na tela e
+                // reidrata, evitando duplicação/ordenação errada com o poll.
+                var histContainer = document.getElementById('xbot-messages');
+                if (histContainer) histContainer.innerHTML = '';
+                seenBotMessageKeys = {};
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
@@ -1968,8 +1973,10 @@
             channelId: channelId,
             transporte: 'sse+poll',
         });
-        startBotPoll();
+        // Carrega o histórico PRIMEIRO (fonte única da render inicial); só então inicia poll/SSE,
+        // evitando duplicação/ordenação errada entre poll e histórico.
         loadChatHistory().finally(function () {
+            startBotPoll();
             runXchatSse();
         });
         
