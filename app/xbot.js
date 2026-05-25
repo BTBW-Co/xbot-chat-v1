@@ -282,6 +282,7 @@
         }
 
         var sessionEndedNoticeShown = false;
+        var sessionEpisodeEnded = false;
 
         function resetXchatEpisodeLocalState(clearUi) {
             lastBotPollAt = null;
@@ -307,10 +308,20 @@
         function showSessionEndedNoticeIfNeeded() {
             if (sessionEndedNoticeShown) return;
             sessionEndedNoticeShown = true;
+            sessionEpisodeEnded = true;
             var hint =
                 'Sua conversa foi encerrada por inatividade ou prazo de atendimento. ' +
                 'Envie uma nova mensagem para recomeçar do início.';
             appendMessage(hint, 'bot', { countUnread: false });
+        }
+
+        function beginNewEpisodeFromUserMessage() {
+            if (!sessionEpisodeEnded) return;
+            resetXchatEpisodeLocalState(true);
+            sessionEpisodeEnded = false;
+            sessionEndedNoticeShown = false;
+            welcomeShown = false;
+            startSessionStatusPoll();
         }
 
         function formatInactivityCountdown(totalSec) {
@@ -350,9 +361,14 @@
 
         function handleSessionExpiredByInactivity() {
             stopSessionStatusPoll();
-            resetXchatEpisodeLocalState(true);
-            showSessionEndedNoticeIfNeeded();
+            sessionEpisodeEnded = true;
             welcomeShown = false;
+            pollBotMessages();
+            setTimeout(function () {
+                if (sessionEpisodeEnded && !sessionEndedNoticeShown) {
+                    showSessionEndedNoticeIfNeeded();
+                }
+            }, 2500);
         }
 
         async function pollSessionInactivity() {
@@ -473,6 +489,10 @@
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
             var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
             if (seenBotMessageKeys['c:' + dedupKey]) return;
+            if (meta.session_closed) {
+                sessionEpisodeEnded = true;
+                sessionEndedNoticeShown = true;
+            }
             clearPendingTyping();
             if (isMedia) {
                 appendBotMedia(ct, mediaUrl, body, meta, { countUnread: source !== 'history' });
@@ -643,8 +663,8 @@
                                 try {
                                     var conn = JSON.parse(frame.data);
                                     if (conn.session_active === false) {
-                                        resetXchatEpisodeLocalState(true);
-                                        showSessionEndedNoticeIfNeeded();
+                                        sessionEpisodeEnded = true;
+                                        pollBotMessages();
                                     }
                                 } catch (e) { /* ignore */ }
                             } else if (frame.event === 'message' && frame.data) {
@@ -685,9 +705,21 @@
                 }
                 var data = await res.json();
                 if (data.session_active === false) {
-                    resetXchatEpisodeLocalState(true);
-                    showSessionEndedNoticeIfNeeded();
-                    widgetLog('sessão encerrada (SLA/timeout) — histórico não restaurado');
+                    sessionEpisodeEnded = true;
+                    var list = data.messages || [];
+                    if (list.length) {
+                        sessionEndedNoticeShown = false;
+                        var histContainer = document.getElementById('xbot-messages');
+                        if (histContainer) histContainer.innerHTML = '';
+                        seenBotMessageKeys = {};
+                        for (var j = 0; j < list.length; j++) {
+                            ingestBotPayload(list[j], (list[j].content || '').trim(), 'history');
+                        }
+                        sessionEndedNoticeShown = true;
+                    } else {
+                        showSessionEndedNoticeIfNeeded();
+                    }
+                    widgetLog('sessão encerrada (SLA/timeout) — histórico do episódio anterior oculto');
                     return;
                 }
                 sessionEndedNoticeShown = false;
@@ -1779,6 +1811,7 @@
             const text = input.value.trim();
             if (!text) return;
 
+            beginNewEpisodeFromUserMessage();
             appendMessage(text, 'user');
             input.value = '';
             pollSessionInactivity();
