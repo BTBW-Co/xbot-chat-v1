@@ -1,7 +1,7 @@
 {
   "name": "xbot-chat-v1",
   "private": true,
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Widget XChat embeddable",
   "scripts": {
     "build": "bash scripts/build-widget.sh",

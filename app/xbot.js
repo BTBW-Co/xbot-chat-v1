@@ -283,11 +283,20 @@
 
         var sessionEndedNoticeShown = false;
         var sessionEpisodeEnded = false;
+        var closureNoticeRendered = false;
+
+        function isSessionClosurePayload(item, body) {
+            var meta = (item && item.metadata && typeof item.metadata === 'object') ? item.metadata : {};
+            if (meta.session_closed) return true;
+            var text = (body || '').trim();
+            return text.indexOf('Sua conversa foi encerrada') === 0;
+        }
 
         function resetXchatEpisodeLocalState(clearUi) {
             lastBotPollAt = null;
             lastBotMessageId = null;
             seenBotMessageKeys = {};
+            closureNoticeRendered = false;
             try {
                 var pollKey = pollStorageKey();
                 var msgKey = lastBotMessageIdKey();
@@ -320,6 +329,7 @@
             resetXchatEpisodeLocalState(true);
             sessionEpisodeEnded = false;
             sessionEndedNoticeShown = false;
+            closureNoticeRendered = false;
             welcomeShown = false;
             startSessionStatusPoll();
         }
@@ -360,6 +370,7 @@
         }
 
         function handleSessionExpiredByInactivity() {
+            if (sessionEpisodeEnded && (sessionEndedNoticeShown || closureNoticeRendered)) return;
             stopSessionStatusPoll();
             sessionEpisodeEnded = true;
             welcomeShown = false;
@@ -370,7 +381,7 @@
             } catch (e) { /* ignore */ }
             pollBotMessages();
             setTimeout(function () {
-                if (sessionEpisodeEnded && !sessionEndedNoticeShown) {
+                if (sessionEpisodeEnded && !sessionEndedNoticeShown && !closureNoticeRendered) {
                     showSessionEndedNoticeIfNeeded();
                 }
             }, 2500);
@@ -495,6 +506,10 @@
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
             var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
             if (seenBotMessageKeys['c:' + dedupKey]) return;
+            if (isSessionClosurePayload(item, body)) {
+                if (closureNoticeRendered) return;
+                closureNoticeRendered = true;
+            }
             if (meta.session_closed) {
                 sessionEpisodeEnded = true;
                 sessionEndedNoticeShown = true;
@@ -723,10 +738,10 @@
                     resetXchatEpisodeLocalState(false);
                     var list = data.messages || [];
                     if (list.length) {
-                        sessionEndedNoticeShown = false;
                         var histContainer = document.getElementById('xbot-messages');
                         if (histContainer) histContainer.innerHTML = '';
                         seenBotMessageKeys = {};
+                        closureNoticeRendered = false;
                         for (var j = 0; j < list.length; j++) {
                             ingestBotPayload(list[j], (list[j].content || '').trim(), 'history');
                         }
