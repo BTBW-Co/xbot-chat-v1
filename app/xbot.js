@@ -325,7 +325,7 @@
         }
 
         function beginNewEpisodeFromUserMessage() {
-            if (!sessionEpisodeEnded) return;
+            if (!sessionEpisodeEnded && !closureNoticeRendered) return;
             resetXchatEpisodeLocalState(true);
             sessionEpisodeEnded = false;
             sessionEndedNoticeShown = false;
@@ -784,6 +784,7 @@
         }
 
         async function pollBotMessages() {
+            if (sessionEpisodeEnded && closureNoticeRendered) return;
             if (!apiBaseUrl || !channelId) return;
             var vid = getVisitorId();
             if (!vid) return;
