@@ -363,6 +363,11 @@
             stopSessionStatusPoll();
             sessionEpisodeEnded = true;
             welcomeShown = false;
+            lastBotMessageId = null;
+            try {
+                var msgKey = lastBotMessageIdKey();
+                if (msgKey && typeof sessionStorage !== 'undefined') sessionStorage.removeItem(msgKey);
+            } catch (e) { /* ignore */ }
             pollBotMessages();
             setTimeout(function () {
                 if (sessionEpisodeEnded && !sessionEndedNoticeShown) {
@@ -486,6 +491,7 @@
             var mediaUrl = meta.media_url || '';
             var isMedia = !!mediaUrl && (ct === 'image' || ct === 'file' || ct === 'video' || ct === 'audio');
             if (!body && !isMedia) return;
+            if (sessionEpisodeEnded && source !== 'history' && !meta.session_closed) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
             var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
             if (seenBotMessageKeys['c:' + dedupKey]) return;
@@ -631,8 +637,15 @@
                 var url = getStreamUrl()
                     + '?channel_id=' + encodeURIComponent(channelId)
                     + '&visitor_id=' + encodeURIComponent(vid);
-                var lastId = lastBotMessageId || loadLastBotMessageId();
-                if (lastId) url += '&last_message_id=' + encodeURIComponent(lastId);
+                if (sessionEpisodeEnded) {
+                    var afterEnded = formatPollAfter(lastBotPollAt);
+                    if (afterEnded) url += '&after=' + encodeURIComponent(afterEnded);
+                } else {
+                    var lastId = lastBotMessageId || loadLastBotMessageId();
+                    if (lastId) url += '&last_message_id=' + encodeURIComponent(lastId);
+                    var afterActive = formatPollAfter(lastBotPollAt);
+                    if (afterActive) url += '&after=' + encodeURIComponent(afterActive);
+                }
 
                 stopXchatSse();
                 sseAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -664,6 +677,7 @@
                                     var conn = JSON.parse(frame.data);
                                     if (conn.session_active === false) {
                                         sessionEpisodeEnded = true;
+                                        resetXchatEpisodeLocalState(false);
                                         pollBotMessages();
                                     }
                                 } catch (e) { /* ignore */ }
@@ -706,6 +720,7 @@
                 var data = await res.json();
                 if (data.session_active === false) {
                     sessionEpisodeEnded = true;
+                    resetXchatEpisodeLocalState(false);
                     var list = data.messages || [];
                     if (list.length) {
                         sessionEndedNoticeShown = false;
@@ -790,7 +805,7 @@
 
         function startBotPoll() {
             if (pollTimer || !apiBaseUrl || !channelId) return;
-            if (!lastBotPollAt) {
+            if (!lastBotPollAt && !sessionEpisodeEnded) {
                 lastBotPollAt = loadLastBotPollAt();
             }
             widgetLog('poll ativo (intervalo ' + XCHAT_POLL_MS + 'ms)');
@@ -2000,7 +2015,6 @@
             deliverWelcomeOnPageLoad();
         }, 500);
 
-        lastBotMessageId = loadLastBotMessageId();
         widgetLog('UI pronta', {
             visitorId: getVisitorId(),
             channelId: channelId,
