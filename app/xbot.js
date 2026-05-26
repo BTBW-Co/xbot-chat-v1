@@ -260,6 +260,38 @@
             return 'xbot_last_bot_msg_id_' + channelId + '_' + vid;
         }
 
+        function userParticipationStorageKey() {
+            var vid = getVisitorId();
+            if (!channelId || !vid) return null;
+            return 'xbot_user_participated_' + channelId + '_' + vid;
+        }
+
+        function markUserParticipatedInTab() {
+            try {
+                var key = userParticipationStorageKey();
+                if (key && typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem(key, '1');
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function hadUserParticipatedInTab() {
+            try {
+                var key = userParticipationStorageKey();
+                if (!key || typeof sessionStorage === 'undefined') return false;
+                return sessionStorage.getItem(key) === '1';
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function historyHasUserMessage(list) {
+            for (var i = 0; i < (list || []).length; i++) {
+                if ((list[i].sender || '').toLowerCase() === 'user') return true;
+            }
+            return false;
+        }
+
         function saveLastBotMessageId(id) {
             if (!id) return;
             lastBotMessageId = String(id);
@@ -314,14 +346,17 @@
             }
         }
 
-        function showSessionEndedNoticeIfNeeded() {
-            if (sessionEndedNoticeShown) return;
-            sessionEndedNoticeShown = true;
+        function pauseRealtimeTransportAfterClosure() {
+            stopBotPoll();
+            stopXchatSse();
+            stopSessionStatusPoll();
+        }
+
+        function finalizeSessionEndedState() {
             sessionEpisodeEnded = true;
-            var hint =
-                'Sua conversa foi encerrada por inatividade ou prazo de atendimento. ' +
-                'Envie uma nova mensagem para recomeçar do início.';
-            appendMessage(hint, 'bot', { countUnread: false });
+            sessionEndedNoticeShown = true;
+            closureNoticeRendered = true;
+            pauseRealtimeTransportAfterClosure();
         }
 
         function beginNewEpisodeFromUserMessage() {
@@ -370,8 +405,7 @@
         }
 
         function handleSessionExpiredByInactivity() {
-            if (sessionEpisodeEnded && (sessionEndedNoticeShown || closureNoticeRendered)) return;
-            stopSessionStatusPoll();
+            if (sessionEpisodeEnded && closureNoticeRendered) return;
             sessionEpisodeEnded = true;
             welcomeShown = false;
             lastBotMessageId = null;
@@ -379,12 +413,11 @@
                 var msgKey = lastBotMessageIdKey();
                 if (msgKey && typeof sessionStorage !== 'undefined') sessionStorage.removeItem(msgKey);
             } catch (e) { /* ignore */ }
-            pollBotMessages();
-            setTimeout(function () {
-                if (sessionEpisodeEnded && !sessionEndedNoticeShown && !closureNoticeRendered) {
-                    showSessionEndedNoticeIfNeeded();
-                }
-            }, 2500);
+            if (!closureNoticeRendered) {
+                pollBotMessages();
+            } else {
+                finalizeSessionEndedState();
+            }
         }
 
         async function pollSessionInactivity() {
@@ -508,11 +541,9 @@
             if (seenBotMessageKeys['c:' + dedupKey]) return;
             if (isSessionClosurePayload(item, body)) {
                 if (closureNoticeRendered) return;
-                closureNoticeRendered = true;
             }
-            if (meta.session_closed) {
-                sessionEpisodeEnded = true;
-                sessionEndedNoticeShown = true;
+            if (meta.session_closed || isSessionClosurePayload(item, body)) {
+                finalizeSessionEndedState();
             }
             clearPendingTyping();
             if (isMedia) {
@@ -646,7 +677,9 @@
 
         async function runXchatSse() {
             if (!apiBaseUrl || !channelId || typeof fetch === 'undefined') return;
+            if (sessionEpisodeEnded && closureNoticeRendered) return;
             while (apiBaseUrl && channelId) {
+                if (sessionEpisodeEnded && closureNoticeRendered) break;
                 var vid = getVisitorId();
                 if (!vid) return;
                 var url = getStreamUrl()
@@ -692,8 +725,11 @@
                                     var conn = JSON.parse(frame.data);
                                     if (conn.session_active === false) {
                                         sessionEpisodeEnded = true;
-                                        resetXchatEpisodeLocalState(false);
-                                        pollBotMessages();
+                                        if (!closureNoticeRendered) {
+                                            pollBotMessages();
+                                        } else {
+                                            finalizeSessionEndedState();
+                                        }
                                     }
                                 } catch (e) { /* ignore */ }
                             } else if (frame.event === 'message' && frame.data) {
@@ -734,20 +770,21 @@
                 }
                 var data = await res.json();
                 if (data.session_active === false) {
-                    sessionEpisodeEnded = true;
-                    resetXchatEpisodeLocalState(false);
                     var list = data.messages || [];
-                    if (list.length) {
-                        var histContainer = document.getElementById('xbot-messages');
-                        if (histContainer) histContainer.innerHTML = '';
-                        seenBotMessageKeys = {};
-                        closureNoticeRendered = false;
-                        for (var j = 0; j < list.length; j++) {
-                            ingestBotPayload(list[j], (list[j].content || '').trim(), 'history');
-                        }
-                        sessionEndedNoticeShown = true;
-                    } else {
-                        showSessionEndedNoticeIfNeeded();
+                    if (!historyHasUserMessage(list) && !hadUserParticipatedInTab()) {
+                        sessionEpisodeEnded = false;
+                        widgetLog('visitante sem conversa anterior — chat limpo');
+                        return;
+                    }
+                    sessionEpisodeEnded = true;
+                    var histContainer = document.getElementById('xbot-messages');
+                    if (histContainer) histContainer.innerHTML = '';
+                    seenBotMessageKeys = {};
+                    for (var j = 0; j < list.length; j++) {
+                        ingestBotPayload(list[j], (list[j].content || '').trim(), 'history');
+                    }
+                    if (closureNoticeRendered) {
+                        finalizeSessionEndedState();
                     }
                     widgetLog('sessão encerrada (SLA/timeout) — histórico do episódio anterior oculto');
                     return;
@@ -820,6 +857,7 @@
         }
 
         function startBotPoll() {
+            if (sessionEpisodeEnded && closureNoticeRendered) return;
             if (pollTimer || !apiBaseUrl || !channelId) return;
             if (!lastBotPollAt && !sessionEpisodeEnded) {
                 lastBotPollAt = loadLastBotPollAt();
@@ -1842,6 +1880,7 @@
             const text = input.value.trim();
             if (!text) return;
 
+            markUserParticipatedInTab();
             beginNewEpisodeFromUserMessage();
             appendMessage(text, 'user');
             input.value = '';
@@ -1906,7 +1945,8 @@
         fileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-        
+            markUserParticipatedInTab();
+
             const formData = new FormData();
             formData.append('file', file);
             var vid = getVisitorId();
@@ -1982,6 +2022,7 @@
         
             mediaRecorder.ondataavailable = e => chunks.push(e.data);
             mediaRecorder.onstop = async () => {
+                markUserParticipatedInTab();
                 const blob = new Blob(chunks, { type: 'audio/webm' });
                 const formData = new FormData();
                 formData.append('file', blob, 'audio.webm');
@@ -2039,6 +2080,10 @@
         // Carrega o histórico PRIMEIRO (fonte única da render inicial); só então inicia poll/SSE,
         // evitando duplicação/ordenação errada entre poll e histórico.
         loadChatHistory().finally(function () {
+            if (sessionEpisodeEnded && closureNoticeRendered) {
+                widgetLog('transporte pausado — sessão encerrada');
+                return;
+            }
             startBotPoll();
             runXchatSse();
         });
