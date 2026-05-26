@@ -637,6 +637,13 @@
                     '<source src="' + url.replace(/"/g, '&quot;') + '"></video>';
                 if (cap) vhtml += '<p>' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
                 appendMessage(vhtml, 'bot', Object.assign({}, opts, { rawHtml: true }));
+            } else if (ct === 'audio') {
+                var alabel = cap || 'áudio';
+                var ahtml =
+                    '<audio controls preload="metadata" style="max-width:100%;min-width:220px;margin:4px 0 8px">' +
+                    '<source src="' + url.replace(/"/g, '&quot;') + '"></audio>';
+                if (cap && cap.indexOf('🎵') !== 0) ahtml += '<p class="text-xs opacity-80 mt-1">' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+                appendMessage(ahtml, 'bot', Object.assign({}, opts, { rawHtml: true }));
             } else {
                 var label = cap || (meta && meta.filename) || 'Arquivo';
                 appendMessage('[📎 ' + label + '](' + url + ')', 'bot', opts);
@@ -2032,38 +2039,52 @@
             mediaRecorder.ondataavailable = e => chunks.push(e.data);
             mediaRecorder.onstop = async () => {
                 markUserParticipatedInTab();
+                resumeRealtimeAfterUserSend();
+                beginNewEpisodeFromUserMessage();
                 const blob = new Blob(chunks, { type: 'audio/webm' });
                 const formData = new FormData();
                 formData.append('file', blob, 'audio.webm');
-        
+
                 const audioPreview = document.createElement('audio');
                 audioPreview.controls = true;
                 audioPreview.src = URL.createObjectURL(blob);
+                const audioRow = document.createElement('div');
+                audioRow.className = 'xbot-message-row user';
                 const audioMsg = document.createElement('div');
                 audioMsg.className = 'xbot-message user';
                 audioMsg.appendChild(audioPreview);
-                messages.appendChild(audioMsg);
+                audioRow.appendChild(audioMsg);
+                messages.appendChild(audioRow);
                 messages.scrollTop = messages.scrollHeight;
-        
+
+                pendingSendCount++;
+                _moveOrShowTyping();
+
                 try {
                 if (window.__xbotConfig.channelId) {
                     formData.append('channel_id', window.__xbotConfig.channelId);
                 }
+                var vid = getVisitorId();
+                if (vid) formData.append('visitor_id', vid);
                 const res = await fetch(getUploadUrl(), {
                     method: 'POST',
                     headers: buildAuthHeaders({}),
                     body: formData
                 });
+                if (!res.ok) throw new Error('upload failed');
                 const data = await res.json();
-                const reply = document.createElement('div');
-                reply.className = 'xbot-message bot';
-                reply.innerHTML = `Áudio recebido: <a href="${data.url}" target="_blank">Ouvir</a>`;
-                messages.appendChild(reply);
+                if (data.visitor_id && typeof localStorage !== 'undefined') {
+                    try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
+                }
+                pendingSendCount = Math.max(0, pendingSendCount - 1);
+                if (pendingSendCount === 0) {
+                    setTimeout(function () { clearPendingTyping(); }, 30000);
+                }
+                pollSessionInactivity();
                 } catch (err) {
-                const errorMsg = document.createElement('div');
-                errorMsg.className = 'xbot-message bot';
-                errorMsg.textContent = 'Erro ao enviar o áudio.';
-                messages.appendChild(errorMsg);
+                pendingSendCount = Math.max(0, pendingSendCount - 1);
+                if (pendingSendCount === 0) clearPendingTyping();
+                appendMessage('Erro ao enviar o áudio.', 'bot');
                 }
                 messages.scrollTop = messages.scrollHeight;
             };
