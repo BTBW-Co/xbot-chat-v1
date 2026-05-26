@@ -359,6 +359,14 @@
             pauseRealtimeTransportAfterClosure();
         }
 
+        function resumeRealtimeAfterUserSend() {
+            sessionEpisodeEnded = false;
+            closureNoticeRendered = false;
+            sessionEndedNoticeShown = false;
+            if (!pollTimer) startBotPoll();
+            if (!sseActive && !sseAbortController) runXchatSse();
+        }
+
         function beginNewEpisodeFromUserMessage() {
             if (!sessionEpisodeEnded && !closureNoticeRendered) return;
             resetXchatEpisodeLocalState(true);
@@ -540,7 +548,7 @@
             var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
             if (seenBotMessageKeys['c:' + dedupKey]) return;
             if (isSessionClosurePayload(item, body)) {
-                if (closureNoticeRendered) return;
+                if (closureNoticeRendered || pendingSendCount > 0) return;
             }
             if (meta.session_closed || isSessionClosurePayload(item, body)) {
                 finalizeSessionEndedState();
@@ -1881,6 +1889,7 @@
             if (!text) return;
 
             markUserParticipatedInTab();
+            resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
             appendMessage(text, 'user');
             input.value = '';
