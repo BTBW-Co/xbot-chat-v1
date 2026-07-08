@@ -77,11 +77,13 @@ Cole antes de `</body>`:
     clientId: "SEU_CLIENT_ID",
     token: "SEU_CLIENT_SECRET",
     apiBaseUrl: "https://api.xbotone.com",
-    position: "right",
-    themeColor: "#25D366"
+    position: "right"
   });
 </script>
 ```
+
+Cor, nome, avatares e mensagem de boas-vindas vêm do painel (aparência do canal XChat,
+servida por `GET /v1/xchat/widget-config`) — não precisam estar no embed.
 
 | Campo | Descrição |
 |-------|-----------|
@@ -90,14 +92,15 @@ Cole antes de `</body>`:
 | `token` | Client secret da API Key |
 | `apiBaseUrl` | URL da API (produção: `https://api.xbotone.com`) |
 | `position` | `right` ou `left` |
-| `themeColor` | Cor do botão (ex.: `#25D366`) |
-| `welcomeMessage` | *(opcional)* Texto de boas-vindas exibido ao carregar o site (balão ao lado do botão + animação no launcher; mensagem completa ao abrir o chat) |
+| `themeColor` | *(opcional)* Sobrescreve a cor configurada no painel (ex.: `#25D366`) |
+| `welcomeMessage` | *(opcional)* Sobrescreve a mensagem de boas-vindas do painel (balão ao lado do botão + animação no launcher; mensagem completa ao abrir o chat) |
 
 **Não commite o `client_secret` em repositório público.** Em apps com build (Next, Vite), use variáveis de ambiente.
 
-### Mensagem de boas-vindas (`welcomeMessage`)
+### Mensagem de boas-vindas
 
-Parâmetro **opcional** no `initXBot`. Quando definido:
+Configure no painel (edição do canal XChat → "Mensagem de boas-vindas") ou passe
+`welcomeMessage` no `initXBot` (o embed tem prioridade sobre o painel). Quando definida:
 
 1. **Ao carregar a página** do site hospedeiro (uma vez por aba/sessão do navegador), o widget:
    - mostra um **balão de prévia** com o texto (truncado) ao lado do botão flutuante;
@@ -119,7 +122,7 @@ Parâmetro **opcional** no `initXBot`. Quando definido:
 </script>
 ```
 
-- O valor definido no **embed do site** tem prioridade sobre `welcome_message` da API (quando a API não envia texto).
+- O valor definido no **embed do site** (quando não vazio) tem prioridade; sem ele, vale o `welcome_message` configurado no painel.
 - A entrega proativa na carga da página usa `sessionStorage` por canal (`xbot_welcome_delivered_<channelId>`), para não repetir o alerta a cada navegação interna na mesma aba.
 - Para disparar mensagens depois (ex.: promo), use `window.sendXBotMessage("...")` (ver abaixo).
 

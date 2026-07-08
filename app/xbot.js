@@ -260,38 +260,6 @@
             return 'xbot_last_bot_msg_id_' + channelId + '_' + vid;
         }
 
-        function userParticipationStorageKey() {
-            var vid = getVisitorId();
-            if (!channelId || !vid) return null;
-            return 'xbot_user_participated_' + channelId + '_' + vid;
-        }
-
-        function markUserParticipatedInTab() {
-            try {
-                var key = userParticipationStorageKey();
-                if (key && typeof sessionStorage !== 'undefined') {
-                    sessionStorage.setItem(key, '1');
-                }
-            } catch (e) { /* ignore */ }
-        }
-
-        function hadUserParticipatedInTab() {
-            try {
-                var key = userParticipationStorageKey();
-                if (!key || typeof sessionStorage === 'undefined') return false;
-                return sessionStorage.getItem(key) === '1';
-            } catch (e) {
-                return false;
-            }
-        }
-
-        function historyHasUserMessage(list) {
-            for (var i = 0; i < (list || []).length; i++) {
-                if ((list[i].sender || '').toLowerCase() === 'user') return true;
-            }
-            return false;
-        }
-
         function saveLastBotMessageId(id) {
             if (!id) return;
             lastBotMessageId = String(id);
@@ -785,23 +753,13 @@
                 }
                 var data = await res.json();
                 if (data.session_active === false) {
-                    var list = data.messages || [];
-                    if (!historyHasUserMessage(list) && !hadUserParticipatedInTab()) {
-                        sessionEpisodeEnded = false;
-                        widgetLog('visitante sem conversa anterior — chat limpo');
-                        return;
-                    }
-                    sessionEpisodeEnded = true;
-                    var histContainer = document.getElementById('xbot-messages');
-                    if (histContainer) histContainer.innerHTML = '';
-                    seenBotMessageKeys = {};
-                    for (var j = 0; j < list.length; j++) {
-                        ingestBotPayload(list[j], (list[j].content || '').trim(), 'history');
-                    }
-                    if (closureNoticeRendered) {
-                        finalizeSessionEndedState();
-                    }
-                    widgetLog('sessão encerrada (SLA/timeout) — histórico do episódio anterior oculto');
+                    // Sessão anterior expirou: pageload recomeça com conversa limpa (welcome).
+                    // O aviso de encerramento só aparece ao vivo, no momento da expiração.
+                    resetXchatEpisodeLocalState(true);
+                    sessionEpisodeEnded = false;
+                    sessionEndedNoticeShown = false;
+                    welcomeShown = false;
+                    widgetLog('sessão anterior encerrada — conversa nova');
                     return;
                 }
                 sessionEndedNoticeShown = false;
@@ -1028,6 +986,32 @@
 
         const style = document.createElement('style');
         style.innerHTML = `
+            /* Design tokens — base única de tema do widget (.xbot-root em launcher, teaser e chatbox) */
+            .xbot-root {
+                --xbot-theme: ${themeColor};
+                --xbot-theme-rgb: ${themeRgb};
+                --xbot-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                --xbot-ink: #0f172a;
+                --xbot-text: #334155;
+                --xbot-muted: #64748b;
+                --xbot-subtle: #94a3b8;
+                --xbot-surface: #fff;
+                --xbot-surface-alt: #f8fafc;
+                --xbot-field: #f1f5f9;
+                --xbot-border: #e2e8f0;
+                --xbot-border-soft: rgba(15, 23, 42, 0.08);
+                --xbot-danger: #ef4444;
+                --xbot-success: #22c55e;
+                --xbot-warn-bg: linear-gradient(90deg, #fff7ed 0%, #ffedd5 100%);
+                --xbot-warn-border: #fed7aa;
+                --xbot-warn-text: #9a3412;
+                --xbot-header-bg: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                --xbot-radius-xs: 8px;
+                --xbot-radius-sm: 10px;
+                --xbot-radius-md: 12px;
+                --xbot-radius-lg: 16px;
+                --xbot-radius-xl: 20px;
+            }
             .xbot-root, .xbot-root * { box-sizing: border-box; }
             .xbot-launcher {
                 position: fixed;
@@ -1040,8 +1024,8 @@
                 border-radius: 50%;
                 cursor: pointer;
                 z-index: 2147483000;
-                background: ${themeColor};
-                box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(${themeRgb}, 0.22);
+                background: var(--xbot-theme);
+                box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(var(--xbot-theme-rgb), 0.22);
                 transition: transform 0.2s ease, box-shadow 0.2s ease;
                 display: flex;
                 align-items: center;
@@ -1066,9 +1050,9 @@
             .xbot-launcher.is-open {
                 width: 48px;
                 height: 48px;
-                background: #0f172a;
+                background: var(--xbot-ink);
                 border-width: 2px;
-                box-shadow: 0 10px 28px rgba(15, 23, 42, 0.32), 0 0 0 4px rgba(${themeRgb}, 0.12);
+                box-shadow: 0 10px 28px rgba(15, 23, 42, 0.32), 0 0 0 4px rgba(var(--xbot-theme-rgb), 0.12);
             }
             .xbot-launcher.is-open:hover { transform: scale(1.04); }
             .xbot-launcher.is-open .xbot-launcher__face { display: none; }
@@ -1089,7 +1073,7 @@
                 min-width: 20px;
                 height: 20px;
                 padding: 0 6px;
-                background: #ef4444;
+                background: var(--xbot-danger);
                 color: #fff;
                 font-size: 11px;
                 font-weight: 700;
@@ -1098,7 +1082,7 @@
                 display: none;
                 align-items: center;
                 justify-content: center;
-                font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+                font-family: var(--xbot-font);
                 animation: xbotBadgePop 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
             }
             @keyframes xbotBadgePop {
@@ -1118,13 +1102,13 @@
                 position: absolute;
                 inset: -6px;
                 border-radius: 50%;
-                border: 2px solid rgba(${themeRgb}, 0.65);
+                border: 2px solid rgba(var(--xbot-theme-rgb), 0.65);
                 animation: xbotLauncherRing 1.8s ease-out infinite;
                 pointer-events: none;
             }
             @keyframes xbotLauncherPulse {
-                0%, 100% { transform: scale(1); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(${themeRgb}, 0.22); }
-                50% { transform: scale(1.07); box-shadow: 0 16px 48px rgba(15, 23, 42, 0.32), 0 0 0 10px rgba(${themeRgb}, 0.35); }
+                0%, 100% { transform: scale(1); box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(var(--xbot-theme-rgb), 0.22); }
+                50% { transform: scale(1.07); box-shadow: 0 16px 48px rgba(15, 23, 42, 0.32), 0 0 0 10px rgba(var(--xbot-theme-rgb), 0.35); }
             }
             @keyframes xbotLauncherRing {
                 0% { transform: scale(0.92); opacity: 0.85; }
@@ -1137,14 +1121,14 @@
                 ${posH}: 96px;
                 max-width: min(280px, calc(100vw - 120px));
                 padding: 12px 14px;
-                background: #fff;
+                background: var(--xbot-surface);
                 border: 1px solid rgba(15, 23, 42, 0.08);
-                border-radius: 16px;
+                border-radius: var(--xbot-radius-lg);
                 border-bottom-${posH === 'left' ? 'right' : 'left'}-radius: 6px;
                 box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
                 z-index: 2147482998;
                 cursor: pointer;
-                font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+                font-family: var(--xbot-font);
                 opacity: 0;
                 transform: translateY(10px) scale(0.96);
                 animation: xbotTeaserIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -1156,7 +1140,7 @@
                 ${posH === 'left' ? 'left' : 'right'}: -7px;
                 width: 14px;
                 height: 14px;
-                background: #fff;
+                background: var(--xbot-surface);
                 border-right: 1px solid rgba(15, 23, 42, 0.08);
                 border-bottom: 1px solid rgba(15, 23, 42, 0.08);
                 transform: rotate(-45deg);
@@ -1172,13 +1156,13 @@
                 height: 28px;
                 border-radius: 50%;
                 object-fit: cover;
-                background: #e2e8f0;
+                background: var(--xbot-border);
                 flex-shrink: 0;
             }
             .xbot-welcome-teaser__name {
                 font-size: 13px;
                 font-weight: 600;
-                color: #0f172a;
+                color: var(--xbot-ink);
             }
             .xbot-welcome-teaser__text {
                 font-size: 13px;
@@ -1193,7 +1177,7 @@
                 margin-top: 8px;
                 font-size: 11px;
                 font-weight: 600;
-                color: ${themeColor};
+                color: var(--xbot-theme);
             }
             @keyframes xbotTeaserIn {
                 to { opacity: 1; transform: translateY(0) scale(1); }
@@ -1209,15 +1193,15 @@
                 width: 380px;
                 max-width: calc(100vw - 24px);
                 height: min(560px, calc(100vh - ${chatboxStackBottom + 16}px));
-                background: #fff;
-                border-radius: 20px;
+                background: var(--xbot-surface);
+                border-radius: var(--xbot-radius-xl);
                 border: 1px solid rgba(15, 23, 42, 0.08);
                 box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.04);
                 display: none;
                 flex-direction: column;
                 overflow: hidden;
                 z-index: 2147482999;
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-family: var(--xbot-font);
                 animation: xbotSlideIn 0.28s ease;
             }
             @keyframes xbotSlideIn {
@@ -1226,19 +1210,19 @@
             }
 
             .xbot-header {
-                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                background: var(--xbot-header-bg);
                 color: #fff;
                 padding: 14px 16px;
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                border-bottom: 3px solid ${themeColor};
+                border-bottom: 3px solid var(--xbot-theme);
                 flex-shrink: 0;
             }
             .xbot-header img {
                 width: 40px;
                 height: 40px;
-                border-radius: 12px;
+                border-radius: var(--xbot-radius-md);
                 object-fit: cover;
                 border: 2px solid rgba(255,255,255,0.15);
             }
@@ -1264,14 +1248,14 @@
                 width: 7px;
                 height: 7px;
                 border-radius: 50%;
-                background: #22c55e;
+                background: var(--xbot-success);
                 box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
             }
             .xbot-header-minimize {
                 width: 36px;
                 height: 36px;
                 border: none;
-                border-radius: 10px;
+                border-radius: var(--xbot-radius-sm);
                 background: rgba(255,255,255,0.08);
                 color: #fff;
                 cursor: pointer;
@@ -1289,10 +1273,10 @@
                 gap: 10px;
                 flex-wrap: wrap;
                 padding: 10px 14px;
-                background: linear-gradient(90deg, #fff7ed 0%, #ffedd5 100%);
-                border-bottom: 1px solid #fed7aa;
+                background: var(--xbot-warn-bg);
+                border-bottom: 1px solid var(--xbot-warn-border);
                 font-size: 12px;
-                color: #9a3412;
+                color: var(--xbot-warn-text);
                 flex-shrink: 0;
             }
             .xbot-inactivity-bar[hidden] { display: none !important; }
@@ -1306,12 +1290,12 @@
             .xbot-inactivity-icon { font-size: 14px; }
             .xbot-inactivity-btn {
                 border: none;
-                border-radius: 10px;
+                border-radius: var(--xbot-radius-sm);
                 padding: 8px 12px;
                 font-size: 12px;
                 font-weight: 600;
                 cursor: pointer;
-                background: rgb(${themeRgb});
+                background: rgb(var(--xbot-theme-rgb));
                 color: #fff;
                 white-space: nowrap;
                 transition: opacity 0.15s, transform 0.1s;
@@ -1327,7 +1311,7 @@
                 flex-direction: column;
                 gap: 10px;
                 scroll-behavior: smooth;
-                background: linear-gradient(180deg, #f8fafc 0%, #fff 48px);
+                background: linear-gradient(180deg, var(--xbot-surface-alt) 0%, var(--xbot-surface) 48px);
             }
 
             .xbot-message-row {
@@ -1344,12 +1328,12 @@
                 border-radius: 50%;
                 object-fit: cover;
                 flex-shrink: 0;
-                background: #e2e8f0;
+                background: var(--xbot-border);
             }
 
             .xbot-message {
                 padding: 10px 14px;
-                border-radius: 16px;
+                border-radius: var(--xbot-radius-lg);
                 font-size: 14px;
                 line-height: 1.45;
                 opacity: 0;
@@ -1362,20 +1346,20 @@
             .xbot-message img {
                 max-width: 100%;
                 height: auto;
-                border-radius: 12px;
+                border-radius: var(--xbot-radius-md);
                 display: block;
                 margin: 2px 0 6px;
             }
             .xbot-message.user {
-                background: rgba(${themeRgb}, 0.12);
-                border: 1px solid rgba(${themeRgb}, 0.22);
-                color: #0f172a;
+                background: rgba(var(--xbot-theme-rgb), 0.12);
+                border: 1px solid rgba(var(--xbot-theme-rgb), 0.22);
+                color: var(--xbot-ink);
                 border-bottom-right-radius: 4px;
             }
             .xbot-message.bot {
-                background: #fff;
-                border: 1px solid #e2e8f0;
-                color: #334155;
+                background: var(--xbot-surface);
+                border: 1px solid var(--xbot-border);
+                color: var(--xbot-text);
                 border-bottom-left-radius: 4px;
                 box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
             }
@@ -1393,25 +1377,25 @@
             .xbot-text strong { font-weight: 600; }
             .xbot-message video {
                 max-width: 100%;
-                border-radius: 12px;
+                border-radius: var(--xbot-radius-md);
                 display: block;
                 margin: 4px 0 8px;
             }
             .xbot-time {
                 font-size: 10px;
-                color: #94a3b8;
+                color: var(--xbot-subtle);
             }
             .xbot-message a {
-                color: ${themeColor};
+                color: var(--xbot-theme);
                 font-weight: 500;
                 text-decoration: none;
-                border-bottom: 1px solid rgba(${themeRgb}, 0.4);
+                border-bottom: 1px solid rgba(var(--xbot-theme-rgb), 0.4);
             }
             .xbot-message a:hover { opacity: 0.85; }
 
             .xbot-typing {
                 font-size: 12px;
-                color: #64748b;
+                color: var(--xbot-muted);
                 padding: 4px 8px;
                 display: flex;
                 align-items: center;
@@ -1421,7 +1405,7 @@
                 width: 5px;
                 height: 5px;
                 border-radius: 50%;
-                background: ${themeColor};
+                background: var(--xbot-theme);
                 display: inline-block;
                 animation: xbotDot 1.2s infinite ease-in-out;
             }
@@ -1434,24 +1418,24 @@
 
             .xbot-compose {
                 padding: 12px 14px 10px;
-                border-top: 1px solid #e2e8f0;
-                background: #fff;
+                border-top: 1px solid var(--xbot-border);
+                background: var(--xbot-surface);
                 flex-shrink: 0;
             }
             .xbot-compose-inner {
                 display: flex;
                 align-items: flex-end;
                 gap: 8px;
-                background: #f1f5f9;
-                border: 1px solid #e2e8f0;
+                background: var(--xbot-field);
+                border: 1px solid var(--xbot-border);
                 border-radius: 14px;
                 padding: 6px 6px 6px 10px;
                 transition: border-color 0.15s, box-shadow 0.15s;
             }
             .xbot-compose-inner:focus-within {
-                border-color: rgba(${themeRgb}, 0.55);
-                box-shadow: 0 0 0 3px rgba(${themeRgb}, 0.12);
-                background: #fff;
+                border-color: rgba(var(--xbot-theme-rgb), 0.55);
+                box-shadow: 0 0 0 3px rgba(var(--xbot-theme-rgb), 0.12);
+                background: var(--xbot-surface);
             }
             .xbot-compose-tools {
                 display: flex;
@@ -1464,9 +1448,9 @@
                 width: 30px;
                 height: 30px;
                 border: none;
-                border-radius: 8px;
+                border-radius: var(--xbot-radius-xs);
                 background: transparent;
-                color: #64748b;
+                color: var(--xbot-muted);
                 cursor: pointer;
                 display: flex;
                 align-items: center;
@@ -1475,10 +1459,10 @@
             }
             .xbot-icon-btn:hover {
                 background: rgba(15, 23, 42, 0.06);
-                color: #0f172a;
+                color: var(--xbot-ink);
             }
             .xbot-icon-btn.is-recording {
-                color: #ef4444;
+                color: var(--xbot-danger);
                 background: rgba(239, 68, 68, 0.1);
             }
             .xbot-input {
@@ -1492,16 +1476,16 @@
                 max-height: 120px;
                 outline: none;
                 font-family: inherit;
-                color: #0f172a;
+                color: var(--xbot-ink);
             }
-            .xbot-input::placeholder { color: #94a3b8; }
+            .xbot-input::placeholder { color: var(--xbot-subtle); }
             .xbot-send {
                 width: 40px;
                 height: 40px;
                 flex-shrink: 0;
                 border: none;
-                border-radius: 12px;
-                background: ${themeColor};
+                border-radius: var(--xbot-radius-md);
+                background: var(--xbot-theme);
                 color: #fff;
                 cursor: pointer;
                 display: flex;
@@ -1515,20 +1499,20 @@
             .xbot-footer {
                 padding: 6px 14px 12px;
                 text-align: center;
-                background: #fff;
+                background: var(--xbot-surface);
                 flex-shrink: 0;
             }
             .xbot-powered {
                 font-size: 11px;
-                color: #94a3b8;
+                color: var(--xbot-subtle);
                 text-decoration: none;
                 letter-spacing: 0.02em;
             }
             .xbot-powered strong {
-                color: #0f172a;
+                color: var(--xbot-ink);
                 font-weight: 600;
             }
-            .xbot-powered:hover strong { color: ${themeColor}; }
+            .xbot-powered:hover strong { color: var(--xbot-theme); }
 
             @media screen and (max-width: 600px) {
                 .xbot-chatbox {
@@ -1536,14 +1520,14 @@
                     max-width: 100vw;
                     bottom: ${mobileStackBottom}px !important;
                     ${posH}: 0 !important;
-                    border-radius: 16px 16px 0 0;
+                    border-radius: var(--xbot-radius-lg) var(--xbot-radius-lg) 0 0;
                 }
                 .xbot-chatbox.is-open:not(.xbot-keyboard-open) {
                     top: env(safe-area-inset-top, 0px);
                     bottom: calc(${mobileOpenStackBottom}px + env(safe-area-inset-bottom, 0px)) !important;
                     height: auto !important;
                     max-height: none !important;
-                    border-radius: 16px 16px 0 0;
+                    border-radius: var(--xbot-radius-lg) var(--xbot-radius-lg) 0 0;
                 }
                 .xbot-chatbox.xbot-keyboard-open {
                     left: 0 !important;
@@ -1895,7 +1879,6 @@
             const text = input.value.trim();
             if (!text) return;
 
-            markUserParticipatedInTab();
             resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
             appendMessage(text, 'user');
@@ -1961,7 +1944,6 @@
         fileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            markUserParticipatedInTab();
 
             const formData = new FormData();
             formData.append('file', file);
@@ -2038,7 +2020,6 @@
         
             mediaRecorder.ondataavailable = e => chunks.push(e.data);
             mediaRecorder.onstop = async () => {
-                markUserParticipatedInTab();
                 resumeRealtimeAfterUserSend();
                 beginNewEpisodeFromUserMessage();
                 const blob = new Blob(chunks, { type: 'audio/webm' });
