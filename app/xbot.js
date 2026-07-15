@@ -71,6 +71,10 @@
                   ? cfg.welcomeMessage
                   : (data.welcome_message != null ? data.welcome_message : cfg.welcomeMessage),
               launcherIcon: data.launcher_icon_url || cfg.launcherIcon,
+              botReplyEnabled:
+                typeof data.bot_reply_enabled === 'boolean'
+                  ? data.bot_reply_enabled
+                  : cfg.botReplyEnabled,
             })
           );
         })
@@ -1885,10 +1889,6 @@
             input.value = '';
             pollSessionInactivity();
 
-            // Incrementa contador e reposiciona (ou cria) o indicador no final — sem piscar
-            pendingSendCount++;
-            _moveOrShowTyping();
-
             try {
                 const visitorId = getVisitorId();
                 const msgBody = { message: text };
@@ -1905,23 +1905,22 @@
                 }
                 if (data.reply) {
                     var replyText = String(data.reply).trim();
-                    pendingSendCount = Math.max(0, pendingSendCount - 1);
                     if (replyText) ingestBotPayload(null, replyText, 'post');
-                    else if (pendingSendCount === 0) clearPendingTyping();
-                } else {
-                    // Resposta assíncrona (SSE/poll): decrementa agora; indicador permanece até o bot responder
+                    else clearPendingTyping();
+                } else if (data.bot_reply_enabled) {
+                    // Só mostra "digitando" quando a API confirma que o agente vai responder.
+                    pendingSendCount++;
+                    _moveOrShowTyping();
                     pendingSendCount = Math.max(0, pendingSendCount - 1);
-                    // Fallback: limpa se o bot não responder em 30s e não houver outras mensagens pendentes
-                    (function (snapshot) {
-                        setTimeout(function () {
-                            if (pendingSendCount === 0) clearPendingTyping();
-                        }, 30000);
-                    })(pendingSendCount);
+                    setTimeout(function () {
+                        if (pendingSendCount === 0) clearPendingTyping();
+                    }, 30000);
+                } else {
+                    clearPendingTyping();
                 }
 
             } catch (err) {
-                pendingSendCount = Math.max(0, pendingSendCount - 1);
-                if (pendingSendCount === 0) clearPendingTyping();
+                clearPendingTyping();
                 var errText = 'Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..';
                 appendMessage(errText, 'bot');
                 rememberBotMessage(null, errText);
@@ -2038,9 +2037,6 @@
                 messages.appendChild(audioRow);
                 messages.scrollTop = messages.scrollHeight;
 
-                pendingSendCount++;
-                _moveOrShowTyping();
-
                 try {
                 if (window.__xbotConfig.channelId) {
                     formData.append('channel_id', window.__xbotConfig.channelId);
@@ -2057,14 +2053,19 @@
                 if (data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
-                pendingSendCount = Math.max(0, pendingSendCount - 1);
-                if (pendingSendCount === 0) {
-                    setTimeout(function () { clearPendingTyping(); }, 30000);
+                if (data.bot_reply_enabled) {
+                    pendingSendCount++;
+                    _moveOrShowTyping();
+                    pendingSendCount = Math.max(0, pendingSendCount - 1);
+                    setTimeout(function () {
+                        if (pendingSendCount === 0) clearPendingTyping();
+                    }, 30000);
+                } else {
+                    clearPendingTyping();
                 }
                 pollSessionInactivity();
                 } catch (err) {
-                pendingSendCount = Math.max(0, pendingSendCount - 1);
-                if (pendingSendCount === 0) clearPendingTyping();
+                clearPendingTyping();
                 appendMessage('Erro ao enviar o áudio.', 'bot');
                 }
                 messages.scrollTop = messages.scrollHeight;
