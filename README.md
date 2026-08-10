@@ -14,52 +14,63 @@ Repositório: [github.com/BTBW-Co/xbot-chat-v1](https://github.com/BTBW-Co/xbot-
 
 ---
 
-## CDN — URL do script
+## CDN e embed hospedado
 
-### URL oficial (recomendada)
+### Embed hospedado (recomendado — escala)
 
-Use **sempre** esta URL no `<script src="...">`. Ela **não muda** entre releases: o artefato vive em `xbot-site-v1/public/xchat/xbot.min.js` e é sincronizado a cada `npm run build` do chat / `make git`. Cache curto no CloudFront (`max-age=5`).
+O widget roda em **iframe** em `xbotone.com`. O site do cliente só carrega um loader leve; `channelId` é sanitizado (UUID puro); com `data-lazy="1"` **não há chamada à API** até o visitante clicar.
 
-**CDN estável (first-party):**
-
-[https://xbotone.com/xchat/xbot.min.js](https://xbotone.com/xchat/xbot.min.js)
-
-```text
-https://xbotone.com/xchat/xbot.min.js
+```html
+<script
+  src="https://xbotone.com/xchat/embed.js"
+  data-channel-id="UUID-DO-CANAL-XCHAT"
+  data-client-id="SEU_CLIENT_ID"
+  data-token="SEU_CLIENT_SECRET"
+  data-api-base="https://api.xbotone.com"
+  data-lazy="1"
+  async
+></script>
 ```
 
 | Item | Valor |
 |------|--------|
-| Provedor | Site oficial (`xbotone.com` / CloudFront) |
-| Artefato | `xbot-site-v1/public/xchat/xbot.min.js` |
-| Atualização | Automática após build do chat + deploy do site |
+| Loader | `https://xbotone.com/xchat/embed.js` |
+| Frame | `https://xbotone.com/xchat/embed.html` |
+| Widget JS | `https://xbotone.com/xchat/xbot.min.js` (interno ao frame) |
 
-A API também expõe essa URL em `GET /v1/xchat/widget-config` no campo **`script_cdn_url`**. Em produção, pode sobrescrever com `XCHAT_WIDGET_SCRIPT_CDN`.
+API (`GET /v1/xchat/widget-config`): `embed_loader_url`, `embed_page_url`, `script_cdn_url`.
 
-**Ícones padrão** (quando o tenant não envia imagem no painel) vêm do app (`app.xbotone.com/workforce/…`).
+Controle via host: `XBotEmbed.open()` / `XBotEmbed.close()` / `XBotEmbed.mount({...})`.
+
+**`channelId` deve ser só o UUID** — não concatene secret nem sufixos (`…db51e-o_g` quebra auth e gera carga inútil).
+
+### Script direto (first-party)
+
+[https://xbotone.com/xchat/xbot.min.js](https://xbotone.com/xchat/xbot.min.js) — atualiza no deploy do site (`public/xchat/`). Cache curto (`max-age=5`).
 
 ### Congelar em uma versão (opcional, jsDelivr)
-
-Se precisar de **pin semver** (auditoria, rollback ou homologação):
 
 ```
 https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@1.0.25/versions/1.0.25/xbot.min.js
 ```
 
-Substitua pela tag desejada. Essa URL **não** se atualiza sozinha.
-
 ### O que evitar
 
-- `cdn.jsdelivr.net/...@main/versions/latest/...` — cache inconsistente entre edges.
-- Repositório legado `btbw/xbot-chat` — use apenas `BTBW-Co/xbot-chat-v1`.
+- `cdn.jsdelivr.net/...@main/versions/latest/...` — cache inconsistente.
+- Carregar o widget antigo (≤ 1.0.20) no layout global (poll no pageload).
+- Repositório legado `btbw/xbot-chat`.
 
 ---
 
 ## Integração em qualquer site (HTML)
 
-### Lazy-load (recomendado)
+### 1) Embed hospedado (recomendado)
 
-Não baixa o JS nem chama a API até o visitante clicar. Cole **um** bloco antes de `</body>` (substitua credenciais):
+Ver bloco acima (`embed.js` + `data-lazy="1"`).
+
+### 2) Lazy-load no domínio do cliente
+
+Não baixa o JS nem chama a API até o visitante clicar:
 
 ```html
 <script>
@@ -121,9 +132,7 @@ Não baixa o JS nem chama a API até o visitante clicar. Cole **um** bloco antes
 </script>
 ```
 
-Botão próprio do site: `data-xbot-open` ou `id="xbot-open-chat"` também dispara o load. Ou chame `window.loadXBot()`.
-
-### Carga imediata (opcional)
+### 3) Carga imediata (opcional)
 
 ```html
 <script src="https://xbotone.com/xchat/xbot.min.js"></script>
@@ -145,7 +154,7 @@ estar no embed.
 
 | Campo | Descrição |
 |-------|-----------|
-| `channelId` | UUID do canal XChat |
+| `channelId` | UUID do canal XChat (**somente** o UUID) |
 | `clientId` | Client ID da API Key |
 | `token` | Client secret da API Key |
 | `apiBaseUrl` | URL da API (produção: `https://api.xbotone.com`) |
