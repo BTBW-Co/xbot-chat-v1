@@ -93,6 +93,8 @@
               position: data.position || cfg.position,
               offsetBottom:
                 data.offset_bottom != null ? data.offset_bottom : cfg.offsetBottom,
+              offsetSide:
+                data.offset_side != null ? data.offset_side : cfg.offsetSide,
               botReplyEnabled:
                 typeof data.bot_reply_enabled === 'boolean'
                   ? data.bot_reply_enabled
@@ -177,7 +179,8 @@
             clientId = '',
             channelId = '',
             apiBaseUrl = '',
-            offsetBottom = 20
+            offsetBottom = 20,
+            offsetSide = 20
         } = config;
 
         function buildAuthHeaders(extra) {
@@ -881,6 +884,7 @@
         }
     
         const offset = offsetBottom || 20;
+        const sideOffset = offsetSide != null ? offsetSide : 20;
         const LAUNCHER_SIZE = 64;
         const LAUNCHER_GAP = 28;
         /** Base do painel acima do botão flutuante (launcher). */
@@ -890,6 +894,7 @@
         const mobileStackBottom = mobileLauncherOffset + LAUNCHER_SIZE + LAUNCHER_GAP;
         const mobileOpenStackBottom = mobileLauncherOffset + mobileLauncherOpenSize + LAUNCHER_GAP;
         const MOBILE_LAYOUT_MQ = '(max-width: 600px)';
+        const teaserSideOffset = sideOffset + LAUNCHER_SIZE + 12;
 
         function hexToRgb(hex) {
             var h = (hex || '#22c55e').replace('#', '').trim();
@@ -1056,7 +1061,7 @@
             .xbot-launcher {
                 position: fixed;
                 bottom: ${offset}px;
-                ${posH}: 20px;
+                ${posH}: ${sideOffset}px;
                 width: 64px;
                 height: 64px;
                 padding: 0;
@@ -1158,7 +1163,7 @@
             .xbot-welcome-teaser {
                 position: fixed;
                 bottom: ${offset + LAUNCHER_SIZE + 12}px;
-                ${posH}: 96px;
+                ${posH}: ${teaserSideOffset}px;
                 max-width: min(280px, calc(100vw - 120px));
                 padding: 12px 14px;
                 background: var(--xbot-surface);
@@ -1229,7 +1234,7 @@
             .xbot-chatbox {
                 position: fixed;
                 bottom: ${chatboxStackBottom}px;
-                ${posH}: 20px;
+                ${posH}: ${sideOffset}px;
                 width: 380px;
                 max-width: calc(100vw - 24px);
                 height: min(560px, calc(100vh - ${chatboxStackBottom + 16}px));
