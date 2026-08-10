@@ -38,6 +38,22 @@ O widget roda em **iframe** em `xbotone.com`. O site do cliente só carrega um l
 | Frame | `https://xbotone.com/xchat/embed.html` |
 | Widget JS | `https://xbotone.com/xchat/xbot.min.js` (interno ao frame) |
 
+Identidade do visitante no embed hospedado (página pai → iframe):
+
+```js
+// O embed.js define estes helpers no parent e encaminha via postMessage.
+window.setXBotUser({
+  externalUserId: "USR-123",
+  name: "Maria",
+  custom_fields: { company_name: "Acme" }
+});
+window.setXBotContext({ pageUrl: location.href, notes: "Checkout" });
+// ou: window.XBotEmbed.setUser(...); window.XBotEmbed.setContext(...);
+```
+
+Também é possível passar `user` / `context` em `XBotEmbed.mount({ ..., user, context })`.
+A próxima mensagem do chat já sai identificada.
+
 API (`GET /v1/xchat/widget-config`): `embed_loader_url`, `embed_page_url`, `script_cdn_url`.
 
 Controle via host: `XBotEmbed.open()` / `XBotEmbed.close()` / `XBotEmbed.mount({...})`.
@@ -206,6 +222,9 @@ Em SPAs, após login ou mudança de rota:
 window.setXBotUser({ externalUserId: "USR-123", name: "Maria" });
 window.setXBotContext({ pageUrl: location.href, pageTitle: document.title });
 ```
+
+Com **embed hospedado**, esses helpers são definidos pelo `embed.js` na página pai e
+encaminhados ao iframe (`xbot:set-user` / `xbot:set-context`).
 
 Se `context.pageUrl` não for informado, o widget envia `window.location.href` automaticamente.
 
