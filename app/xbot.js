@@ -246,17 +246,22 @@
         var lastBotMessageId = null;
         var seenBotMessageKeys = {};
         var pollTimer = null;
-        var XCHAT_POLL_MS = 3000;
+        /** Poll HTTP só como fallback quando SSE cair (evita dobrar carga na API). */
+        var XCHAT_POLL_MS = 8000;
         var sseAbortController = null;
         var sseActive = false;
         var sseFailCount = 0;
+        var sseLoopRunning = false;
         var pendingTypingEl = null;
         var sessionStatusTimer = null;
-        var SESSION_STATUS_POLL_MS = 2000;
+        /** Barra de inatividade: 10s basta; 2s gerava storm desnecessário. */
+        var SESSION_STATUS_POLL_MS = 10000;
         var keepAliveInFlight = false;
         var inactivityBar = null;
         var inactivityCountdownEl = null;
         var inactivityKeepBtn = null;
+        var historyLoadedOnce = false;
+        var realtimeDesired = false;
 
         function pollStorageKey() {
             var vid = getVisitorId();
@@ -358,6 +363,7 @@
         }
 
         function pauseRealtimeTransportAfterClosure() {
+            realtimeDesired = false;
             stopBotPoll();
             stopXchatSse();
             stopSessionStatusPoll();
@@ -374,8 +380,7 @@
             sessionEpisodeEnded = false;
             closureNoticeRendered = false;
             sessionEndedNoticeShown = false;
-            if (!pollTimer) startBotPoll();
-            if (!sseActive && !sseAbortController) runXchatSse();
+            ensureRealtimeTransport();
         }
 
         function beginNewEpisodeFromUserMessage() {
@@ -386,6 +391,59 @@
             closureNoticeRendered = false;
             welcomeShown = false;
             startSessionStatusPoll();
+            ensureRealtimeTransport();
+        }
+
+        function isChatOpen() {
+            return chatbox && chatbox.style.display === 'flex';
+        }
+
+        function isPageVisible() {
+            return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+        }
+
+        /**
+         * Transporte em tempo real só com chat aberto + aba visível.
+         * SSE é o caminho principal; poll HTTP só se SSE falhar.
+         */
+        function maybeShowWelcomeMessage() {
+            if (!isChatOpen() || welcomeShown) return;
+            var welcomeText = pendingWelcomeText || getWelcomeText();
+            if (!welcomeText) return;
+            appendMessage(welcomeText, 'bot', { countUnread: false });
+            rememberBotMessage(null, welcomeText);
+            welcomeShown = true;
+            pendingWelcomeText = null;
+            scheduleScrollMessagesToBottom();
+        }
+
+        function ensureRealtimeTransport() {
+            if (sessionEpisodeEnded && closureNoticeRendered) return;
+            if (!isChatOpen() || !isPageVisible()) return;
+            realtimeDesired = true;
+            function startTransports() {
+                if (!realtimeDesired || !isChatOpen() || !isPageVisible()) return;
+                maybeShowWelcomeMessage();
+                if (!sseLoopRunning) runXchatSse();
+                // Dá ~2.5s para o SSE subir antes de ligar o poll HTTP.
+                setTimeout(function () {
+                    if (!realtimeDesired || sseActive || pollTimer) return;
+                    if (!isChatOpen() || !isPageVisible()) return;
+                    startBotPoll();
+                }, 2500);
+            }
+            if (!historyLoadedOnce) {
+                historyLoadedOnce = true;
+                loadChatHistory().finally(startTransports);
+            } else {
+                startTransports();
+            }
+        }
+
+        function pauseRealtimeTransportIdle() {
+            realtimeDesired = false;
+            stopBotPoll();
+            stopXchatSse();
         }
 
         function formatInactivityCountdown(totalSec) {
@@ -703,80 +761,97 @@
 
         async function runXchatSse() {
             if (!apiBaseUrl || !channelId || typeof fetch === 'undefined') return;
+            if (sseLoopRunning) return;
             if (sessionEpisodeEnded && closureNoticeRendered) return;
-            while (apiBaseUrl && channelId) {
-                if (sessionEpisodeEnded && closureNoticeRendered) break;
-                var vid = getVisitorId();
-                if (!vid) return;
-                var url = getStreamUrl()
-                    + '?channel_id=' + encodeURIComponent(channelId)
-                    + '&visitor_id=' + encodeURIComponent(vid);
-                if (sessionEpisodeEnded) {
-                    var afterEnded = formatPollAfter(lastBotPollAt);
-                    if (afterEnded) url += '&after=' + encodeURIComponent(afterEnded);
-                } else {
-                    var lastId = lastBotMessageId || loadLastBotMessageId();
-                    if (lastId) url += '&last_message_id=' + encodeURIComponent(lastId);
-                    var afterActive = formatPollAfter(lastBotPollAt);
-                    if (afterActive) url += '&after=' + encodeURIComponent(afterActive);
-                }
-
-                stopXchatSse();
-                sseAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
-                try {
-                    var fetchOpts = {
-                        headers: buildAuthHeaders({ Accept: 'text/event-stream' }),
-                    };
-                    if (sseAbortController) fetchOpts.signal = sseAbortController.signal;
-                    var res = await fetch(url, fetchOpts);
-                    if (!res.ok || !res.body || !res.body.getReader) {
-                        throw new Error('sse_unavailable');
+            sseLoopRunning = true;
+            try {
+                while (apiBaseUrl && channelId && realtimeDesired) {
+                    if (sessionEpisodeEnded && closureNoticeRendered) break;
+                    if (!isChatOpen() || !isPageVisible()) break;
+                    var vid = getVisitorId();
+                    if (!vid) break;
+                    var url = getStreamUrl()
+                        + '?channel_id=' + encodeURIComponent(channelId)
+                        + '&visitor_id=' + encodeURIComponent(vid);
+                    if (sessionEpisodeEnded) {
+                        var afterEnded = formatPollAfter(lastBotPollAt);
+                        if (afterEnded) url += '&after=' + encodeURIComponent(afterEnded);
+                    } else {
+                        var lastId = lastBotMessageId || loadLastBotMessageId();
+                        if (lastId) url += '&last_message_id=' + encodeURIComponent(lastId);
+                        var afterActive = formatPollAfter(lastBotPollAt);
+                        if (afterActive) url += '&after=' + encodeURIComponent(afterActive);
                     }
-                    sseActive = true;
-                    sseFailCount = 0;
-                    widgetLog('SSE conectado');
 
-                    var reader = res.body.getReader();
-                    var decoder = new TextDecoder();
-                    var buffer = '';
-                    while (true) {
-                        var chunk = await reader.read();
-                        if (chunk.done) break;
-                        buffer += decoder.decode(chunk.value, { stream: true });
-                        var parsed = parseSseFrames(buffer);
-                        buffer = parsed.rest;
-                        parsed.events.forEach(function (frame) {
-                            if (frame.event === 'connected' && frame.data) {
-                                try {
-                                    var conn = JSON.parse(frame.data);
-                                    if (conn.session_active === false) {
-                                        sessionEpisodeEnded = true;
-                                        if (!closureNoticeRendered) {
-                                            pollBotMessages();
-                                        } else {
-                                            finalizeSessionEndedState();
-                                        }
-                                    }
-                                } catch (e) { /* ignore */ }
-                            } else if (frame.event === 'message' && frame.data) {
-                                try {
-                                    var payload = JSON.parse(frame.data);
-                                    ingestBotPayload(payload, payload.content, 'sse');
-                                } catch (e) { /* ignore */ }
-                            } else if (frame.event === 'timeout') {
-                                widgetLog('SSE timeout — reconectando');
-                                throw new Error('sse_timeout');
+                    stopXchatSse();
+                    sseAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                    try {
+                        var fetchOpts = {
+                            headers: buildAuthHeaders({ Accept: 'text/event-stream' }),
+                        };
+                        if (sseAbortController) fetchOpts.signal = sseAbortController.signal;
+                        var res = await fetch(url, fetchOpts);
+                        if (!res.ok || !res.body || !res.body.getReader) {
+                            throw new Error('sse_unavailable');
+                        }
+                        sseActive = true;
+                        sseFailCount = 0;
+                        stopBotPoll();
+                        widgetLog('SSE conectado (poll pausado)');
+
+                        var reader = res.body.getReader();
+                        var decoder = new TextDecoder();
+                        var buffer = '';
+                        while (true) {
+                            if (!realtimeDesired) {
+                                stopXchatSse();
+                                break;
                             }
-                        });
+                            var chunk = await reader.read();
+                            if (chunk.done) break;
+                            buffer += decoder.decode(chunk.value, { stream: true });
+                            var parsed = parseSseFrames(buffer);
+                            buffer = parsed.rest;
+                            parsed.events.forEach(function (frame) {
+                                if (frame.event === 'connected' && frame.data) {
+                                    try {
+                                        var conn = JSON.parse(frame.data);
+                                        if (conn.session_active === false) {
+                                            sessionEpisodeEnded = true;
+                                            if (!closureNoticeRendered) {
+                                                pollBotMessages();
+                                            } else {
+                                                finalizeSessionEndedState();
+                                            }
+                                        }
+                                    } catch (e) { /* ignore */ }
+                                } else if (frame.event === 'message' && frame.data) {
+                                    try {
+                                        var payload = JSON.parse(frame.data);
+                                        ingestBotPayload(payload, payload.content, 'sse');
+                                    } catch (e) { /* ignore */ }
+                                } else if (frame.event === 'timeout') {
+                                    widgetLog('SSE timeout — reconectando');
+                                    throw new Error('sse_timeout');
+                                }
+                            });
+                        }
+                        if (!realtimeDesired) break;
+                        throw new Error('sse_closed');
+                    } catch (err) {
+                        sseActive = false;
+                        if (err && err.name === 'AbortError') break;
+                        sseFailCount += 1;
+                        widgetLog('SSE indisponível, usando poll', { erro: err && err.message, tentativa: sseFailCount });
+                        if (realtimeDesired && isChatOpen() && isPageVisible()) {
+                            if (!pollTimer) startBotPoll();
+                        }
+                        await new Promise(function (r) { setTimeout(r, Math.min(1500 * sseFailCount, 8000)); });
                     }
-                    throw new Error('sse_closed');
-                } catch (err) {
-                    sseActive = false;
-                    if (err && err.name === 'AbortError') return;
-                    sseFailCount += 1;
-                    widgetLog('SSE indisponível, usando poll', { erro: err && err.message, tentativa: sseFailCount });
-                    await new Promise(function (r) { setTimeout(r, 1500); });
                 }
+            } finally {
+                sseLoopRunning = false;
+                sseActive = false;
             }
         }
 
@@ -829,6 +904,7 @@
                         ingestBotPayload(item, body, 'history');
                     }
                 }
+                if (list.length) welcomeShown = true;
             } catch (e) {
                 widgetLog('histórico erro', e && e.message);
             } finally {
@@ -838,6 +914,8 @@
 
         async function pollBotMessages() {
             if (sessionEpisodeEnded && closureNoticeRendered) return;
+            if (sseActive) return;
+            if (!realtimeDesired || !isChatOpen() || !isPageVisible()) return;
             if (!apiBaseUrl || !channelId) return;
             var vid = getVisitorId();
             if (!vid) return;
@@ -874,11 +952,13 @@
 
         function startBotPoll() {
             if (sessionEpisodeEnded && closureNoticeRendered) return;
+            if (sseActive) return;
+            if (!realtimeDesired || !isChatOpen() || !isPageVisible()) return;
             if (pollTimer || !apiBaseUrl || !channelId) return;
             if (!lastBotPollAt && !sessionEpisodeEnded) {
                 lastBotPollAt = loadLastBotPollAt();
             }
-            widgetLog('poll ativo (intervalo ' + XCHAT_POLL_MS + 'ms)');
+            widgetLog('poll fallback ativo (intervalo ' + XCHAT_POLL_MS + 'ms)');
             pollBotMessages();
             pollTimer = setInterval(pollBotMessages, XCHAT_POLL_MS);
         }
@@ -1725,19 +1805,11 @@
             launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
             if (open) {
                 startSessionStatusPoll();
+                ensureRealtimeTransport();
                 unreadCount = 0;
                 notification.textContent = '';
                 notification.style.display = 'none';
                 clearWelcomeAlertUi();
-                if (!welcomeShown) {
-                    var welcomeText = pendingWelcomeText || getWelcomeText();
-                    if (welcomeText) {
-                        appendMessage(welcomeText, 'bot', { countUnread: false });
-                        rememberBotMessage(null, welcomeText);
-                        welcomeShown = true;
-                        pendingWelcomeText = null;
-                    }
-                }
                 scheduleScrollMessagesToBottom();
                 if (isMobileLayout()) {
                     requestAnimationFrame(applyMobileKeyboardLayout);
@@ -1745,8 +1817,23 @@
                 input.focus();
             } else {
                 stopSessionStatusPoll();
+                pauseRealtimeTransportIdle();
                 clearMobilePanelStyles();
             }
+        }
+
+        if (typeof document !== 'undefined' && document.addEventListener) {
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'hidden') {
+                    pauseRealtimeTransportIdle();
+                    stopSessionStatusPoll();
+                    return;
+                }
+                if (isChatOpen()) {
+                    startSessionStatusPoll();
+                    ensureRealtimeTransport();
+                }
+            });
         }
 
         inactivityBar = document.getElementById('xbot-inactivity-bar');
@@ -2128,18 +2215,9 @@
         widgetLog('UI pronta', {
             visitorId: getVisitorId(),
             channelId: channelId,
-            transporte: 'sse+poll',
+            transporte: 'sse-primary (poll fallback; idle até abrir o chat)',
         });
-        // Carrega o histórico PRIMEIRO (fonte única da render inicial); só então inicia poll/SSE,
-        // evitando duplicação/ordenação errada entre poll e histórico.
-        loadChatHistory().finally(function () {
-            if (sessionEpisodeEnded && closureNoticeRendered) {
-                widgetLog('transporte pausado — sessão encerrada');
-                return;
-            }
-            startBotPoll();
-            runXchatSse();
-        });
+        // Sem poll/SSE no pageload: só quando o visitante abre o chat (e a aba está visível).
         
     });
 
