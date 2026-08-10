@@ -75,6 +75,9 @@
       } else if (cfg.token) {
         headers['Authorization'] = 'Bearer ' + cfg.token;
       }
+      if (XBOT_WIDGET_VERSION && XBOT_WIDGET_VERSION.indexOf('__XBOT_WIDGET_VERSION__') !== 0) {
+        headers['X-XBot-Widget-Version'] = XBOT_WIDGET_VERSION;
+      }
       return fetch(url, { headers })
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (data) {
@@ -185,6 +188,9 @@
 
         function buildAuthHeaders(extra) {
             const h = Object.assign({}, extra || {});
+            if (XBOT_WIDGET_VERSION && String(XBOT_WIDGET_VERSION).indexOf('__XBOT_WIDGET_VERSION__') !== 0) {
+                h['X-XBot-Widget-Version'] = XBOT_WIDGET_VERSION;
+            }
             if (clientId && channelId && token) {
                 h['Authorization'] = 'Bearer ' + token;
                 h['X-XBot-Client-Id'] = clientId;
