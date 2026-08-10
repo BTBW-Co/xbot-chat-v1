@@ -709,6 +709,29 @@
             pendingTypingEl = null;
         }
 
+        function formatMessageTime(date) {
+            return (date || new Date()).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+        }
+
+        function lastMessageRow() {
+            var container = document.getElementById('xbot-messages');
+            if (!container || !container.children) return null;
+            for (var i = container.children.length - 1; i >= 0; i--) {
+                var el = container.children[i];
+                if (el && el.classList && el.classList.contains('xbot-message-row')) return el;
+            }
+            return null;
+        }
+
+        function shouldShowBotAvatar() {
+            var last = lastMessageRow();
+            return !(last && last.classList.contains('bot'));
+        }
+
         // Move o indicador existente para o final (sem piscar) ou cria um novo se não existir.
         function _moveOrShowTyping() {
             var container = document.getElementById('xbot-messages');
@@ -772,12 +795,18 @@
                 var row = document.createElement('div');
                 row.className = 'xbot-message-row bot';
                 if (botAvatar) {
-                    var av = document.createElement('img');
-                    av.className = 'xbot-msg-avatar';
-                    av.src = botAvatar;
-                    av.alt = '';
-                    row.appendChild(av);
+                    if (shouldShowBotAvatar()) {
+                        var av = document.createElement('img');
+                        av.className = 'xbot-msg-avatar';
+                        av.src = botAvatar;
+                        av.alt = '';
+                        row.appendChild(av);
+                    } else {
+                        row.classList.add('xbot-message-row--no-avatar');
+                    }
                 }
+                var col = document.createElement('div');
+                col.className = 'xbot-message-col';
                 var msgDiv = document.createElement('div');
                 msgDiv.className = 'xbot-message bot';
                 var contentDiv = document.createElement('div');
@@ -809,11 +838,12 @@
                 }
                 var timeDiv = document.createElement('div');
                 timeDiv.className = 'xbot-time';
-                timeDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                timeDiv.textContent = formatMessageTime();
                 contentDiv.appendChild(textDiv);
-                contentDiv.appendChild(timeDiv);
                 msgDiv.appendChild(contentDiv);
-                row.appendChild(msgDiv);
+                col.appendChild(msgDiv);
+                col.appendChild(timeDiv);
+                row.appendChild(col);
                 messages.appendChild(row);
                 scrollMessagesToBottom();
                 var countUnread = !opts || opts.countUnread !== false;
@@ -1092,12 +1122,9 @@
         const sideOffset = offsetSide != null ? offsetSide : 20;
         const LAUNCHER_SIZE = 64;
         const LAUNCHER_GAP = 28;
-        /** Base do painel acima do botão flutuante (launcher). */
-        const chatboxStackBottom = offset + LAUNCHER_SIZE + LAUNCHER_GAP;
         const mobileLauncherOffset = 16;
         const mobileLauncherOpenSize = 44;
         const mobileStackBottom = mobileLauncherOffset + LAUNCHER_SIZE + LAUNCHER_GAP;
-        const mobileOpenStackBottom = mobileLauncherOffset + mobileLauncherOpenSize + LAUNCHER_GAP;
         const MOBILE_LAYOUT_MQ = '(max-width: 600px)';
         const teaserSideOffset = sideOffset + LAUNCHER_SIZE + 12;
 
@@ -1276,7 +1303,7 @@
                 z-index: 2147483000;
                 background: var(--xbot-theme);
                 box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28), 0 0 0 6px rgba(var(--xbot-theme-rgb), 0.22);
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, visibility 0.2s;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -1342,6 +1369,13 @@
             }
             .xbot-launcher.is-open .xbot-notification {
                 display: none !important;
+            }
+            .xbot-launcher.xbot-launcher--hidden {
+                visibility: hidden;
+                pointer-events: none;
+                opacity: 0;
+                transform: scale(0.85);
+                transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
             }
 
             .xbot-launcher.has-welcome-alert {
@@ -1438,11 +1472,12 @@
 
             .xbot-chatbox {
                 position: fixed;
-                bottom: ${chatboxStackBottom}px;
+                bottom: ${offset}px;
                 ${posH}: ${sideOffset}px;
-                width: 380px;
+                width: 400px;
                 max-width: calc(100vw - 24px);
-                height: min(560px, calc(100vh - ${chatboxStackBottom + 16}px));
+                height: min(600px, calc(100vh - ${offset + 24}px));
+                height: min(600px, calc(100dvh - ${offset + 24}px));
                 background: var(--xbot-surface);
                 border-radius: var(--xbot-radius-xl);
                 border: 1px solid rgba(15, 23, 42, 0.08);
@@ -1452,10 +1487,10 @@
                 overflow: hidden;
                 z-index: 2147482999;
                 font-family: var(--xbot-font);
-                animation: xbotSlideIn 0.28s ease;
+                animation: xbotSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
             }
             @keyframes xbotSlideIn {
-                from { opacity: 0; transform: translateY(12px) scale(0.98); }
+                from { opacity: 0; transform: translateY(16px) scale(0.97); }
                 to { opacity: 1; transform: translateY(0) scale(1); }
             }
 
@@ -1463,6 +1498,7 @@
                 background: var(--xbot-header-bg);
                 color: #fff;
                 padding: 14px 16px;
+                padding-top: calc(14px + env(safe-area-inset-top, 0px));
                 display: flex;
                 align-items: center;
                 gap: 12px;
@@ -1472,7 +1508,7 @@
             .xbot-header img {
                 width: 40px;
                 height: 40px;
-                border-radius: var(--xbot-radius-md);
+                border-radius: 50%;
                 object-fit: cover;
                 border: 2px solid rgba(255,255,255,0.15);
             }
@@ -1502,8 +1538,9 @@
                 box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
             }
             .xbot-header-minimize {
-                width: 36px;
-                height: 36px;
+                width: 40px;
+                height: 40px;
+                flex-shrink: 0;
                 border: none;
                 border-radius: var(--xbot-radius-sm);
                 background: rgba(255,255,255,0.08);
@@ -1570,8 +1607,11 @@
                 gap: 8px;
                 max-width: 92%;
             }
-            .xbot-message-row.user { align-self: flex-end; flex-direction: row-reverse; }
+            .xbot-message-row.user { align-self: flex-end; max-width: 85%; }
             .xbot-message-row.bot { align-self: flex-start; }
+            .xbot-message-row.bot.xbot-message-row--no-avatar {
+                padding-left: 36px;
+            }
             .xbot-msg-avatar {
                 width: 28px;
                 height: 28px;
@@ -1580,6 +1620,15 @@
                 flex-shrink: 0;
                 background: var(--xbot-border);
             }
+            .xbot-message-col {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                min-width: 0;
+                max-width: 100%;
+            }
+            .xbot-message-row.user .xbot-message-col { align-items: flex-end; }
+            .xbot-message-row.bot .xbot-message-col { align-items: flex-start; }
 
             .xbot-message {
                 padding: 10px 14px;
@@ -1618,8 +1667,7 @@
                 flex-direction: column;
                 gap: 4px;
             }
-            .xbot-message.user .xbot-message-content { align-items: flex-end; }
-            .xbot-text { display: block; word-wrap: break-word; }
+            .xbot-text { display: block; word-wrap: break-word; overflow-wrap: anywhere; }
             .xbot-text p { margin: 0 0 0.55em; line-height: 1.5; }
             .xbot-text p:last-child { margin-bottom: 0; }
             .xbot-text ul, .xbot-text ol { margin: 0.35em 0 0.55em 1.1em; padding: 0; }
@@ -1633,7 +1681,10 @@
             }
             .xbot-time {
                 font-size: 10px;
+                line-height: 1;
                 color: var(--xbot-subtle);
+                padding: 0 2px;
+                letter-spacing: 0.01em;
             }
             .xbot-message a {
                 color: var(--xbot-theme);
@@ -1675,11 +1726,11 @@
             .xbot-compose-inner {
                 display: flex;
                 align-items: flex-end;
-                gap: 8px;
+                gap: 6px;
                 background: var(--xbot-field);
                 border: 1px solid var(--xbot-border);
                 border-radius: 14px;
-                padding: 6px 6px 6px 10px;
+                padding: 6px 6px 6px 8px;
                 transition: border-color 0.15s, box-shadow 0.15s;
             }
             .xbot-compose-inner:focus-within {
@@ -1695,8 +1746,8 @@
                 flex-shrink: 0;
             }
             .xbot-icon-btn {
-                width: 30px;
-                height: 30px;
+                width: 36px;
+                height: 36px;
                 border: none;
                 border-radius: var(--xbot-radius-xs);
                 background: transparent;
@@ -1747,7 +1798,7 @@
             .xbot-send:active { transform: scale(0.96); }
 
             .xbot-footer {
-                padding: 6px 14px 12px;
+                padding: 6px 14px calc(12px + env(safe-area-inset-bottom, 0px));
                 text-align: center;
                 background: var(--xbot-surface);
                 flex-shrink: 0;
@@ -1764,20 +1815,29 @@
             }
             .xbot-powered:hover strong { color: var(--xbot-theme); }
 
+            @media screen and (min-width: 601px) and (max-width: 900px) {
+                .xbot-chatbox {
+                    width: 440px;
+                    max-width: calc(100vw - 32px);
+                    height: min(640px, calc(100vh - ${offset + 24}px));
+                    height: min(640px, calc(100dvh - ${offset + 24}px));
+                }
+            }
+
             @media screen and (max-width: 600px) {
                 .xbot-chatbox {
                     width: 100vw;
                     max-width: 100vw;
-                    bottom: ${mobileStackBottom}px !important;
+                    bottom: 0 !important;
                     ${posH}: 0 !important;
-                    border-radius: var(--xbot-radius-lg) var(--xbot-radius-lg) 0 0;
+                    border-radius: 0;
                 }
                 .xbot-chatbox.is-open:not(.xbot-keyboard-open) {
-                    top: env(safe-area-inset-top, 0px);
-                    bottom: calc(${mobileOpenStackBottom}px + env(safe-area-inset-bottom, 0px)) !important;
+                    top: 0;
+                    bottom: 0 !important;
                     height: auto !important;
                     max-height: none !important;
-                    border-radius: var(--xbot-radius-lg) var(--xbot-radius-lg) 0 0;
+                    border-radius: 0;
                 }
                 .xbot-chatbox.xbot-keyboard-open {
                     left: 0 !important;
@@ -1787,9 +1847,35 @@
                     border-radius: 0 !important;
                     z-index: 2147483001;
                 }
-                .xbot-launcher.xbot-launcher--hidden {
-                    visibility: hidden;
-                    pointer-events: none;
+                .xbot-header {
+                    padding: 12px 14px;
+                    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+                }
+                .xbot-header-minimize {
+                    width: 44px;
+                    height: 44px;
+                }
+                .xbot-messages {
+                    padding: 14px 12px;
+                }
+                .xbot-message-row.user { max-width: 88%; }
+                .xbot-compose {
+                    padding: 10px 12px 8px;
+                }
+                .xbot-icon-btn {
+                    width: 44px;
+                    height: 44px;
+                }
+                .xbot-send {
+                    width: 44px;
+                    height: 44px;
+                }
+                .xbot-input {
+                    font-size: 16px;
+                    padding: 10px 4px;
+                }
+                .xbot-footer {
+                    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
                 }
                 .xbot-launcher {
                     bottom: calc(${mobileLauncherOffset}px + env(safe-area-inset-bottom, 0px));
@@ -1926,6 +2012,7 @@
             chatbox.style.flexDirection = 'column';
             chatbox.classList.toggle('is-open', open);
             launcher.classList.toggle('is-open', open);
+            launcher.classList.toggle('xbot-launcher--hidden', open);
             setViewportZoomLocked(!!open);
             launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
             if (open) {
@@ -2029,7 +2116,10 @@
             chatbox.style.maxHeight = '';
             chatbox.style.bottom = '';
             chatbox.style.borderRadius = '';
-            launcher.classList.remove('xbot-launcher--hidden');
+            // Launcher fica oculto enquanto o chat estiver aberto (evita X duplo).
+            if (chatbox.style.display !== 'flex') {
+                launcher.classList.remove('xbot-launcher--hidden');
+            }
         }
 
         function applyMobileKeyboardLayout() {
@@ -2098,14 +2188,19 @@
             opts = opts || {};
             const row = document.createElement('div');
             row.className = `xbot-message-row ${from}`;
-            const avatarUrl = from === 'user' ? userAvatar : botAvatar;
-            if (avatarUrl) {
-              const av = document.createElement('img');
-              av.className = 'xbot-msg-avatar';
-              av.src = avatarUrl;
-              av.alt = '';
-              row.appendChild(av);
+            if (from === 'bot' && botAvatar) {
+                if (shouldShowBotAvatar()) {
+                    const av = document.createElement('img');
+                    av.className = 'xbot-msg-avatar';
+                    av.src = botAvatar;
+                    av.alt = '';
+                    row.appendChild(av);
+                } else {
+                    row.classList.add('xbot-message-row--no-avatar');
+                }
             }
+            const col = document.createElement('div');
+            col.className = 'xbot-message-col';
             const msg = document.createElement('div');
             msg.className = `xbot-message ${from}`;
             var unsafeHTML;
@@ -2118,14 +2213,17 @@
                 ADD_TAGS: ['video', 'source'],
                 ADD_ATTR: ['controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt']
             });
-            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             msg.innerHTML = `
                 <div class="xbot-message-content">
                     <div class="xbot-text">${sanitized}</div>
-                    <div class="xbot-time">${timestamp}</div>
                 </div>
             `;
-            row.appendChild(msg);
+            const timeEl = document.createElement('div');
+            timeEl.className = 'xbot-time';
+            timeEl.textContent = formatMessageTime();
+            col.appendChild(msg);
+            col.appendChild(timeEl);
+            row.appendChild(col);
             messages.appendChild(row);
             if (opts.scroll !== false) {
                 scrollMessagesToBottom();
@@ -2211,6 +2309,10 @@
             if (vid) formData.append('visitor_id', vid);
             attachIdentityToFormData(formData);
         
+            const previewRow = document.createElement('div');
+            previewRow.className = 'xbot-message-row user';
+            const previewCol = document.createElement('div');
+            previewCol.className = 'xbot-message-col';
             const preview = document.createElement('div');
             preview.className = 'xbot-message user';
             if (file.type.startsWith('image/')) {
@@ -2220,16 +2322,22 @@
             img.style.borderRadius = '10px';
             preview.appendChild(img);
             } else if (file.type.startsWith('video/')) {
-            const vid = document.createElement('video');
-            vid.src = URL.createObjectURL(file);
-            vid.controls = true;
-            vid.style.maxWidth = '100%';
-            vid.style.borderRadius = '10px';
-            preview.appendChild(vid);
+            const vidEl = document.createElement('video');
+            vidEl.src = URL.createObjectURL(file);
+            vidEl.controls = true;
+            vidEl.style.maxWidth = '100%';
+            vidEl.style.borderRadius = '10px';
+            preview.appendChild(vidEl);
             } else {
             preview.textContent = 'Anexo: ' + file.name;
             }
-            messages.appendChild(preview);
+            const previewTime = document.createElement('div');
+            previewTime.className = 'xbot-time';
+            previewTime.textContent = formatMessageTime();
+            previewCol.appendChild(preview);
+            previewCol.appendChild(previewTime);
+            previewRow.appendChild(previewCol);
+            messages.appendChild(previewRow);
             messages.scrollTop = messages.scrollHeight;
         
             try {
@@ -2242,15 +2350,9 @@
                 body: formData
             });
             const data = await res.json();
-            const msg = document.createElement('div');
-            msg.className = 'xbot-message bot';
-            msg.innerHTML = `Arquivo recebido: <a href="${data.url}" target="_blank">${file.name}</a>`;
-            messages.appendChild(msg);
+            appendMessage('Arquivo recebido: [' + file.name + '](' + (data.url || '#') + ')', 'bot');
             } catch (err) {
-            const errorMsg = document.createElement('div');
-            errorMsg.className = 'xbot-message bot';
-            errorMsg.textContent = 'Erro ao enviar o arquivo.';
-            messages.appendChild(errorMsg);
+            appendMessage('Erro ao enviar o arquivo.', 'bot');
             }
             messages.scrollTop = messages.scrollHeight;
         });
@@ -2292,10 +2394,17 @@
                 audioPreview.src = URL.createObjectURL(blob);
                 const audioRow = document.createElement('div');
                 audioRow.className = 'xbot-message-row user';
+                const audioCol = document.createElement('div');
+                audioCol.className = 'xbot-message-col';
                 const audioMsg = document.createElement('div');
                 audioMsg.className = 'xbot-message user';
                 audioMsg.appendChild(audioPreview);
-                audioRow.appendChild(audioMsg);
+                const audioTime = document.createElement('div');
+                audioTime.className = 'xbot-time';
+                audioTime.textContent = formatMessageTime();
+                audioCol.appendChild(audioMsg);
+                audioCol.appendChild(audioTime);
+                audioRow.appendChild(audioCol);
                 messages.appendChild(audioRow);
                 messages.scrollTop = messages.scrollHeight;
 
