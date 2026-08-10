@@ -14,53 +14,43 @@ Repositório: [github.com/BTBW-Co/xbot-chat-v1](https://github.com/BTBW-Co/xbot-
 
 ---
 
-## CDN (jsDelivr) — URL do script
-
-O widget é servido pelo [jsDelivr](https://www.jsdelivr.com/) a partir deste repositório GitHub (`BTBW-Co/xbot-chat-v1`).
+## CDN — URL do script
 
 ### URL oficial (recomendada)
 
-Use **sempre** esta URL no `<script src="...">`. Ela **não muda** entre releases: após cada `npm run build` e push em `main`, o arquivo `versions/latest/xbot.min.js` é atualizado. O `make git` na raiz do monorepo **purga o cache jsDelivr** de `versions/latest` (e da pasta da versão em `@main`) para o CDN refletir na hora.
+Use **sempre** esta URL no `<script src="...">`. Ela **não muda** entre releases: o artefato vive em `xbot-site-v1/public/xchat/xbot.min.js` e é sincronizado a cada `npm run build` do chat / `make git`. Cache curto no CloudFront (`max-age=5`).
 
-**CDN estável:**
+**CDN estável (first-party):**
 
-[https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/versions/latest/xbot.min.js](https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/versions/latest/xbot.min.js)
+[https://xbotone.com/xchat/xbot.min.js](https://xbotone.com/xchat/xbot.min.js)
 
 ```text
-https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/versions/latest/xbot.min.js
+https://xbotone.com/xchat/xbot.min.js
 ```
 
 | Item | Valor |
 |------|--------|
-| Provedor | [jsDelivr](https://cdn.jsdelivr.net/) (GitHub) |
-| Repositório | `BTBW-Co/xbot-chat-v1` |
-| Branch / ref | `main` |
-| Caminho no repo | `versions/latest/xbot.min.js` |
-| Atualização | Automática após push em `main` com novo build em `versions/latest/` |
+| Provedor | Site oficial (`xbotone.com` / CloudFront) |
+| Artefato | `xbot-site-v1/public/xchat/xbot.min.js` |
+| Atualização | Automática após build do chat + deploy do site |
 
-A API também expõe essa URL em `GET /v1/xchat/widget-config` no campo **`script_cdn_url`** (mesma autenticação de `POST /message`). Em produção, a API pode sobrescrever com a variável de ambiente `XCHAT_WIDGET_SCRIPT_CDN`.
+A API também expõe essa URL em `GET /v1/xchat/widget-config` no campo **`script_cdn_url`**. Em produção, pode sobrescrever com `XCHAT_WIDGET_SCRIPT_CDN`.
 
-**Ícones padrão** (quando o tenant não envia imagem no painel):
+**Ícones padrão** (quando o tenant não envia imagem no painel) vêm do app (`app.xbotone.com/workforce/…`).
 
-```
-https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default/launcher.svg
-https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default/bot-avatar.svg
-https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default/user-avatar.svg
-```
+### Congelar em uma versão (opcional, jsDelivr)
 
-### Congelar em uma versão (opcional)
-
-Se precisar de **pin semver** (auditoria, rollback ou homologação), use tag Git + pasta da versão:
+Se precisar de **pin semver** (auditoria, rollback ou homologação):
 
 ```
-https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@1.0.3/versions/1.0.3/xbot.min.js
+https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@1.0.24/versions/1.0.24/xbot.min.js
 ```
 
-Substitua `1.0.3` pela tag desejada. Essa URL **não** se atualiza sozinha — só mude o embed se quiser travar o JS.
+Substitua pela tag desejada. Essa URL **não** se atualiza sozinha.
 
 ### O que evitar
 
-- URLs com tag antiga no path (`@1.0.2/versions/1.0.2/...`) exigem troca manual a cada release.
+- `cdn.jsdelivr.net/...@main/versions/latest/...` — cache inconsistente entre edges.
 - Repositório legado `btbw/xbot-chat` — use apenas `BTBW-Co/xbot-chat-v1`.
 
 ---
@@ -70,7 +60,7 @@ Substitua `1.0.3` pela tag desejada. Essa URL **não** se atualiza sozinha — s
 Cole antes de `</body>`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/versions/latest/xbot.min.js"></script>
+<script src="https://xbotone.com/xchat/xbot.min.js"></script>
 <script>
   window.initXBot({
     channelId: "UUID-DO-CANAL-XCHAT",
@@ -118,8 +108,8 @@ XBOT_XCHAT_CHANNEL_ID=uuid-do-canal
 XBOT_XCHAT_CLIENT_ID=seu_client_id
 XBOT_XCHAT_SECRET=seu_client_secret
 XBOT_XCHAT_API_BASE_URL=https://api.xbotone.com
-# Opcional — padrão é a URL estável @main/versions/latest:
-# XBOT_XCHAT_SCRIPT_CDN=https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/versions/latest/xbot.min.js
+# Opcional — padrão é https://xbotone.com/xchat/xbot.min.js
+# XBOT_XCHAT_SCRIPT_CDN=https://xbotone.com/xchat/xbot.min.js
 ```
 
 Opcional:
@@ -139,7 +129,7 @@ O painel XBot (**Conexões → XChat**) gera um snippet com a URL estável para 
 
 No painel: **Conexões → editar canal XChat** — defina nome exibido, cor do chat, ícone do botão (upload no bucket do tenant), avatares do assistente e do visitante.
 
-Se alguma imagem não for enviada, o widget usa os **ícones padrão XBot** (`assets/default/` no repositório, servidos via jsDelivr `@main`).
+Se alguma imagem não for enviada, o widget usa os **ícones padrão XBot** (`app.xbotone.com/workforce/…`).
 
 ### Visual (v1.0.3+)
 
@@ -169,7 +159,7 @@ Endpoints extras (widget ≥ 1.0.6):
 - `GET /v1/xchat/history` — restaura conversa ao recarregar a página
 - `POST /v1/xchat/message` — não bloqueia mais ~18s; resposta vem pelo stream/poll
 
-Requisitos em produção: API atualizada + widget **≥ 1.0.7** (ou `@main/versions/latest`).
+Requisitos em produção: API atualizada + widget **≥ 1.0.7** (URL oficial `https://xbotone.com/xchat/xbot.min.js`).
 
 ### Log de versão no console (debug)
 
@@ -203,16 +193,16 @@ Histórico (`GET /v1/xchat/history`): `channel_id`, `visitor_id`, `limit?` (padr
 ## Desenvolvimento e release do widget
 
 1. Edite `app/xbot.js`
-2. Rode o build (gera `versions/{versão}/` e copia para `versions/latest/`):
+2. Rode o build (gera `versions/{versão}/`, `versions/latest/` e copia para `xbot-site-v1/public/xchat/`):
 
 ```bash
 npm run build
 # ou: bash scripts/build-widget.sh 1.0.4
 ```
 
-3. Na raiz do monorepo: `make git` — faz build, commit/push em `main`, **tag + push** com a versão do `package.json` (ex.: `1.0.8` → jsDelivr `@1.0.8/versions/1.0.8/...`) e **purge** do jsDelivr (`versions/latest` + pasta da versão em `@main`).
+3. Na raiz do monorepo: `make git` — faz build, commit/push (chat + site), **tag + push** com a versão do `package.json` (fallback jsDelivr pinado) e purge jsDelivr opcional.
 
-4. Quem usa a URL estável (`@main/versions/latest/xbot.min.js`) passa a receber o novo JS na hora (após o purge). Hard refresh no browser do visitante se ainda vir a versão antiga.
+4. Quem usa a URL oficial (`https://xbotone.com/xchat/xbot.min.js`) passa a receber o novo JS após o deploy do site (cache ~5s). Hard refresh se ainda vir a versão antiga.
 
 Tag manual (só se precisar): `git tag 1.0.8 && git push origin 1.0.8`
 
