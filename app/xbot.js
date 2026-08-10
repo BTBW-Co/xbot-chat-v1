@@ -520,7 +520,7 @@
         }
 
         function isChatOpen() {
-            return chatbox && chatbox.style.display === 'flex';
+            return !!(chatbox && chatbox.classList.contains('is-open'));
         }
 
         function isPageVisible() {
@@ -623,7 +623,7 @@
         }
 
         async function pollSessionInactivity() {
-            if (!apiBaseUrl || !channelId || chatbox.style.display !== 'flex') return;
+            if (!apiBaseUrl || !channelId || !isChatOpen()) return;
             var vid = getVisitorId();
             if (!vid) return;
             var url =
@@ -845,9 +845,10 @@
                 col.appendChild(timeDiv);
                 row.appendChild(col);
                 messages.appendChild(row);
+                syncEmptyState();
                 scrollMessagesToBottom();
                 var countUnread = !opts || opts.countUnread !== false;
-                if (countUnread && chatbox.style.display === 'none') {
+                if (countUnread && !isChatOpen()) {
                     unreadCount++;
                     notification.textContent = String(unreadCount);
                     notification.style.display = 'flex';
@@ -1144,7 +1145,8 @@
 
         var XBOT_ICONS = {
             close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-            send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+            collapse: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.75 3.75V10.25M13.75 10.25H20.25M13.75 10.25L20.25 3.75M10.25 20.25V13.75M10.25 13.75H3.75M10.25 13.75L3.75 20.25"/></svg>',
+            send: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.468 6.058C.265 4.988 1.02 3 2.63 3H21.28c1.343 0 2.185 1.45 1.52 2.617l-9.146 16.038c-.789 1.383-2.864 1.08-3.225-.47l-2.062-8.853 6.608-3.677a.75.75 0 0 0-.729-1.31L7.276 11.22z"/></svg>',
             attach: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
             mic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>',
             stop: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
@@ -1251,7 +1253,7 @@
             if (welcomeShown || wasWelcomeDeliveredThisSession()) return;
             var text = getWelcomeText();
             if (!text) return;
-            if (chatbox.style.display === 'flex') return;
+            if (isChatOpen()) return;
 
             pendingWelcomeText = text;
             markWelcomeDeliveredThisSession();
@@ -1282,7 +1284,8 @@
                 --xbot-warn-bg: linear-gradient(90deg, #fff7ed 0%, #ffedd5 100%);
                 --xbot-warn-border: #fed7aa;
                 --xbot-warn-text: #9a3412;
-                --xbot-header-bg: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                --xbot-header-bg: #fff;
+                --xbot-compose-shadow: 0 0 1px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.04);
                 --xbot-radius-xs: 8px;
                 --xbot-radius-sm: 10px;
                 --xbot-radius-md: 12px;
@@ -1474,50 +1477,53 @@
                 position: fixed;
                 bottom: ${offset}px;
                 ${posH}: ${sideOffset}px;
-                width: 400px;
-                max-width: calc(100vw - 24px);
-                height: min(600px, calc(100vh - ${offset + 24}px));
-                height: min(600px, calc(100dvh - ${offset + 24}px));
+                width: min(23.75rem, calc(100vw - 2rem));
+                height: min(30rem, calc(100vh - ${offset + 24}px));
+                height: min(30rem, calc(100dvh - ${offset + 24}px));
                 background: var(--xbot-surface);
                 border-radius: var(--xbot-radius-xl);
-                border: 1px solid rgba(15, 23, 42, 0.08);
-                box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.04);
+                border: 1px solid rgba(15, 23, 42, 0.06);
+                box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.03);
                 display: none;
                 flex-direction: column;
                 overflow: hidden;
                 z-index: 2147482999;
                 font-family: var(--xbot-font);
-                animation: xbotSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+                opacity: 0;
+                transform: translateY(14px) scale(0.98);
+                transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
             }
-            @keyframes xbotSlideIn {
-                from { opacity: 0; transform: translateY(16px) scale(0.97); }
-                to { opacity: 1; transform: translateY(0) scale(1); }
+            .xbot-chatbox.is-visible {
+                opacity: 1;
+                transform: translateY(0) scale(1);
             }
 
             .xbot-header {
                 background: var(--xbot-header-bg);
-                color: #fff;
-                padding: 14px 16px;
-                padding-top: calc(14px + env(safe-area-inset-top, 0px));
+                color: var(--xbot-ink);
+                padding: 12px 14px;
+                padding-top: calc(12px + env(safe-area-inset-top, 0px));
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                border-bottom: 3px solid var(--xbot-theme);
+                border-bottom: 1px solid var(--xbot-border);
+                box-shadow: inset 0 -2px 0 rgba(var(--xbot-theme-rgb), 0.85);
                 flex-shrink: 0;
             }
             .xbot-header img {
-                width: 40px;
-                height: 40px;
+                width: 36px;
+                height: 36px;
                 border-radius: 50%;
                 object-fit: cover;
-                border: 2px solid rgba(255,255,255,0.15);
+                border: 1px solid var(--xbot-border);
             }
             .xbot-header-text { flex: 1; min-width: 0; }
             .xbot-header-name {
                 display: block;
-                font-size: 15px;
+                font-size: 14px;
                 font-weight: 600;
                 letter-spacing: -0.02em;
+                color: var(--xbot-ink);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -1527,7 +1533,7 @@
                 align-items: center;
                 gap: 6px;
                 font-size: 12px;
-                color: rgba(255,255,255,0.72);
+                color: var(--xbot-muted);
                 margin-top: 2px;
             }
             .xbot-status-dot {
@@ -1535,23 +1541,30 @@
                 height: 7px;
                 border-radius: 50%;
                 background: var(--xbot-success);
-                box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
+                box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.28);
             }
             .xbot-header-minimize {
                 width: 40px;
                 height: 40px;
                 flex-shrink: 0;
                 border: none;
-                border-radius: var(--xbot-radius-sm);
-                background: rgba(255,255,255,0.08);
-                color: #fff;
+                border-radius: 50%;
+                background: var(--xbot-field);
+                color: var(--xbot-muted);
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: background 0.15s;
+                transition: background 0.15s, color 0.15s;
             }
-            .xbot-header-minimize:hover { background: rgba(255,255,255,0.16); }
+            .xbot-header-minimize:hover {
+                background: #e2e8f0;
+                color: var(--xbot-ink);
+            }
+            .xbot-header-minimize:focus-visible {
+                outline: 2px solid rgba(var(--xbot-theme-rgb), 0.55);
+                outline-offset: 2px;
+            }
 
             .xbot-inactivity-bar {
                 display: flex;
@@ -1598,7 +1611,23 @@
                 flex-direction: column;
                 gap: 10px;
                 scroll-behavior: smooth;
-                background: linear-gradient(180deg, var(--xbot-surface-alt) 0%, var(--xbot-surface) 48px);
+                background: var(--xbot-surface);
+                position: relative;
+            }
+            .xbot-empty {
+                margin: auto;
+                max-width: 18rem;
+                padding: 28px 12px;
+                text-align: center;
+                pointer-events: none;
+            }
+            .xbot-empty[hidden] { display: none !important; }
+            .xbot-empty-text {
+                margin: 0;
+                font-size: 13px;
+                line-height: 1.5;
+                color: var(--xbot-muted);
+                text-wrap: balance;
             }
 
             .xbot-message-row {
@@ -1718,25 +1747,24 @@
             }
 
             .xbot-compose {
-                padding: 12px 14px 10px;
-                border-top: 1px solid var(--xbot-border);
+                padding: 10px 14px 8px;
+                border-top: none;
                 background: var(--xbot-surface);
                 flex-shrink: 0;
             }
             .xbot-compose-inner {
                 display: flex;
                 align-items: flex-end;
-                gap: 6px;
-                background: var(--xbot-field);
-                border: 1px solid var(--xbot-border);
-                border-radius: 14px;
-                padding: 6px 6px 6px 8px;
-                transition: border-color 0.15s, box-shadow 0.15s;
+                gap: 4px;
+                background: var(--xbot-surface);
+                border: none;
+                border-radius: 24px;
+                padding: 4px 6px 4px 10px;
+                box-shadow: var(--xbot-compose-shadow);
+                transition: box-shadow 0.15s;
             }
             .xbot-compose-inner:focus-within {
-                border-color: rgba(var(--xbot-theme-rgb), 0.55);
-                box-shadow: 0 0 0 3px rgba(var(--xbot-theme-rgb), 0.12);
-                background: var(--xbot-surface);
+                box-shadow: var(--xbot-compose-shadow), 0 0 0 3px rgba(var(--xbot-theme-rgb), 0.12);
             }
             .xbot-compose-tools {
                 display: flex;
@@ -1749,7 +1777,7 @@
                 width: 36px;
                 height: 36px;
                 border: none;
-                border-radius: var(--xbot-radius-xs);
+                border-radius: 50%;
                 background: transparent;
                 color: var(--xbot-muted);
                 cursor: pointer;
@@ -1770,8 +1798,8 @@
                 flex: 1;
                 border: none;
                 background: transparent;
-                padding: 8px 4px;
-                font-size: 14px;
+                padding: 10px 4px;
+                font-size: 16px;
                 line-height: 1.45;
                 resize: none;
                 max-height: 120px;
@@ -1781,21 +1809,28 @@
             }
             .xbot-input::placeholder { color: var(--xbot-subtle); }
             .xbot-send {
-                width: 40px;
-                height: 40px;
+                width: 36px;
+                height: 36px;
                 flex-shrink: 0;
                 border: none;
-                border-radius: var(--xbot-radius-md);
-                background: var(--xbot-theme);
-                color: #fff;
+                border-radius: 50%;
+                background: transparent;
+                color: var(--xbot-subtle);
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: transform 0.15s, filter 0.15s;
+                transition: background 0.15s, color 0.15s, transform 0.12s;
             }
-            .xbot-send:hover { filter: brightness(1.06); transform: scale(1.04); }
-            .xbot-send:active { transform: scale(0.96); }
+            .xbot-send:hover {
+                color: var(--xbot-ink);
+                background: rgba(15, 23, 42, 0.06);
+            }
+            .xbot-send:active { transform: scale(0.94); }
+            .xbot-send:focus-visible {
+                outline: 2px solid rgba(var(--xbot-theme-rgb), 0.55);
+                outline-offset: 2px;
+            }
 
             .xbot-footer {
                 padding: 6px 14px calc(12px + env(safe-area-inset-bottom, 0px));
@@ -1817,10 +1852,9 @@
 
             @media screen and (min-width: 601px) and (max-width: 900px) {
                 .xbot-chatbox {
-                    width: 440px;
-                    max-width: calc(100vw - 32px);
-                    height: min(640px, calc(100vh - ${offset + 24}px));
-                    height: min(640px, calc(100dvh - ${offset + 24}px));
+                    width: min(27.5rem, calc(100vw - 2rem));
+                    height: min(32rem, calc(100vh - ${offset + 24}px));
+                    height: min(32rem, calc(100dvh - ${offset + 24}px));
                 }
             }
 
@@ -1872,7 +1906,7 @@
                 }
                 .xbot-input {
                     font-size: 16px;
-                    padding: 10px 4px;
+                    padding: 12px 4px;
                 }
                 .xbot-footer {
                     padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
@@ -1924,8 +1958,8 @@
             '<span class="xbot-header-name"></span>' +
             '<span class="xbot-header-status"><span class="xbot-status-dot"></span>Online agora</span>' +
             '</div>' +
-            '<button type="button" class="xbot-header-minimize" aria-label="Minimizar">' +
-            XBOT_ICONS.close +
+            '<button type="button" class="xbot-header-minimize" aria-label="Recolher">' +
+            XBOT_ICONS.collapse +
             '</button></div>' +
             '<div class="xbot-inactivity-bar" id="xbot-inactivity-bar" hidden role="status" aria-live="polite">' +
             '<div class="xbot-inactivity-text">' +
@@ -1935,7 +1969,10 @@
             '<button type="button" class="xbot-inactivity-btn" id="xbot-inactivity-keep">' +
             'Manter conversa ativa' +
             '</button></div>' +
-            '<div class="xbot-messages" id="xbot-messages"></div>' +
+            '<div class="xbot-messages" id="xbot-messages">' +
+            '<div class="xbot-empty" id="xbot-empty">' +
+            '<p class="xbot-empty-text" id="xbot-empty-text"></p>' +
+            '</div></div>' +
             '<div class="xbot-compose">' +
             '<div class="xbot-compose-inner">' +
             '<div class="xbot-compose-tools">' +
@@ -1945,7 +1982,7 @@
             '<button type="button" class="xbot-icon-btn" id="xbot-audio" aria-label="Gravar áudio">' +
             XBOT_ICONS.mic +
             '</button></div>' +
-            '<textarea class="xbot-input" id="xbot-input" placeholder="Escreva sua mensagem…" rows="1"></textarea>' +
+            '<textarea class="xbot-input" id="xbot-input" placeholder="Ou envie uma mensagem…" rows="1"></textarea>' +
             '<button type="button" class="xbot-send" id="xbot-send" aria-label="Enviar">' +
             XBOT_ICONS.send +
             '</button></div></div>' +
@@ -2007,15 +2044,51 @@
             });
         }
 
+        var chatCloseTimer = null;
+
+        function plainWelcomeSnippet(text) {
+            var plain = String(text || '')
+                .replace(/\*\*/g, '')
+                .replace(/\*/g, '')
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (plain.length > 140) plain = plain.slice(0, 137) + '…';
+            return plain;
+        }
+
+        function syncEmptyState() {
+            var emptyEl = document.getElementById('xbot-empty');
+            var textEl = document.getElementById('xbot-empty-text');
+            if (!emptyEl || !textEl) return;
+            var hasMessages = !!lastMessageRow();
+            if (hasMessages) {
+                emptyEl.hidden = true;
+                return;
+            }
+            var welcome = plainWelcomeSnippet(getWelcomeText());
+            textEl.textContent = welcome || ('Olá! Envie uma mensagem para falar com ' + botName + '.');
+            emptyEl.hidden = false;
+        }
+
         function setChatOpen(open) {
-            chatbox.style.display = open ? 'flex' : 'none';
+            if (chatCloseTimer) {
+                clearTimeout(chatCloseTimer);
+                chatCloseTimer = null;
+            }
             chatbox.style.flexDirection = 'column';
-            chatbox.classList.toggle('is-open', open);
             launcher.classList.toggle('is-open', open);
             launcher.classList.toggle('xbot-launcher--hidden', open);
             setViewportZoomLocked(!!open);
-            launcher.setAttribute('aria-label', open ? 'Fechar chat' : 'Abrir chat');
+            launcher.setAttribute('aria-label', open ? 'Recolher chat' : 'Abrir chat');
+
             if (open) {
+                chatbox.style.display = 'flex';
+                chatbox.classList.add('is-open');
+                syncEmptyState();
+                // Força reflow antes da transição de entrada
+                void chatbox.offsetWidth;
+                chatbox.classList.add('is-visible');
                 startSessionStatusPoll();
                 ensureRealtimeTransport();
                 unreadCount = 0;
@@ -2028,9 +2101,17 @@
                 }
                 input.focus();
             } else {
+                chatbox.classList.remove('is-visible');
+                chatbox.classList.remove('is-open');
                 stopSessionStatusPoll();
                 pauseRealtimeTransportIdle();
                 clearMobilePanelStyles();
+                chatCloseTimer = setTimeout(function () {
+                    chatCloseTimer = null;
+                    if (!chatbox.classList.contains('is-open')) {
+                        chatbox.style.display = 'none';
+                    }
+                }, 220);
             }
         }
 
@@ -2073,7 +2154,7 @@
         });
 
         launcher.addEventListener('click', function () {
-            setChatOpen(chatbox.style.display !== 'flex');
+            setChatOpen(!chatbox.classList.contains('is-open'));
         });
 
         chatbox.querySelector('.xbot-header-minimize').addEventListener('click', function () {
@@ -2117,13 +2198,13 @@
             chatbox.style.bottom = '';
             chatbox.style.borderRadius = '';
             // Launcher fica oculto enquanto o chat estiver aberto (evita X duplo).
-            if (chatbox.style.display !== 'flex') {
+            if (!chatbox.classList.contains('is-open')) {
                 launcher.classList.remove('xbot-launcher--hidden');
             }
         }
 
         function applyMobileKeyboardLayout() {
-            if (!isMobileLayout() || chatbox.style.display !== 'flex') {
+            if (!isMobileLayout() || !chatbox.classList.contains('is-open')) {
                 clearMobilePanelStyles();
                 return;
             }
@@ -2225,12 +2306,13 @@
             col.appendChild(timeEl);
             row.appendChild(col);
             messages.appendChild(row);
+            syncEmptyState();
             if (opts.scroll !== false) {
                 scrollMessagesToBottom();
             }
 
             var countUnread = opts.countUnread !== false;
-            if (from === 'bot' && countUnread && chatbox.style.display === 'none') {
+            if (from === 'bot' && countUnread && !isChatOpen()) {
                 unreadCount++;
                 notification.textContent = String(unreadCount);
                 notification.style.display = 'flex';
@@ -2338,6 +2420,7 @@
             previewCol.appendChild(previewTime);
             previewRow.appendChild(previewCol);
             messages.appendChild(previewRow);
+            syncEmptyState();
             messages.scrollTop = messages.scrollHeight;
         
             try {
@@ -2406,6 +2489,7 @@
                 audioCol.appendChild(audioTime);
                 audioRow.appendChild(audioCol);
                 messages.appendChild(audioRow);
+                syncEmptyState();
                 messages.scrollTop = messages.scrollHeight;
 
                 try {
@@ -2455,6 +2539,8 @@
         setTimeout(function () {
             deliverWelcomeOnPageLoad();
         }, 500);
+
+        syncEmptyState();
 
         widgetLog('UI pronta', {
             visitorId: getVisitorId(),
