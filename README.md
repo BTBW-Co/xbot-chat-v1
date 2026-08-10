@@ -43,7 +43,7 @@ A API também expõe essa URL em `GET /v1/xchat/widget-config` no campo **`scrip
 Se precisar de **pin semver** (auditoria, rollback ou homologação):
 
 ```
-https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@1.0.24/versions/1.0.24/xbot.min.js
+https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@1.0.25/versions/1.0.25/xbot.min.js
 ```
 
 Substitua pela tag desejada. Essa URL **não** se atualiza sozinha.
@@ -57,7 +57,73 @@ Substitua pela tag desejada. Essa URL **não** se atualiza sozinha.
 
 ## Integração em qualquer site (HTML)
 
-Cole antes de `</body>`:
+### Lazy-load (recomendado)
+
+Não baixa o JS nem chama a API até o visitante clicar. Cole **um** bloco antes de `</body>` (substitua credenciais):
+
+```html
+<script>
+(function () {
+  var SCRIPT_URL = "https://xbotone.com/xchat/xbot.min.js";
+  var CFG = {
+    channelId: "UUID-DO-CANAL-XCHAT",
+    clientId: "SEU_CLIENT_ID",
+    token: "SEU_CLIENT_SECRET",
+    apiBaseUrl: "https://api.xbotone.com"
+  };
+  var loading = false, inited = false;
+  function openWhenReady() {
+    if (typeof window.openXBot === "function") { window.openXBot(); return; }
+    var n = 0, t = setInterval(function () {
+      if (typeof window.openXBot === "function") { clearInterval(t); window.openXBot(); return; }
+      var btn = document.querySelector(".xbot-launcher");
+      if (btn) { clearInterval(t); btn.click(); }
+      if (++n > 80) clearInterval(t);
+    }, 50);
+  }
+  function loadAndOpen() {
+    if (typeof window.initXBot === "function") {
+      if (!inited) { window.initXBot(CFG); inited = true; }
+      openWhenReady(); return;
+    }
+    if (loading) return;
+    loading = true;
+    var s = document.createElement("script");
+    s.src = SCRIPT_URL; s.async = true;
+    s.onload = function () { window.initXBot(CFG); inited = true; openWhenReady(); };
+    document.body.appendChild(s);
+  }
+  function mountStub() {
+    if (document.getElementById("xbot-lazy-stub") || document.querySelector(".xbot-launcher")) return;
+    var b = document.createElement("button");
+    b.id = "xbot-lazy-stub"; b.type = "button"; b.setAttribute("aria-label", "Abrir chat");
+    b.textContent = "💬";
+    b.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483000;width:56px;height:56px;border-radius:50%;border:0;cursor:pointer;background:#25D366;color:#fff;font-size:22px;box-shadow:0 4px 14px rgba(0,0,0,.18)";
+    b.addEventListener("click", function () {
+      b.disabled = true; loadAndOpen();
+      var n = 0, t = setInterval(function () {
+        if (document.querySelector(".xbot-launcher")) { clearInterval(t); b.remove(); }
+        if (++n > 100) clearInterval(t);
+      }, 80);
+    });
+    document.body.appendChild(b);
+  }
+  document.addEventListener("click", function (ev) {
+    var el = ev.target && ev.target.closest && ev.target.closest("[data-xbot-open], #xbot-open-chat");
+    if (!el) return;
+    ev.preventDefault();
+    loadAndOpen();
+  });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountStub);
+  else mountStub();
+  window.loadXBot = loadAndOpen;
+})();
+</script>
+```
+
+Botão próprio do site: `data-xbot-open` ou `id="xbot-open-chat"` também dispara o load. Ou chame `window.loadXBot()`.
+
+### Carga imediata (opcional)
 
 ```html
 <script src="https://xbotone.com/xchat/xbot.min.js"></script>
@@ -70,6 +136,8 @@ Cole antes de `</body>`:
   });
 </script>
 ```
+
+Com widget **≥ 1.0.24**, mesmo no pageload o transporte (poll/SSE) só liga ao **abrir** o chat.
 
 Nome, cor, posição, offset, avatares e mensagem de boas-vindas vêm do painel
 (edição do canal XChat → aparência), via `GET /v1/xchat/widget-config` — não precisam

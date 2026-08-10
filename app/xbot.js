@@ -1822,6 +1822,14 @@
             }
         }
 
+        /** API pública: abrir/fechar painel (útil no lazy-load). */
+        window.openXBot = function () {
+            setChatOpen(true);
+        };
+        window.closeXBot = function () {
+            setChatOpen(false);
+        };
+
         if (typeof document !== 'undefined' && document.addEventListener) {
             document.addEventListener('visibilitychange', function () {
                 if (document.visibilityState === 'hidden') {
