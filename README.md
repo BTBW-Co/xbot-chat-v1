@@ -20,7 +20,7 @@ O widget é servido pelo [jsDelivr](https://www.jsdelivr.com/) a partir deste re
 
 ### URL oficial (recomendada)
 
-Use **sempre** esta URL no `<script src="...">`. Ela **não muda** entre releases: após cada `npm run build` e push em `main`, o arquivo `versions/latest/xbot.min.js` é atualizado e os sites passam a carregar o JS novo (o cache do jsDelivr pode levar alguns minutos).
+Use **sempre** esta URL no `<script src="...">`. Ela **não muda** entre releases: após cada `npm run build` e push em `main`, o arquivo `versions/latest/xbot.min.js` é atualizado. O `make git` na raiz do monorepo **purga o cache jsDelivr** de `versions/latest` (e da pasta da versão em `@main`) para o CDN refletir na hora.
 
 **CDN estável:**
 
@@ -210,9 +210,9 @@ npm run build
 # ou: bash scripts/build-widget.sh 1.0.4
 ```
 
-3. Na raiz do monorepo: `make git` — faz build, commit/push em `main` e **tag + push** com a versão do `package.json` (ex.: `1.0.8` → jsDelivr `@1.0.8/versions/1.0.8/...`)
+3. Na raiz do monorepo: `make git` — faz build, commit/push em `main`, **tag + push** com a versão do `package.json` (ex.: `1.0.8` → jsDelivr `@1.0.8/versions/1.0.8/...`) e **purge** do jsDelivr (`versions/latest` + pasta da versão em `@main`).
 
-4. Quem usa a URL estável (`@main/versions/latest/xbot.min.js`) passa a receber o novo JS após o push (cache do jsDelivr pode levar alguns minutos)
+4. Quem usa a URL estável (`@main/versions/latest/xbot.min.js`) passa a receber o novo JS na hora (após o purge). Hard refresh no browser do visitante se ainda vir a versão antiga.
 
 Tag manual (só se precisar): `git tag 1.0.8 && git push origin 1.0.8`
 

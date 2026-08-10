@@ -14,6 +14,20 @@
       return XBOT_DEFAULT_ASSETS_BASE + '/workforce/' + file;
     }
 
+    var XBOT_CHANNEL_UUID_RE =
+      /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
+
+    /**
+     * Extrai UUID canônico do channelId.
+     * Evita 422 quando o embed/env concatena lixo ao UUID (ex.: sufixo do client secret).
+     */
+    function normalizeXbotChannelId(value) {
+      var raw = String(value == null ? '' : value).trim();
+      if (!raw) return '';
+      var match = raw.match(XBOT_CHANNEL_UUID_RE);
+      return match ? match[0] : raw;
+    }
+
     function xbotWorkforceIconKey(channelId) {
       if (!channelId) return 'bb8';
       var hex = String(channelId).replace(/-/g, '').slice(0, 8);
@@ -33,9 +47,11 @@
       var launcher = (cfg.launcherIcon || '').trim();
       var bot = (cfg.botAvatar || '').trim();
       var user = (cfg.userAvatar || '').trim();
-      var workforceKey = xbotWorkforceIconKey(cfg.channelId);
+      var channelId = normalizeXbotChannelId(cfg.channelId);
+      var workforceKey = xbotWorkforceIconKey(channelId);
       var workforceUrl = xbotWorkforceAssetUrl(workforceKey);
       return Object.assign({}, cfg, {
+        channelId: channelId || cfg.channelId,
         launcherIcon: launcher || workforceUrl,
         botAvatar: bot || workforceUrl,
         userAvatar: user || xbotDefaultAssetUrl('user-avatar.svg'),
@@ -98,12 +114,26 @@
 
     window.initXBot = function (config) {
       config = config || {};
-      window.__xbotConfig = applyXbotAssetDefaults(config);
+      var rawChannelId = config.channelId;
+      var normalizedChannelId = normalizeXbotChannelId(rawChannelId);
+      if (
+        rawChannelId &&
+        normalizedChannelId &&
+        String(rawChannelId).trim() !== normalizedChannelId
+      ) {
+        widgetLog('channelId sanitizado (removido sufixo inválido)', {
+          recebido: String(rawChannelId).trim(),
+          usando: normalizedChannelId,
+        });
+      }
+      window.__xbotConfig = applyXbotAssetDefaults(
+        Object.assign({}, config, { channelId: normalizedChannelId || rawChannelId })
+      );
       window.__xbotAppearanceReady = false;
       widgetLog(
         'init',
         {
-          channelId: config.channelId || null,
+          channelId: (window.__xbotConfig && window.__xbotConfig.channelId) || null,
           apiBaseUrl: config.apiBaseUrl || null,
           hasClientId: !!(config.clientId && String(config.clientId).trim()),
         }
