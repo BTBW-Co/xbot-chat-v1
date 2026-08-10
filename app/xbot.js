@@ -141,11 +141,34 @@
           channelId: (window.__xbotConfig && window.__xbotConfig.channelId) || null,
           apiBaseUrl: config.apiBaseUrl || null,
           hasClientId: !!(config.clientId && String(config.clientId).trim()),
+          hasExternalUserId: !!(
+            config.user &&
+            config.user.externalUserId &&
+            String(config.user.externalUserId).trim()
+          ),
+          hasContext: !!(config.context && typeof config.context === 'object'),
         }
       );
       fetchWidgetAppearance().finally(function () {
         window.__xbotAppearanceReady = true;
       });
+    };
+
+    /** Atualiza identidade do visitante (ex.: após login no site hospedeiro). */
+    window.setXBotUser = function (user) {
+      var cfg = window.__xbotConfig || {};
+      cfg.user = user && typeof user === 'object' ? user : null;
+      window.__xbotConfig = cfg;
+      widgetLog('setXBotUser', {
+        hasExternalUserId: !!(user && user.externalUserId && String(user.externalUserId).trim()),
+      });
+    };
+
+    /** Atualiza contexto da página (URL/obs.) antes do envio — útil em SPAs. */
+    window.setXBotContext = function (context) {
+      var cfg = window.__xbotConfig || {};
+      cfg.context = context && typeof context === 'object' ? context : null;
+      window.__xbotConfig = cfg;
     };
   
     const markedScript = document.createElement('script');
@@ -213,6 +236,19 @@
         }
         function getVisitorId() {
             try {
+                var liveCfg = window.__xbotConfig || config || {};
+                var user = liveCfg.user && typeof liveCfg.user === 'object' ? liveCfg.user : null;
+                var extRaw = user && user.externalUserId != null ? String(user.externalUserId).trim() : '';
+                if (extRaw) {
+                    var safe = extRaw.replace(/[^\w.@+-]/g, '_').replace(/^ext_/i, '');
+                    if (safe) {
+                        var extId = ('ext_' + safe).slice(0, 50);
+                        if (typeof localStorage !== 'undefined') {
+                            try { localStorage.setItem('xbot_visitor_id', extId); } catch (e) {}
+                        }
+                        return extId;
+                    }
+                }
                 var key = 'xbot_visitor_id';
                 var id = typeof localStorage !== 'undefined' && localStorage.getItem(key);
                 if (!id) {
@@ -221,6 +257,89 @@
                 }
                 return id;
             } catch (e) { return null; }
+        }
+
+        function getXbotUserPayload() {
+            var liveCfg = window.__xbotConfig || config || {};
+            var user = liveCfg.user && typeof liveCfg.user === 'object' ? liveCfg.user : null;
+            if (!user) return null;
+            var out = {};
+            if (user.externalUserId != null && String(user.externalUserId).trim()) {
+                out.externalUserId = String(user.externalUserId).trim();
+            }
+            if (user.name != null && String(user.name).trim()) out.name = String(user.name).trim();
+            if (user.email != null && String(user.email).trim()) out.email = String(user.email).trim();
+            if (user.phone != null && String(user.phone).trim()) out.phone = String(user.phone).trim();
+            var rawCustom = user.custom_fields || user.customFields;
+            if (rawCustom && typeof rawCustom === 'object') {
+                var custom = {};
+                Object.keys(rawCustom).forEach(function (k) {
+                    var sk = toSnakeCaseFieldKey(k);
+                    if (!sk) return;
+                    var v = rawCustom[k];
+                    if (v == null) return;
+                    if (typeof v === 'boolean' || typeof v === 'number') {
+                        custom[sk] = v;
+                        return;
+                    }
+                    var text = String(v).trim();
+                    if (text) custom[sk] = text.slice(0, 2000);
+                });
+                if (Object.keys(custom).length) out.custom_fields = custom;
+            }
+            return Object.keys(out).length ? out : null;
+        }
+
+        function toSnakeCaseFieldKey(raw) {
+            var s = String(raw == null ? '' : raw).trim();
+            if (!s) return '';
+            s = s.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+            s = s.replace(/[-\s]+/g, '_');
+            s = s.replace(/[^a-zA-Z0-9_]/g, '_');
+            s = s.replace(/_+/g, '_').replace(/^_|_$/g, '').toLowerCase();
+            if (!s || /^[0-9]/.test(s)) return '';
+            return s.slice(0, 64);
+        }
+
+        function getXbotContextPayload() {
+            var liveCfg = window.__xbotConfig || config || {};
+            var ctx = liveCfg.context && typeof liveCfg.context === 'object' ? liveCfg.context : null;
+            var out = {};
+            if (ctx) {
+                if (ctx.pageUrl != null && String(ctx.pageUrl).trim()) out.pageUrl = String(ctx.pageUrl).trim();
+                if (ctx.pageTitle != null && String(ctx.pageTitle).trim()) out.pageTitle = String(ctx.pageTitle).trim();
+                if (ctx.notes != null && String(ctx.notes).trim()) out.notes = String(ctx.notes).trim();
+            }
+            // Fallback: URL atual da página hospedeira se o site não passou context.pageUrl
+            if (!out.pageUrl && typeof window !== 'undefined' && window.location && window.location.href) {
+                try {
+                    out.pageUrl = String(window.location.href).slice(0, 2000);
+                    if (!out.pageTitle && typeof document !== 'undefined' && document.title) {
+                        out.pageTitle = String(document.title).slice(0, 255);
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            return Object.keys(out).length ? out : null;
+        }
+
+        function attachIdentityToMessageBody(msgBody) {
+            var user = getXbotUserPayload();
+            var ctx = getXbotContextPayload();
+            if (user) msgBody.user = user;
+            if (ctx) msgBody.context = ctx;
+            return msgBody;
+        }
+
+        function attachIdentityToFormData(formData) {
+            var user = getXbotUserPayload();
+            var ctx = getXbotContextPayload();
+            if (user) {
+                try { formData.append('user', JSON.stringify(user)); } catch (e) {}
+            }
+            if (ctx) {
+                try { formData.append('context', JSON.stringify(ctx)); } catch (e) {}
+            }
+            return formData;
         }
 
         function getMessagesPollUrl() {
@@ -2033,7 +2152,7 @@
 
             try {
                 const visitorId = getVisitorId();
-                const msgBody = { message: text };
+                const msgBody = attachIdentityToMessageBody({ message: text });
                 if (visitorId) msgBody.visitor_id = visitorId;
                 if (channelId) msgBody.channel_id = channelId;
                 const response = await fetch(getMessageUrl(), {
@@ -2090,6 +2209,7 @@
             formData.append('file', file);
             var vid = getVisitorId();
             if (vid) formData.append('visitor_id', vid);
+            attachIdentityToFormData(formData);
         
             const preview = document.createElement('div');
             preview.className = 'xbot-message user';
@@ -2185,6 +2305,7 @@
                 }
                 var vid = getVisitorId();
                 if (vid) formData.append('visitor_id', vid);
+                attachIdentityToFormData(formData);
                 const res = await fetch(getUploadUrl(), {
                     method: 'POST',
                     headers: buildAuthHeaders({}),

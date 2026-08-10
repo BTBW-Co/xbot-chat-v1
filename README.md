@@ -155,9 +155,59 @@ estar no embed.
 | Campo | Descrição |
 |-------|-----------|
 | `channelId` | UUID do canal XChat (**somente** o UUID) |
-| `clientId` | Client ID da API Key |
+| `clientId` | Client ID da API Key (autenticação — **não** é o ID do visitante) |
 | `token` | Client secret da API Key |
 | `apiBaseUrl` | URL da API (produção: `https://api.xbotone.com`) |
+| `user` | (opcional) Identidade do visitante logado no seu site |
+| `context` | (opcional) URL/observações → follow-up no card Kanban |
+
+### Contato identificado (`user`) e contexto (`context`)
+
+Sem `user.externalUserId`, o visitante fica anônimo (`Visitante v_…`).
+
+Com identidade, o site passa a chave única do usuário + dados do perfil:
+
+```html
+<script src="https://xbotone.com/xchat/xbot.min.js"></script>
+<script>
+  window.initXBot({
+    channelId: "UUID-DO-CANAL-XCHAT",
+    clientId: "SEU_CLIENT_ID",
+    token: "SEU_CLIENT_SECRET",
+    apiBaseUrl: "https://api.xbotone.com",
+    user: {
+      externalUserId: "USR-123",   // chave única no seu sistema (evita duplicar contato)
+      name: "Maria Silva",
+      email: "maria@empresa.com",
+      phone: "+5511999999999",
+      // chaves de campos customizáveis em snake_case
+      custom_fields: {
+        company_name: "Acme",
+        plan_tier: "pro",
+        lead_origin: "checkout"
+      }
+    },
+    context: {
+      pageUrl: "https://loja.com/produto/abc",
+      pageTitle: "Produto ABC",
+      notes: "Veio do checkout"
+    }
+  });
+</script>
+```
+
+Os nomes em `custom_fields` devem coincidir com os campos customizáveis do contato
+(Contatos → campos). Use **snake_case** quando o nome tiver mais de uma palavra
+(`company_name`, não `companyName`). O widget/API também convertem camelCase para snake_case.
+
+Em SPAs, após login ou mudança de rota:
+
+```js
+window.setXBotUser({ externalUserId: "USR-123", name: "Maria" });
+window.setXBotContext({ pageUrl: location.href, pageTitle: document.title });
+```
+
+Se `context.pageUrl` não for informado, o widget envia `window.location.href` automaticamente.
 
 **Não commite o `client_secret` em repositório público.** Em apps com build (Next, Vite), use variáveis de ambiente.
 
@@ -257,7 +307,10 @@ O widget chama `POST /v1/xchat/message` com:
 
 - `Authorization: Bearer <client_secret>`
 - `X-XBot-Client-Id: <client_id>`
-- Body: `{ "message", "channel_id", "visitor_id?" }`
+- Body: `{ "message", "channel_id", "visitor_id?", "user?", "context?" }`
+  - `user`: `{ externalUserId, name?, email?, phone?, custom_fields? }` — contato identificado
+  - `custom_fields`: chaves em **snake_case** (ex.: `company_name`), gravadas no metadata do contato
+  - `context`: `{ pageUrl?, pageTitle?, notes? }` — follow-up no card Kanban
 
 Poll (`GET /v1/xchat/messages`): `channel_id`, `visitor_id`, `after?` (ISO-8601).
 
