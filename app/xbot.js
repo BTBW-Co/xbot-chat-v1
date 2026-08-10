@@ -4,11 +4,14 @@
     window.__XBOT_WIDGET_VERSION = XBOT_WIDGET_VERSION;
 
     var XBOT_DEFAULT_ASSETS_BASE =
-      'https://cdn.jsdelivr.net/gh/BTBW-Co/xbot-chat-v1@main/assets/default';
+      'https://app.xbotone.com';
     var XBOT_WORKFORCE_ICON_KEYS = ['bb8', 'obiwan', 'threepio', 'r2d2'];
 
     function xbotDefaultAssetUrl(file) {
-      return XBOT_DEFAULT_ASSETS_BASE + '/' + file;
+      if (file === 'user-avatar.svg') {
+        return XBOT_DEFAULT_ASSETS_BASE + '/xchat-defaults/' + file;
+      }
+      return XBOT_DEFAULT_ASSETS_BASE + '/workforce/' + file;
     }
 
     function xbotWorkforceIconKey(channelId) {
@@ -67,10 +70,13 @@
               userAvatar: data.user_avatar_url || cfg.userAvatar,
               botName: data.bot_name || cfg.botName,
               welcomeMessage:
-                (cfg.welcomeMessage != null && String(cfg.welcomeMessage).trim())
-                  ? cfg.welcomeMessage
-                  : (data.welcome_message != null ? data.welcome_message : cfg.welcomeMessage),
+                (data.welcome_message != null && String(data.welcome_message).trim())
+                  ? data.welcome_message
+                  : cfg.welcomeMessage,
               launcherIcon: data.launcher_icon_url || cfg.launcherIcon,
+              position: data.position || cfg.position,
+              offsetBottom:
+                data.offset_bottom != null ? data.offset_bottom : cfg.offsetBottom,
               botReplyEnabled:
                 typeof data.bot_reply_enabled === 'boolean'
                   ? data.bot_reply_enabled

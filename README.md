@@ -76,14 +76,14 @@ Cole antes de `</body>`:
     channelId: "UUID-DO-CANAL-XCHAT",
     clientId: "SEU_CLIENT_ID",
     token: "SEU_CLIENT_SECRET",
-    apiBaseUrl: "https://api.xbotone.com",
-    position: "right"
+    apiBaseUrl: "https://api.xbotone.com"
   });
 </script>
 ```
 
-Cor, nome, avatares e mensagem de boas-vindas vêm do painel (aparência do canal XChat,
-servida por `GET /v1/xchat/widget-config`) — não precisam estar no embed.
+Nome, cor, posição, offset, avatares e mensagem de boas-vindas vêm do painel
+(edição do canal XChat → aparência), via `GET /v1/xchat/widget-config` — não precisam
+estar no embed.
 
 | Campo | Descrição |
 |-------|-----------|
@@ -91,16 +91,12 @@ servida por `GET /v1/xchat/widget-config`) — não precisam estar no embed.
 | `clientId` | Client ID da API Key |
 | `token` | Client secret da API Key |
 | `apiBaseUrl` | URL da API (produção: `https://api.xbotone.com`) |
-| `position` | `right` ou `left` |
-| `themeColor` | *(opcional)* Sobrescreve a cor configurada no painel (ex.: `#25D366`) |
-| `welcomeMessage` | *(opcional)* Sobrescreve a mensagem de boas-vindas do painel (balão ao lado do botão + animação no launcher; mensagem completa ao abrir o chat) |
 
 **Não commite o `client_secret` em repositório público.** Em apps com build (Next, Vite), use variáveis de ambiente.
 
 ### Mensagem de boas-vindas
 
-Configure no painel (edição do canal XChat → "Mensagem de boas-vindas") ou passe
-`welcomeMessage` no `initXBot` (o embed tem prioridade sobre o painel). Quando definida:
+Configure no painel (edição do canal XChat → "Mensagem de boas-vindas"). Quando definida:
 
 1. **Ao carregar a página** do site hospedeiro (uma vez por aba/sessão do navegador), o widget:
    - mostra um **balão de prévia** com o texto (truncado) ao lado do botão flutuante;
@@ -108,21 +104,6 @@ Configure no painel (edição do canal XChat → "Mensagem de boas-vindas") ou p
    - reproduz o **som de notificação** (mesmo das novas mensagens com o chat fechado).
 2. **Ao abrir o chat**, o visitante vê a mensagem completa no histórico (suporta Markdown leve: `**negrito**`, links).
 
-```html
-<script>
-  window.initXBot({
-    channelId: "UUID-DO-CANAL-XCHAT",
-    clientId: "SEU_CLIENT_ID",
-    token: "SEU_CLIENT_SECRET",
-    apiBaseUrl: "https://api.xbotone.com",
-    position: "right",
-    themeColor: "#25D366",
-    welcomeMessage: "Olá! 👋 Sou o assistente da sua loja. Em que posso ajudar?"
-  });
-</script>
-```
-
-- O valor definido no **embed do site** (quando não vazio) tem prioridade; sem ele, vale o `welcome_message` configurado no painel.
 - A entrega proativa na carga da página usa `sessionStorage` por canal (`xbot_welcome_delivered_<channelId>`), para não repetir o alerta a cada navegação interna na mesma aba.
 - Para disparar mensagens depois (ex.: promo), use `window.sendXBotMessage("...")` (ver abaixo).
 
