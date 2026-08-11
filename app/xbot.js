@@ -1492,6 +1492,12 @@
                 opacity: 0;
                 transform: translateY(14px) scale(0.98);
                 transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+                pointer-events: none;
+            }
+            .xbot-chatbox.is-open {
+                /* Acima do launcher (z 2147483000) para o botão recolher receber o clique. */
+                z-index: 2147483001;
+                pointer-events: auto;
             }
             .xbot-chatbox.is-visible {
                 opacity: 1;
@@ -2099,8 +2105,13 @@
                 if (isMobileLayout()) {
                     requestAnimationFrame(applyMobileKeyboardLayout);
                 }
-                input.focus();
+                var openInput = document.getElementById('xbot-input');
+                if (openInput && typeof openInput.focus === 'function') openInput.focus();
             } else {
+                var closeInput = document.getElementById('xbot-input');
+                if (closeInput && typeof closeInput.blur === 'function' && document.activeElement === closeInput) {
+                    closeInput.blur();
+                }
                 chatbox.classList.remove('is-visible');
                 chatbox.classList.remove('is-open');
                 stopSessionStatusPoll();
@@ -2157,9 +2168,16 @@
             setChatOpen(!chatbox.classList.contains('is-open'));
         });
 
-        chatbox.querySelector('.xbot-header-minimize').addEventListener('click', function () {
-            setChatOpen(false);
-        });
+        var minimizeBtn = chatbox.querySelector('.xbot-header-minimize');
+        if (minimizeBtn) {
+            minimizeBtn.addEventListener('click', function (ev) {
+                if (ev) {
+                    if (typeof ev.preventDefault === 'function') ev.preventDefault();
+                    if (typeof ev.stopPropagation === 'function') ev.stopPropagation();
+                }
+                setChatOpen(false);
+            });
+        }
 
         const uploadBtn = document.getElementById('xbot-upload');
         const audioBtn = document.getElementById('xbot-audio');
