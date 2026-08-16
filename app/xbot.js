@@ -2184,6 +2184,13 @@
         const input = document.getElementById('xbot-input');
         const messages = document.getElementById('xbot-messages');
 
+        function focusMessageInput() {
+            if (!isChatOpen() || !input || typeof input.focus !== 'function') return;
+            requestAnimationFrame(function () {
+                if (isChatOpen()) input.focus({ preventScroll: true });
+            });
+        }
+
         const send = chatbox.querySelector('#xbot-send');
         send.addEventListener('click', handleSendMessage);
 
@@ -2346,6 +2353,8 @@
             beginNewEpisodeFromUserMessage();
             appendMessage(text, 'user');
             input.value = '';
+            input.style.height = 'auto';
+            focusMessageInput();
             pollSessionInactivity();
 
             try {
@@ -2383,6 +2392,8 @@
                 var errText = 'Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..';
                 appendMessage(errText, 'bot');
                 rememberBotMessage(null, errText);
+            } finally {
+                focusMessageInput();
             }
         }     
 
