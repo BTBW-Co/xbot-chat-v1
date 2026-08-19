@@ -1148,6 +1148,7 @@
             collapse: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.75 3.75V10.25M13.75 10.25H20.25M13.75 10.25L20.25 3.75M10.25 20.25V13.75M10.25 13.75H3.75M10.25 13.75L3.75 20.25"/></svg>',
             send: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.468 6.058C.265 4.988 1.02 3 2.63 3H21.28c1.343 0 2.185 1.45 1.52 2.617l-9.146 16.038c-.789 1.383-2.864 1.08-3.225-.47l-2.062-8.853 6.608-3.677a.75.75 0 0 0-.729-1.31L7.276 11.22z"/></svg>',
             attach: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
+            copy: '<svg class="xbot-copy-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
             mic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>',
             stop: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
         };
@@ -1673,6 +1674,11 @@
                 opacity: 0;
                 transform: translateY(8px);
                 animation: xbotFadeIn 0.28s ease forwards;
+                min-width: 0;
+                max-width: 100%;
+                overflow: hidden;
+                overflow-wrap: anywhere;
+                word-break: break-word;
             }
             @keyframes xbotFadeIn {
                 to { opacity: 1; transform: translateY(0); }
@@ -1702,7 +1708,62 @@
                 flex-direction: column;
                 gap: 4px;
             }
-            .xbot-text { display: block; word-wrap: break-word; overflow-wrap: anywhere; }
+            .xbot-text { display: block; word-wrap: break-word; overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
+            .xbot-text pre {
+                display: block;
+                max-width: 100%;
+                min-width: 0;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                word-break: break-all;
+                overflow-x: hidden;
+            }
+            .xbot-code-box {
+                position: relative;
+                background: #1e1e1e;
+                color: #d4d4d4;
+                padding: 16px 12px 12px;
+                border-radius: 8px;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                margin: 8px 0 4px;
+            }
+            .xbot-code-box pre {
+                margin: 0;
+                padding-right: 52px;
+                background: transparent;
+                color: inherit;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                word-break: break-all;
+            }
+            .xbot-copy-btn {
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                background: #2d2d2d;
+                color: #fff;
+                border: 1px solid #444;
+                padding: 6px 8px;
+                border-radius: 4px;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                line-height: 1;
+            }
+            .xbot-copy-btn:hover { background: #3c3c3c; }
+            .xbot-copy-tooltip { font-family: var(--xbot-font); }
+            .xbot-text code {
+                max-width: 100%;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                word-break: break-all;
+            }
+            .xbot-text a {
+                overflow-wrap: anywhere;
+                word-break: break-all;
+            }
             .xbot-text p { margin: 0 0 0.55em; line-height: 1.5; }
             .xbot-text p:last-child { margin-bottom: 0; }
             .xbot-text ul, .xbot-text ol { margin: 0.35em 0 0.55em 1.1em; padding: 0; }
@@ -2289,6 +2350,67 @@
 
         bindMobileViewportListeners();
 
+        function copyPlainText(value) {
+            var text = String(value || '');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            return new Promise(function (resolve, reject) {
+                try {
+                    var area = document.createElement('textarea');
+                    area.value = text;
+                    area.setAttribute('readonly', '');
+                    area.style.position = 'fixed';
+                    area.style.left = '-9999px';
+                    document.body.appendChild(area);
+                    area.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(area);
+                    resolve();
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+
+        function enhanceCopyableCode(root) {
+            if (!root || !root.querySelectorAll) return;
+            var nodes = root.querySelectorAll('pre');
+            for (var i = 0; i < nodes.length; i++) {
+                var pre = nodes[i];
+                if (pre.closest('.xbot-code-box')) continue;
+                var code = pre.querySelector('code') || pre;
+                var value = String(code.innerText || '').trim();
+                if (!value) continue;
+                var box = document.createElement('div');
+                box.className = 'xbot-code-box';
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'xbot-copy-btn';
+                btn.setAttribute('title', 'Copiar');
+                btn.innerHTML = XBOT_ICONS.copy + '<span class="xbot-copy-tooltip">Copiar</span>';
+                btn.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    var button = ev.currentTarget;
+                    var tip = button.querySelector('.xbot-copy-tooltip');
+                    var payload = button.getAttribute('data-copy') || '';
+                    copyPlainText(payload).then(function () {
+                        button.setAttribute('title', 'Copiado!');
+                        if (tip) tip.textContent = 'Copiado!';
+                        setTimeout(function () {
+                            button.setAttribute('title', 'Copiar');
+                            if (tip) tip.textContent = 'Copiar';
+                        }, 2000);
+                    }).catch(function () {});
+                });
+                btn.setAttribute('data-copy', value);
+                pre.parentNode.insertBefore(box, pre);
+                box.appendChild(btn);
+                box.appendChild(pre);
+            }
+        }
+
         function appendMessage(text, from, opts) {
             if (from === undefined) from = 'user';
             opts = opts || {};
@@ -2324,6 +2446,7 @@
                     <div class="xbot-text">${sanitized}</div>
                 </div>
             `;
+            if (from === 'bot') enhanceCopyableCode(msg.querySelector('.xbot-text'));
             const timeEl = document.createElement('div');
             timeEl.className = 'xbot-time';
             timeEl.textContent = formatMessageTime();
