@@ -2373,6 +2373,24 @@
             });
         }
 
+        /** WhatsApp/Instagram (* _ ~) → Markdown para marked.parse. */
+        function whatsappToMarkdown(text) {
+            var s = String(text || '');
+            var placeholders = [];
+            s = s.replace(/\*\*([^*\n]+)\*\*/g, function (_, inner) {
+                var idx = placeholders.length;
+                placeholders.push('**' + inner + '**');
+                return '\x00MD' + idx + '\x00';
+            });
+            s = s.replace(/\*([^*\n]+)\*/g, '**$1**');
+            s = s.replace(/\x00MD(\d+)\x00/g, function (_, idx) {
+                return placeholders[Number(idx)] || '';
+            });
+            s = s.replace(/_([^_\n]+)_/g, '*$1*');
+            s = s.replace(/~([^~\n]+)~/g, '~~$1~~');
+            return s;
+        }
+
         function enhanceCopyableCode(root) {
             if (!root || !root.querySelectorAll) return;
             var nodes = root.querySelectorAll('pre');
@@ -2435,7 +2453,7 @@
             if (opts.rawHtml) {
                 unsafeHTML = text;
             } else {
-                unsafeHTML = window.marked.parse(text);
+                unsafeHTML = window.marked.parse(whatsappToMarkdown(text));
             }
             var sanitized = window.DOMPurify.sanitize(unsafeHTML, {
                 ADD_TAGS: ['video', 'source'],
