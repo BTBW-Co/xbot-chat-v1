@@ -1812,6 +1812,24 @@
                 height: 110px;
                 object-fit: cover;
             }
+            .xbot-text [data-xbot-card="catalog"] {
+                cursor: pointer;
+                outline: none;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .xbot-text [data-xbot-card="catalog"]:hover {
+                border-color: rgba(var(--xbot-theme-rgb), 0.55) !important;
+                box-shadow: 0 0 0 2px rgba(var(--xbot-theme-rgb), 0.18);
+            }
+            .xbot-text [data-xbot-card="catalog"]:focus-visible {
+                border-color: rgba(var(--xbot-theme-rgb), 0.7) !important;
+                box-shadow: 0 0 0 2px rgba(var(--xbot-theme-rgb), 0.28);
+            }
+            .xbot-text [data-xbot-card="catalog"].is-selected,
+            .xbot-text [data-xbot-card="catalog"].is-disabled {
+                opacity: 0.72;
+                pointer-events: none;
+            }
             .xbot-reply-actions {
                 display: flex;
                 flex-wrap: wrap;
@@ -2505,6 +2523,8 @@
 
         function mountReplyActions(host, actions, opts) {
             if (!host || !Array.isArray(actions) || !actions.length) return;
+            // Grid de catálogo já oferece as opções nos cards.
+            if (host.querySelector && host.querySelector('[data-xbot="catalog-grid"]')) return;
             var interactive = !opts || opts.interactive !== false;
             var group = document.createElement('div');
             group.className = 'xbot-reply-actions';
@@ -2528,6 +2548,69 @@
                 group.appendChild(btn);
             });
             host.appendChild(group);
+        }
+
+        function enhanceCatalogGrid(root, opts) {
+            if (!root || !root.querySelectorAll) return;
+            var cards = root.querySelectorAll('[data-xbot-card="catalog"]');
+            if (!cards.length) return;
+            var interactive = !opts || opts.interactive !== false;
+            var imgs = root.querySelectorAll('[data-xbot-catalog-img], [data-xbot="catalog-grid"] img');
+            for (var i = 0; i < imgs.length; i++) {
+                (function (img) {
+                    img.onerror = function () {
+                        var ph = document.createElement('div');
+                        ph.style.cssText = 'width:100%;height:72px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;';
+                        ph.textContent = 'Sem foto';
+                        if (img.parentNode) img.parentNode.replaceChild(ph, img);
+                    };
+                })(imgs[i]);
+            }
+            function disableAll() {
+                for (var j = 0; j < cards.length; j++) {
+                    cards[j].classList.add('is-disabled');
+                    cards[j].setAttribute('aria-disabled', 'true');
+                    cards[j].removeAttribute('tabindex');
+                }
+            }
+            function selectCard(card) {
+                if (!interactive || sessionEpisodeEnded) return;
+                var value = (card.getAttribute('data-xbot-value') || '').trim();
+                if (!value) {
+                    var strong = card.querySelector('strong');
+                    value = strong ? String(strong.textContent || '').trim() : '';
+                }
+                if (!value) return;
+                card.classList.add('is-selected');
+                disableAll();
+                sendUserText(value);
+            }
+            for (var k = 0; k < cards.length; k++) {
+                (function (card) {
+                    if (!interactive || sessionEpisodeEnded) {
+                        card.classList.add('is-disabled');
+                        card.setAttribute('aria-disabled', 'true');
+                        card.removeAttribute('tabindex');
+                        return;
+                    }
+                    card.setAttribute('role', 'button');
+                    if (!card.hasAttribute('tabindex')) card.setAttribute('tabindex', '0');
+                    card.addEventListener('click', function (ev) {
+                        if (ev) {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                        }
+                        selectCard(card);
+                    });
+                    card.addEventListener('keydown', function (ev) {
+                        if (!ev) return;
+                        if (ev.key === 'Enter' || ev.key === ' ') {
+                            ev.preventDefault();
+                            selectCard(card);
+                        }
+                    });
+                })(cards[k]);
+            }
         }
 
         function appendMessage(text, from, opts) {
@@ -2562,7 +2645,10 @@
             }
             var sanitized = window.DOMPurify.sanitize(unsafeHTML, {
                 ADD_TAGS: ['video', 'source'],
-                ADD_ATTR: ['controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt']
+                ADD_ATTR: [
+                    'controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt',
+                    'role', 'tabindex', 'data-xbot', 'data-xbot-card', 'data-xbot-value', 'data-xbot-catalog-img'
+                ]
             });
             msg.innerHTML = `
                 <div class="xbot-message-content">
@@ -2570,7 +2656,9 @@
                 </div>
             `;
             if (from === 'bot') {
-                enhanceCopyableCode(msg.querySelector('.xbot-text'));
+                var textRoot = msg.querySelector('.xbot-text');
+                enhanceCopyableCode(textRoot);
+                enhanceCatalogGrid(textRoot, opts);
                 mountReplyActions(msg.querySelector('.xbot-message-content'), opts.actions || [], opts);
             }
             const timeEl = document.createElement('div');
