@@ -1875,10 +1875,12 @@
                 margin: 0;
                 border-radius: 0;
                 background: #e2e8f0;
+                flex-shrink: 0;
             }
             .xbot-catalog-photo-fallback {
                 width: 100%;
-                height: 72px;
+                height: 110px;
+                flex-shrink: 0;
                 background: #e2e8f0;
                 display: flex;
                 align-items: center;
@@ -1886,7 +1888,13 @@
                 color: #94a3b8;
                 font-size: 11px;
             }
-            .xbot-catalog-body { padding: 8px 10px; }
+            .xbot-catalog-body {
+                padding: 8px 10px;
+                flex: 1 1 auto;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
             .xbot-catalog-title {
                 font-size: 13px;
                 line-height: 1.3;
@@ -1904,7 +1912,8 @@
                 line-height: 1.35;
             }
             .xbot-catalog-select {
-                margin-top: 8px;
+                margin-top: auto;
+                padding-top: 8px;
                 font-size: 11px;
                 font-weight: 600;
                 color: #2563eb;
