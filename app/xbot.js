@@ -771,14 +771,45 @@
                 finalizeSessionEndedState();
             }
             clearPendingTyping();
+            var actions = extractReplyActions(meta);
             if (isMedia) {
-                appendBotMedia(ct, mediaUrl, body, meta, { countUnread: source !== 'history' });
+                appendBotMedia(ct, mediaUrl, body, meta, {
+                    countUnread: source !== 'history',
+                    actions: actions,
+                    interactive: source !== 'history'
+                });
             } else {
-                appendMessage(body, 'bot', { countUnread: source !== 'history' });
+                appendMessage(body, 'bot', {
+                    countUnread: source !== 'history',
+                    actions: actions,
+                    interactive: source !== 'history'
+                });
             }
             rememberBotMessage(item, dedupKey);
             if (item && item.id) saveLastBotMessageId(item.id);
             widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, tipo: ct, len: body.length });
+        }
+
+        function extractReplyActions(meta) {
+            if (!meta || typeof meta !== 'object') return [];
+            var raw = null;
+            if (Array.isArray(meta.actions) && meta.actions.length) raw = meta.actions;
+            else if (meta.channel_rendering && Array.isArray(meta.channel_rendering.actions)) {
+                raw = meta.channel_rendering.actions;
+            } else if (meta.content_envelope && Array.isArray(meta.content_envelope.actions)) {
+                raw = meta.content_envelope.actions;
+            }
+            if (!raw || !raw.length) return [];
+            var out = [];
+            for (var i = 0; i < raw.length; i++) {
+                var a = raw[i];
+                if (!a || typeof a !== 'object') continue;
+                var label = String(a.label || a.value || '').trim();
+                var value = String(a.value || a.label || '').trim();
+                if (!label || !value) continue;
+                out.push({ id: a.id || ('action-' + i), label: label, value: value });
+            }
+            return out;
         }
 
         function _escHtml(s) {
@@ -841,6 +872,7 @@
                 timeDiv.textContent = formatMessageTime();
                 contentDiv.appendChild(textDiv);
                 msgDiv.appendChild(contentDiv);
+                mountReplyActions(contentDiv, (opts && opts.actions) || [], opts);
                 col.appendChild(msgDiv);
                 col.appendChild(timeDiv);
                 row.appendChild(col);
@@ -1643,8 +1675,9 @@
                 gap: 8px;
                 max-width: 92%;
             }
+            .xbot-message-row.bot { align-self: flex-start; max-width: 92%; }
+            .xbot-message-row.bot.xbot-message-row--catalog { max-width: 100%; width: 100%; }
             .xbot-message-row.user { align-self: flex-end; max-width: 85%; }
-            .xbot-message-row.bot { align-self: flex-start; }
             .xbot-message-row.bot.xbot-message-row--no-avatar {
                 padding-left: 36px;
             }
@@ -1769,6 +1802,47 @@
             .xbot-text ul, .xbot-text ol { margin: 0.35em 0 0.55em 1.1em; padding: 0; }
             .xbot-text li { margin-bottom: 0.25em; }
             .xbot-text strong { font-weight: 600; }
+            .xbot-text [data-xbot="catalog-grid"] {
+                width: 100%;
+                min-width: 0;
+            }
+            .xbot-text [data-xbot="catalog-grid"] img {
+                margin: 0;
+                border-radius: 0;
+                height: 110px;
+                object-fit: cover;
+            }
+            .xbot-reply-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-top: 8px;
+            }
+            .xbot-reply-action {
+                appearance: none;
+                border: 1px solid rgba(var(--xbot-theme-rgb), 0.35);
+                background: rgba(var(--xbot-theme-rgb), 0.08);
+                color: var(--xbot-ink);
+                border-radius: 999px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: 600;
+                line-height: 1.2;
+                cursor: pointer;
+                max-width: 100%;
+                text-align: left;
+                transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+            }
+            .xbot-reply-action:hover {
+                background: rgba(var(--xbot-theme-rgb), 0.16);
+                border-color: rgba(var(--xbot-theme-rgb), 0.55);
+            }
+            .xbot-reply-action:active { transform: scale(0.98); }
+            .xbot-reply-action:disabled {
+                opacity: 0.55;
+                cursor: default;
+                transform: none;
+            }
             .xbot-message video {
                 max-width: 100%;
                 border-radius: var(--xbot-radius-md);
@@ -2429,11 +2503,40 @@
             }
         }
 
+        function mountReplyActions(host, actions, opts) {
+            if (!host || !Array.isArray(actions) || !actions.length) return;
+            var interactive = !opts || opts.interactive !== false;
+            var group = document.createElement('div');
+            group.className = 'xbot-reply-actions';
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', 'Opções');
+            actions.forEach(function (action) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'xbot-reply-action';
+                btn.textContent = action.label;
+                if (!interactive || sessionEpisodeEnded) {
+                    btn.disabled = true;
+                } else {
+                    btn.addEventListener('click', function () {
+                        if (sessionEpisodeEnded) return;
+                        var buttons = group.querySelectorAll('.xbot-reply-action');
+                        for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+                        sendUserText(action.value);
+                    });
+                }
+                group.appendChild(btn);
+            });
+            host.appendChild(group);
+        }
+
         function appendMessage(text, from, opts) {
             if (from === undefined) from = 'user';
             opts = opts || {};
             const row = document.createElement('div');
             row.className = `xbot-message-row ${from}`;
+            var hasCatalogGrid = from === 'bot' && String(text || '').indexOf('data-xbot="catalog-grid"') !== -1;
+            if (hasCatalogGrid) row.classList.add('xbot-message-row--catalog');
             if (from === 'bot' && botAvatar) {
                 if (shouldShowBotAvatar()) {
                     const av = document.createElement('img');
@@ -2450,7 +2553,9 @@
             const msg = document.createElement('div');
             msg.className = `xbot-message ${from}`;
             var unsafeHTML;
-            if (opts.rawHtml) {
+            var treatAsHtml = !!opts.rawHtml
+                || (from === 'bot' && /<\s*(?:p|div|ul|ol|table|strong|img)\b/i.test(String(text || '')));
+            if (treatAsHtml) {
                 unsafeHTML = text;
             } else {
                 unsafeHTML = window.marked.parse(whatsappToMarkdown(text));
@@ -2464,7 +2569,10 @@
                     <div class="xbot-text">${sanitized}</div>
                 </div>
             `;
-            if (from === 'bot') enhanceCopyableCode(msg.querySelector('.xbot-text'));
+            if (from === 'bot') {
+                enhanceCopyableCode(msg.querySelector('.xbot-text'));
+                mountReplyActions(msg.querySelector('.xbot-message-content'), opts.actions || [], opts);
+            }
             const timeEl = document.createElement('div');
             timeEl.className = 'xbot-time';
             timeEl.textContent = formatMessageTime();
@@ -2484,23 +2592,25 @@
                 notification.style.display = 'flex';
                 notificationSound.play().catch(function () {});
             }
-        }     
-        
-        async function handleSendMessage() {
-            const text = input.value.trim();
-            if (!text) return;
+        }
+
+        async function sendUserText(text) {
+            const value = String(text || '').trim();
+            if (!value) return;
 
             resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
-            appendMessage(text, 'user');
-            input.value = '';
-            input.style.height = 'auto';
+            appendMessage(value, 'user');
+            if (input) {
+                input.value = '';
+                input.style.height = 'auto';
+            }
             focusMessageInput();
             pollSessionInactivity();
 
             try {
                 const visitorId = getVisitorId();
-                const msgBody = attachIdentityToMessageBody({ message: text });
+                const msgBody = attachIdentityToMessageBody({ message: value });
                 if (visitorId) msgBody.visitor_id = visitorId;
                 if (channelId) msgBody.channel_id = channelId;
                 const response = await fetch(getMessageUrl(), {
@@ -2517,7 +2627,6 @@
                     if (replyText) ingestBotPayload(null, replyText, 'post');
                     else clearPendingTyping();
                 } else if (data.bot_reply_enabled) {
-                    // Só mostra "digitando" quando a API confirma que o agente vai responder.
                     pendingSendCount++;
                     _moveOrShowTyping();
                     pendingSendCount = Math.max(0, pendingSendCount - 1);
@@ -2527,7 +2636,6 @@
                 } else {
                     clearPendingTyping();
                 }
-
             } catch (err) {
                 clearPendingTyping();
                 var errText = 'Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..';
@@ -2536,6 +2644,12 @@
             } finally {
                 focusMessageInput();
             }
+        }
+
+        async function handleSendMessage() {
+            const text = input.value.trim();
+            if (!text) return;
+            await sendUserText(text);
         }     
 
         window.sendXBotMessage = function(message) {
