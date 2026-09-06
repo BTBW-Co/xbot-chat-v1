@@ -772,17 +772,20 @@
             }
             clearPendingTyping();
             var actions = extractReplyActions(meta);
+            var animateTyping = source !== 'history' && source !== 'hydrate';
             if (isMedia) {
                 appendBotMedia(ct, mediaUrl, body, meta, {
                     countUnread: source !== 'history',
                     actions: actions,
-                    interactive: source !== 'history'
+                    interactive: source !== 'history',
+                    animateTyping: false
                 });
             } else {
                 appendMessage(body, 'bot', {
                     countUnread: source !== 'history',
                     actions: actions,
-                    interactive: source !== 'history'
+                    interactive: source !== 'history',
+                    animateTyping: animateTyping
                 });
             }
             rememberBotMessage(item, dedupKey);
@@ -1802,41 +1805,149 @@
             .xbot-text ul, .xbot-text ol { margin: 0.35em 0 0.55em 1.1em; padding: 0; }
             .xbot-text li { margin-bottom: 0.25em; }
             .xbot-text strong { font-weight: 600; }
+            .xbot-catalog-grid,
             .xbot-text [data-xbot="catalog-grid"] {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 10px;
                 width: 100%;
                 min-width: 0;
+                margin: 10px 0;
             }
-            .xbot-text [data-xbot="catalog-grid"] img {
-                margin: 0;
-                border-radius: 0;
-                height: 110px;
-                object-fit: cover;
-            }
+            .xbot-catalog-card,
             .xbot-text [data-xbot-card="catalog"] {
+                display: flex;
+                flex-direction: column;
+                border: 1px solid var(--xbot-border);
+                border-radius: 10px;
+                overflow: hidden;
+                background: var(--xbot-surface-alt);
                 cursor: pointer;
                 outline: none;
                 -webkit-tap-highlight-color: transparent;
+                transition: border-color .15s ease, box-shadow .15s ease;
+                min-width: 0;
             }
+            .xbot-catalog-card--hidden,
+            .xbot-text [data-xbot-card="catalog"].xbot-catalog-card--hidden,
+            .xbot-text [data-xbot-card="catalog"][data-xbot-catalog-hidden="1"],
+            .xbot-catalog-card--pending {
+                display: none !important;
+            }
+            .xbot-catalog-card--reveal {
+                animation: xbotCatalogReveal 0.32s ease forwards;
+            }
+            @keyframes xbotCatalogReveal {
+                from { opacity: 0; transform: translateY(10px) scale(0.98); }
+                to { opacity: 1; transform: none; }
+            }
+            .xbot-catalog-ui--pending { display: none !important; }
+            .xbot-catalog-is-typing {
+                pointer-events: none;
+            }
+            .xbot-catalog-typecursor::after {
+                content: '▋';
+                margin-left: 1px;
+                color: var(--xbot-theme);
+                animation: xbotTypeBlink 0.75s step-end infinite;
+            }
+            @keyframes xbotTypeBlink {
+                50% { opacity: 0; }
+            }
+            .xbot-catalog-live-typing {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin: 6px 0 8px;
+                font-size: 12px;
+                color: var(--xbot-muted);
+            }
+            .xbot-catalog-live-typing .xbot-typing-dots span {
+                width: 5px;
+                height: 5px;
+            }
+            .xbot-catalog-img,
+            .xbot-text [data-xbot="catalog-grid"] img {
+                width: 100%;
+                height: 110px;
+                object-fit: cover;
+                display: block;
+                margin: 0;
+                border-radius: 0;
+                background: #e2e8f0;
+            }
+            .xbot-catalog-photo-fallback {
+                width: 100%;
+                height: 72px;
+                background: #e2e8f0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #94a3b8;
+                font-size: 11px;
+            }
+            .xbot-catalog-body { padding: 8px 10px; }
+            .xbot-catalog-title {
+                font-size: 13px;
+                line-height: 1.3;
+                color: var(--xbot-ink);
+            }
+            .xbot-catalog-price {
+                margin-top: 4px;
+                font-size: 13px;
+                color: var(--xbot-ink);
+            }
+            .xbot-catalog-desc {
+                margin-top: 4px;
+                font-size: 11px;
+                color: var(--xbot-muted);
+                line-height: 1.35;
+            }
+            .xbot-catalog-select {
+                margin-top: 8px;
+                font-size: 11px;
+                font-weight: 600;
+                color: #2563eb;
+            }
+            .xbot-catalog-card:hover,
             .xbot-text [data-xbot-card="catalog"]:hover {
-                border-color: rgba(var(--xbot-theme-rgb), 0.55) !important;
+                border-color: rgba(var(--xbot-theme-rgb), 0.55);
                 box-shadow: 0 0 0 2px rgba(var(--xbot-theme-rgb), 0.18);
             }
+            .xbot-catalog-card:focus-visible,
             .xbot-text [data-xbot-card="catalog"]:focus-visible {
-                border-color: rgba(var(--xbot-theme-rgb), 0.7) !important;
+                border-color: rgba(var(--xbot-theme-rgb), 0.7);
                 box-shadow: 0 0 0 2px rgba(var(--xbot-theme-rgb), 0.28);
             }
+            .xbot-catalog-card.is-selected,
+            .xbot-catalog-card.is-disabled,
             .xbot-text [data-xbot-card="catalog"].is-selected,
             .xbot-text [data-xbot-card="catalog"].is-disabled {
                 opacity: 0.72;
                 pointer-events: none;
             }
+            .xbot-catalog-more,
             .xbot-text [data-xbot-catalog-more] {
+                display: block;
+                margin: 4px 0 10px;
+                padding: 10px 12px;
+                border: 1px dashed #cbd5e1;
+                border-radius: 10px;
+                background: #fff;
+                color: #1d4ed8;
+                font-size: 13px;
+                font-weight: 600;
+                text-align: center;
+                cursor: pointer;
                 -webkit-tap-highlight-color: transparent;
+                user-select: none;
             }
+            .xbot-catalog-more:hover,
             .xbot-text [data-xbot-catalog-more]:hover {
-                border-color: rgba(var(--xbot-theme-rgb), 0.55) !important;
-                background: rgba(var(--xbot-theme-rgb), 0.06) !important;
+                border-color: rgba(var(--xbot-theme-rgb), 0.55);
+                background: rgba(var(--xbot-theme-rgb), 0.06);
             }
+            .xbot-catalog-more.is-disabled,
             .xbot-text [data-xbot-catalog-more].is-disabled {
                 opacity: 0.55;
                 pointer-events: none;
@@ -2563,23 +2674,50 @@
 
         function enhanceCatalogGrid(root, opts) {
             if (!root || !root.querySelectorAll) return;
-            var cards = root.querySelectorAll('[data-xbot-card="catalog"]');
+            var grid = root.querySelector('.xbot-catalog-grid, [data-xbot="catalog-grid"]');
+            var cards = root.querySelectorAll('.xbot-catalog-card, [data-xbot-card="catalog"]');
             if (!cards.length) return;
             var interactive = !opts || opts.interactive !== false;
-            var imgs = root.querySelectorAll('[data-xbot-catalog-img], [data-xbot="catalog-grid"] img');
+            var animateTyping = !!(opts && opts.animateTyping) && interactive && !sessionEpisodeEnded;
+            var typingLocked = false;
+
+            if (grid && !grid.classList.contains('xbot-catalog-grid')) {
+                grid.classList.add('xbot-catalog-grid');
+            }
+
+            for (var c = 0; c < cards.length; c++) {
+                if (!cards[c].classList.contains('xbot-catalog-card')) {
+                    cards[c].classList.add('xbot-catalog-card');
+                }
+                if (cards[c].getAttribute('data-xbot-catalog-hidden') === '1') {
+                    cards[c].classList.add('xbot-catalog-card--hidden');
+                }
+            }
+
+            var imgs = root.querySelectorAll('.xbot-catalog-img, [data-xbot-catalog-img], .xbot-catalog-grid img, [data-xbot="catalog-grid"] img');
             for (var i = 0; i < imgs.length; i++) {
                 (function (img) {
                     img.onerror = function () {
                         var ph = document.createElement('div');
-                        ph.style.cssText = 'width:100%;height:72px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;';
+                        ph.className = 'xbot-catalog-photo-fallback';
                         ph.textContent = 'Sem foto';
                         if (img.parentNode) img.parentNode.replaceChild(ph, img);
                     };
                 })(imgs[i]);
             }
-            var moreBtn = root.querySelector('[data-xbot-catalog-more]');
+
+            var moreBtn = root.querySelector('.xbot-catalog-more, [data-xbot-catalog-more]');
+            var introEl = null;
+            var footerEl = null;
+            var paragraphs = root.querySelectorAll(':scope > p');
+            if (paragraphs.length) {
+                introEl = paragraphs[0];
+                if (paragraphs.length > 1) footerEl = paragraphs[paragraphs.length - 1];
+            }
             function hiddenCards() {
-                return root.querySelectorAll('[data-xbot-card="catalog"][data-xbot-catalog-hidden="1"]');
+                return root.querySelectorAll(
+                    '.xbot-catalog-card--hidden, [data-xbot-card="catalog"][data-xbot-catalog-hidden="1"]'
+                );
             }
             function updateMoreButton() {
                 if (!moreBtn) return;
@@ -2591,18 +2729,116 @@
                 }
                 moreBtn.textContent = 'Ver mais produtos (+' + left + ')';
             }
-            function revealMore() {
-                if (!interactive || sessionEpisodeEnded) return;
-                var pageSize = parseInt(moreBtn && moreBtn.getAttribute('data-xbot-page-size'), 10);
-                if (!pageSize || pageSize < 1) pageSize = 8;
-                var hidden = hiddenCards();
-                var limit = Math.min(pageSize, hidden.length);
-                for (var r = 0; r < limit; r++) {
-                    hidden[r].style.display = '';
-                    hidden[r].removeAttribute('data-xbot-catalog-hidden');
-                }
-                updateMoreButton();
+            function scrollCatalog() {
                 if (typeof scrollMessagesToBottom === 'function') scrollMessagesToBottom();
+            }
+            function setTypingLock(on) {
+                typingLocked = !!on;
+                if (on) root.classList.add('xbot-catalog-is-typing');
+                else root.classList.remove('xbot-catalog-is-typing');
+            }
+            function showLiveTyping(label) {
+                var el = root.querySelector('.xbot-catalog-live-typing');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.className = 'xbot-catalog-live-typing';
+                    if (grid && grid.parentNode) grid.parentNode.insertBefore(el, grid);
+                    else root.appendChild(el);
+                }
+                el.innerHTML =
+                    (label || 'escrevendo') +
+                    ' <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
+                scrollCatalog();
+                return el;
+            }
+            function hideLiveTyping() {
+                var el = root.querySelector('.xbot-catalog-live-typing');
+                if (el && el.parentNode) el.parentNode.removeChild(el);
+            }
+            function typeText(el, fullText, done) {
+                if (!el) {
+                    if (done) done();
+                    return;
+                }
+                var text = String(fullText || '');
+                el.textContent = '';
+                el.classList.add('xbot-catalog-typecursor');
+                var idx = 0;
+                var step = Math.max(1, Math.floor(text.length / 40));
+                function tick() {
+                    if (sessionEpisodeEnded) {
+                        el.textContent = text;
+                        el.classList.remove('xbot-catalog-typecursor');
+                        if (done) done();
+                        return;
+                    }
+                    idx = Math.min(text.length, idx + step);
+                    el.textContent = text.slice(0, idx);
+                    scrollCatalog();
+                    if (idx >= text.length) {
+                        el.classList.remove('xbot-catalog-typecursor');
+                        if (done) done();
+                        return;
+                    }
+                    setTimeout(tick, 18);
+                }
+                tick();
+            }
+            function revealCard(card) {
+                card.classList.remove('xbot-catalog-card--pending');
+                card.classList.remove('xbot-catalog-card--hidden');
+                card.removeAttribute('data-xbot-catalog-hidden');
+                card.style.display = '';
+                card.classList.remove('xbot-catalog-card--reveal');
+                // force reflow for animation restart
+                void card.offsetWidth;
+                card.classList.add('xbot-catalog-card--reveal');
+                if (!card.hasAttribute('tabindex') && interactive) card.setAttribute('tabindex', '0');
+                scrollCatalog();
+            }
+            function revealCardsSequentially(queue, onDone) {
+                var list = Array.prototype.slice.call(queue || []);
+                var n = 0;
+                function next() {
+                    if (sessionEpisodeEnded) {
+                        for (var s = n; s < list.length; s++) revealCard(list[s]);
+                        if (onDone) onDone();
+                        return;
+                    }
+                    if (n >= list.length) {
+                        if (onDone) onDone();
+                        return;
+                    }
+                    showLiveTyping('montando opções');
+                    setTimeout(function () {
+                        hideLiveTyping();
+                        revealCard(list[n]);
+                        n += 1;
+                        setTimeout(next, 120);
+                    }, 220);
+                }
+                next();
+            }
+            function revealMore() {
+                if (!interactive || sessionEpisodeEnded || typingLocked) return;
+                var pageSize = parseInt(
+                    (moreBtn && (moreBtn.getAttribute('data-xbot-page-size') || moreBtn.getAttribute('data-page-size'))) || '8',
+                    10
+                );
+                if (!pageSize || pageSize < 1) pageSize = 8;
+                var hidden = Array.prototype.slice.call(hiddenCards(), 0, pageSize);
+                if (!hidden.length) {
+                    updateMoreButton();
+                    return;
+                }
+                setTypingLock(true);
+                if (moreBtn) moreBtn.classList.add('xbot-catalog-ui--pending');
+                revealCardsSequentially(hidden, function () {
+                    if (moreBtn) moreBtn.classList.remove('xbot-catalog-ui--pending');
+                    updateMoreButton();
+                    setTypingLock(false);
+                    scrollCatalog();
+                });
             }
             function disableAll() {
                 for (var j = 0; j < cards.length; j++) {
@@ -2617,7 +2853,13 @@
                 }
             }
             function selectCard(card) {
-                if (!interactive || sessionEpisodeEnded) return;
+                if (!interactive || sessionEpisodeEnded || typingLocked) return;
+                if (
+                    card.classList.contains('xbot-catalog-card--hidden') ||
+                    card.classList.contains('xbot-catalog-card--pending')
+                ) {
+                    return;
+                }
                 var value = (card.getAttribute('data-xbot-value') || '').trim();
                 if (!value) {
                     var strong = card.querySelector('strong');
@@ -2628,54 +2870,95 @@
                 disableAll();
                 sendUserText(value);
             }
+
+            root.addEventListener('click', function (ev) {
+                if (!interactive || sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
+                var more = ev.target.closest
+                    ? ev.target.closest('.xbot-catalog-more, [data-xbot-catalog-more]')
+                    : null;
+                if (more && root.contains(more)) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    revealMore();
+                    return;
+                }
+                var card = ev.target.closest
+                    ? ev.target.closest('.xbot-catalog-card, [data-xbot-card="catalog"]')
+                    : null;
+                if (card && root.contains(card)) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    selectCard(card);
+                }
+            });
+            root.addEventListener('keydown', function (ev) {
+                if (!interactive || sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                var more = ev.target.closest
+                    ? ev.target.closest('.xbot-catalog-more, [data-xbot-catalog-more]')
+                    : null;
+                if (more && root.contains(more)) {
+                    ev.preventDefault();
+                    revealMore();
+                    return;
+                }
+                var card = ev.target.closest
+                    ? ev.target.closest('.xbot-catalog-card, [data-xbot-card="catalog"]')
+                    : null;
+                if (card && root.contains(card)) {
+                    ev.preventDefault();
+                    selectCard(card);
+                }
+            });
+
             for (var k = 0; k < cards.length; k++) {
-                (function (card) {
-                    if (!interactive || sessionEpisodeEnded) {
-                        card.classList.add('is-disabled');
-                        card.setAttribute('aria-disabled', 'true');
-                        card.removeAttribute('tabindex');
-                        return;
-                    }
-                    card.setAttribute('role', 'button');
-                    if (!card.hasAttribute('tabindex')) card.setAttribute('tabindex', '0');
-                    card.addEventListener('click', function (ev) {
-                        if (ev) {
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                        }
-                        selectCard(card);
-                    });
-                    card.addEventListener('keydown', function (ev) {
-                        if (!ev) return;
-                        if (ev.key === 'Enter' || ev.key === ' ') {
-                            ev.preventDefault();
-                            selectCard(card);
-                        }
-                    });
-                })(cards[k]);
+                cards[k].setAttribute('role', 'button');
+                if (!cards[k].hasAttribute('tabindex') && !cards[k].classList.contains('xbot-catalog-card--hidden')) {
+                    cards[k].setAttribute('tabindex', '0');
+                }
+                if (!interactive || sessionEpisodeEnded) {
+                    cards[k].classList.add('is-disabled');
+                    cards[k].setAttribute('aria-disabled', 'true');
+                    cards[k].removeAttribute('tabindex');
+                }
             }
             if (moreBtn) {
+                if (!moreBtn.classList.contains('xbot-catalog-more')) {
+                    moreBtn.classList.add('xbot-catalog-more');
+                }
+                moreBtn.setAttribute('role', 'button');
+                if (!moreBtn.hasAttribute('tabindex')) moreBtn.setAttribute('tabindex', '0');
                 if (!interactive || sessionEpisodeEnded) {
                     moreBtn.classList.add('is-disabled');
                     moreBtn.setAttribute('aria-disabled', 'true');
                     moreBtn.removeAttribute('tabindex');
-                } else {
-                    moreBtn.addEventListener('click', function (ev) {
-                        if (ev) {
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                        }
-                        revealMore();
-                    });
-                    moreBtn.addEventListener('keydown', function (ev) {
-                        if (!ev) return;
-                        if (ev.key === 'Enter' || ev.key === ' ') {
-                            ev.preventDefault();
-                            revealMore();
-                        }
-                    });
                 }
             }
+
+            if (!animateTyping) return;
+
+            var initialQueue = [];
+            for (var q = 0; q < cards.length; q++) {
+                if (cards[q].classList.contains('xbot-catalog-card--hidden')) continue;
+                cards[q].classList.add('xbot-catalog-card--pending');
+                cards[q].removeAttribute('tabindex');
+                initialQueue.push(cards[q]);
+            }
+            if (moreBtn) moreBtn.classList.add('xbot-catalog-ui--pending');
+            if (footerEl) footerEl.classList.add('xbot-catalog-ui--pending');
+
+            setTypingLock(true);
+            var introText = introEl ? String(introEl.textContent || '').trim() : '';
+            showLiveTyping('digitando');
+            typeText(introEl, introText || 'Encontrei estas opções no catálogo:', function () {
+                hideLiveTyping();
+                revealCardsSequentially(initialQueue, function () {
+                    if (moreBtn) moreBtn.classList.remove('xbot-catalog-ui--pending');
+                    if (footerEl) footerEl.classList.remove('xbot-catalog-ui--pending');
+                    setTypingLock(false);
+                    scrollCatalog();
+                });
+            });
         }
 
         function appendMessage(text, from, opts) {
