@@ -1830,6 +1830,17 @@
                 opacity: 0.72;
                 pointer-events: none;
             }
+            .xbot-text [data-xbot-catalog-more] {
+                -webkit-tap-highlight-color: transparent;
+            }
+            .xbot-text [data-xbot-catalog-more]:hover {
+                border-color: rgba(var(--xbot-theme-rgb), 0.55) !important;
+                background: rgba(var(--xbot-theme-rgb), 0.06) !important;
+            }
+            .xbot-text [data-xbot-catalog-more].is-disabled {
+                opacity: 0.55;
+                pointer-events: none;
+            }
             .xbot-reply-actions {
                 display: flex;
                 flex-wrap: wrap;
@@ -2566,11 +2577,43 @@
                     };
                 })(imgs[i]);
             }
+            var moreBtn = root.querySelector('[data-xbot-catalog-more]');
+            function hiddenCards() {
+                return root.querySelectorAll('[data-xbot-card="catalog"][data-xbot-catalog-hidden="1"]');
+            }
+            function updateMoreButton() {
+                if (!moreBtn) return;
+                var left = hiddenCards().length;
+                if (left <= 0) {
+                    if (moreBtn.parentNode) moreBtn.parentNode.removeChild(moreBtn);
+                    moreBtn = null;
+                    return;
+                }
+                moreBtn.textContent = 'Ver mais produtos (+' + left + ')';
+            }
+            function revealMore() {
+                if (!interactive || sessionEpisodeEnded) return;
+                var pageSize = parseInt(moreBtn && moreBtn.getAttribute('data-xbot-page-size'), 10);
+                if (!pageSize || pageSize < 1) pageSize = 8;
+                var hidden = hiddenCards();
+                var limit = Math.min(pageSize, hidden.length);
+                for (var r = 0; r < limit; r++) {
+                    hidden[r].style.display = '';
+                    hidden[r].removeAttribute('data-xbot-catalog-hidden');
+                }
+                updateMoreButton();
+                if (typeof scrollMessagesToBottom === 'function') scrollMessagesToBottom();
+            }
             function disableAll() {
                 for (var j = 0; j < cards.length; j++) {
                     cards[j].classList.add('is-disabled');
                     cards[j].setAttribute('aria-disabled', 'true');
                     cards[j].removeAttribute('tabindex');
+                }
+                if (moreBtn) {
+                    moreBtn.classList.add('is-disabled');
+                    moreBtn.setAttribute('aria-disabled', 'true');
+                    moreBtn.removeAttribute('tabindex');
                 }
             }
             function selectCard(card) {
@@ -2611,6 +2654,28 @@
                     });
                 })(cards[k]);
             }
+            if (moreBtn) {
+                if (!interactive || sessionEpisodeEnded) {
+                    moreBtn.classList.add('is-disabled');
+                    moreBtn.setAttribute('aria-disabled', 'true');
+                    moreBtn.removeAttribute('tabindex');
+                } else {
+                    moreBtn.addEventListener('click', function (ev) {
+                        if (ev) {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                        }
+                        revealMore();
+                    });
+                    moreBtn.addEventListener('keydown', function (ev) {
+                        if (!ev) return;
+                        if (ev.key === 'Enter' || ev.key === ' ') {
+                            ev.preventDefault();
+                            revealMore();
+                        }
+                    });
+                }
+            }
         }
 
         function appendMessage(text, from, opts) {
@@ -2647,7 +2712,9 @@
                 ADD_TAGS: ['video', 'source'],
                 ADD_ATTR: [
                     'controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt',
-                    'role', 'tabindex', 'data-xbot', 'data-xbot-card', 'data-xbot-value', 'data-xbot-catalog-img'
+                    'role', 'tabindex', 'data-xbot', 'data-xbot-card', 'data-xbot-value',
+                    'data-xbot-catalog-img', 'data-xbot-catalog-hidden', 'data-xbot-catalog-more',
+                    'data-xbot-page-size'
                 ]
             });
             msg.innerHTML = `
