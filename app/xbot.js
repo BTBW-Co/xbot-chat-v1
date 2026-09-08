@@ -1154,7 +1154,7 @@
             pollTimer = setInterval(pollBotMessages, XCHAT_POLL_MS);
         }
     
-        const offset = offsetBottom || 20;
+        const offset = offsetBottom != null ? offsetBottom : 20;
         const sideOffset = offsetSide != null ? offsetSide : 20;
         const LAUNCHER_SIZE = 64;
         const LAUNCHER_GAP = 28;
