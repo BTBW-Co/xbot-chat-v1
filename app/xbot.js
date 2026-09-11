@@ -732,6 +732,62 @@
             return !(last && last.classList.contains('bot'));
         }
 
+        function _randRange(min, max) {
+            return min + Math.random() * (max - min);
+        }
+
+        function _randMs(min, max) {
+            return Math.round(_randRange(min, max)) + 'ms';
+        }
+
+        /** Rostinho animado (respira, balança, pisca e olha) enquanto o bot pensa. */
+        function buildThinkingFaceHtml(sizePx) {
+            var size = sizePx || 36;
+            var lookX = _randRange(1.1, 2.2) * (Math.random() < 0.5 ? -1 : 1);
+            var lookY = _randRange(0.8, 1.6) * (Math.random() < 0.5 ? -1 : 1);
+            var style = [
+                '--xb-phase: -' + _randMs(800, 3600),
+                '--xb-bob-phase: -' + _randMs(400, 2800),
+                '--xb-blink: ' + _randMs(3800, 5600),
+                '--xb-blink-phase: -' + _randMs(200, 2400),
+                '--xb-look-x: ' + lookX.toFixed(2),
+                '--xb-look-mx: ' + (-lookX).toFixed(2),
+                '--xb-look-y: ' + lookY.toFixed(2),
+                '--xb-look-my: ' + (-lookY).toFixed(2),
+                '--xb-saccade: ' + _randMs(4800, 7200),
+                '--xb-saccade-phase: -' + _randMs(600, 4800),
+                '--xb-rock: ' + _randRange(0.55, 1.1).toFixed(2),
+                '--xb-bdy: ' + _randRange(-0.7, -0.2).toFixed(2),
+            ].join('; ');
+            return (
+                '<svg class="xbot-think-face" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="' +
+                size +
+                '" height="' +
+                size +
+                '" aria-hidden="true" style="' +
+                style +
+                '">' +
+                '<g class="xbot-think-root">' +
+                '<g class="xbot-think-breathe">' +
+                '<g class="xbot-think-bob">' +
+                '<g class="xbot-think-head" fill="#48322a">' +
+                '<circle cx="38.13" cy="49.28" r="22.1"></circle>' +
+                '<circle cx="63.75" cy="49.28" r="22.1"></circle>' +
+                '<path d="M38.13 27.18H63.75V71.38H38.13Z"></path>' +
+                '</g>' +
+                '<g class="xbot-think-eyes" fill="#fdf3ef">' +
+                '<g class="xbot-think-eye xbot-think-eye--l" style="--xb-wrap:-1">' +
+                '<g class="xbot-think-lid">' +
+                '<path d="M43.28 49.53C43.78 56.82 43.42 58.08 40.79 58.26C38.16 58.44 37.63 57.24 37.13 49.95C36.63 42.67 36.99 41.4 39.62 41.22C42.25 41.04 42.78 42.25 43.28 49.53Z"></path>' +
+                '</g></g>' +
+                '<g class="xbot-think-eye xbot-think-eye--r" style="--xb-wrap:1">' +
+                '<g class="xbot-think-lid">' +
+                '<path d="M61.35 49.05C61.79 57.54 61.33 59 58.16 59.16C55 59.32 54.39 57.92 53.95 49.43C53.51 40.95 53.97 39.49 57.14 39.33C60.31 39.16 60.92 40.57 61.35 49.05Z"></path>' +
+                '</g></g>' +
+                '</g></g></g></g></svg>'
+            );
+        }
+
         // Move o indicador existente para o final (sem piscar) ou cria um novo se não existir.
         function _moveOrShowTyping() {
             var container = document.getElementById('xbot-messages');
@@ -746,7 +802,9 @@
             } else {
                 var el = document.createElement('div');
                 el.className = 'xbot-typing';
-                el.innerHTML = botName + ' está digitando <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
+                el.setAttribute('aria-live', 'polite');
+                el.setAttribute('aria-label', botName + ' está pensando');
+                el.innerHTML = buildThinkingFaceHtml(36);
                 container.appendChild(el);
                 pendingTypingEl = el;
             }
@@ -1864,10 +1922,17 @@
             .xbot-catalog-live-typing {
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 8px;
                 margin: 6px 0 8px;
                 font-size: 12px;
                 color: var(--xbot-muted);
+            }
+            .xbot-catalog-live-typing .xbot-think-face {
+                width: 28px;
+                height: 28px;
+            }
+            .xbot-catalog-live-typing-label {
+                line-height: 1;
             }
             .xbot-catalog-live-typing .xbot-typing-dots span {
                 width: 5px;
@@ -2021,12 +2086,88 @@
             .xbot-message a:hover { opacity: 0.85; }
 
             .xbot-typing {
-                font-size: 12px;
-                color: var(--xbot-muted);
-                padding: 4px 8px;
+                padding: 2px 6px 6px;
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 8px;
+                min-height: 40px;
+            }
+            .xbot-think-face {
+                display: block;
+                flex-shrink: 0;
+                overflow: visible;
+                transform: translateZ(0);
+            }
+            .xbot-think-breathe {
+                transform-origin: 50px 58px;
+                animation: xbotThinkBreathe 3.4s ease-in-out infinite;
+                animation-delay: var(--xb-phase, 0ms);
+            }
+            .xbot-think-bob {
+                transform-origin: 50px 55px;
+                animation: xbotThinkBob 2.6s ease-in-out infinite;
+                animation-delay: var(--xb-bob-phase, 0ms);
+            }
+            .xbot-think-eye {
+                transform-box: fill-box;
+                transform-origin: center;
+                animation: xbotThinkLook var(--xb-saccade, 5.8s) ease-in-out infinite;
+                animation-delay: var(--xb-saccade-phase, 0ms);
+            }
+            .xbot-think-lid {
+                transform-box: fill-box;
+                transform-origin: center;
+                animation: xbotThinkBlink var(--xb-blink, 4.7s) ease-in-out infinite;
+                animation-delay: var(--xb-blink-phase, 0ms);
+            }
+            @keyframes xbotThinkBreathe {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.045); }
+            }
+            @keyframes xbotThinkBob {
+                0%, 100% {
+                    transform:
+                        translateY(0)
+                        rotate(calc(var(--xb-rock, 0.8) * -1deg));
+                }
+                50% {
+                    transform:
+                        translateY(calc(var(--xb-bdy, -0.4) * 1px - 1.6px))
+                        rotate(calc(var(--xb-rock, 0.8) * 1deg));
+                }
+            }
+            @keyframes xbotThinkBlink {
+                0%, 41%, 49%, 100% { transform: scaleY(1) scaleX(1); }
+                45% { transform: scaleY(0.06) scaleX(1.18); }
+            }
+            @keyframes xbotThinkLook {
+                0%, 100% {
+                    transform: translate(0, 0);
+                }
+                18% {
+                    transform: translate(
+                        calc(var(--xb-look-x, 1.5) * 1px),
+                        calc(var(--xb-look-y, 1) * 1px)
+                    );
+                }
+                36% {
+                    transform: translate(
+                        calc(var(--xb-look-mx, -1.5) * 0.55px),
+                        calc(var(--xb-look-my, -1) * 0.4px)
+                    );
+                }
+                58% {
+                    transform: translate(
+                        calc(var(--xb-look-mx, -1.5) * 1px),
+                        calc(var(--xb-look-y, 1) * 0.7px)
+                    );
+                }
+                76% {
+                    transform: translate(
+                        calc(var(--xb-look-x, 1.5) * 0.35px),
+                        calc(var(--xb-look-my, -1) * 0.85px)
+                    );
+                }
             }
             .xbot-typing-dots span {
                 width: 5px;
@@ -2788,8 +2929,10 @@
                     else root.appendChild(el);
                 }
                 el.innerHTML =
-                    (label || 'escrevendo') +
-                    ' <span class="xbot-typing-dots"><span></span><span></span><span></span></span>';
+                    buildThinkingFaceHtml(28) +
+                    '<span class="xbot-catalog-live-typing-label">' +
+                    (label || 'pensando') +
+                    '</span>';
                 scrollCatalog();
                 return el;
             }
