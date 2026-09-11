@@ -480,10 +480,10 @@
             } catch (e) { /* ignore */ }
             if (clearUi) {
                 var container = document.getElementById('xbot-messages');
-                if (container) {
-                    container.innerHTML = '';
-                    sessionEndedNoticeShown = false;
-                }
+                clearMessageRows(container);
+                ensureEmptyStateEl();
+                sessionEndedNoticeShown = false;
+                syncEmptyState();
             }
         }
 
@@ -1073,11 +1073,16 @@
                 }
                 sessionEndedNoticeShown = false;
                 var list = data.messages || [];
-                widgetLog('histórico carregado', { mensagens: list.length, session_active: data.session_active });
-                // Histórico é a fonte única da render inicial: limpa o que estiver na tela e
-                // reidrata, evitando duplicação/ordenação errada com o poll.
+                widgetLog('histórico carregado', {
+                    mensagens: list.length,
+                    session_active: data.session_active,
+                    presentation_started: !!data.presentation_started,
+                });
+                // Histórico é a fonte única da render inicial: remove só as linhas de mensagem
+                // (preserva #xbot-empty) e reidrata — evita tela branca quando a lista vem vazia.
                 var histContainer = document.getElementById('xbot-messages');
-                if (histContainer) histContainer.innerHTML = '';
+                clearMessageRows(histContainer);
+                ensureEmptyStateEl();
                 seenBotMessageKeys = {};
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
@@ -1096,9 +1101,11 @@
                     }
                 }
                 if (list.length) welcomeShown = true;
+                syncEmptyState();
             } catch (e) {
                 widgetLog('histórico erro', e && e.message);
             } finally {
+                syncEmptyState();
                 scheduleScrollMessagesToBottom();
             }
         }
@@ -2347,8 +2354,34 @@
             return plain;
         }
 
-        function syncEmptyState() {
+        function ensureEmptyStateEl() {
+            var container = document.getElementById('xbot-messages');
+            if (!container) return null;
             var emptyEl = document.getElementById('xbot-empty');
+            if (emptyEl) return emptyEl;
+            emptyEl = document.createElement('div');
+            emptyEl.className = 'xbot-empty';
+            emptyEl.id = 'xbot-empty';
+            var textEl = document.createElement('p');
+            textEl.className = 'xbot-empty-text';
+            textEl.id = 'xbot-empty-text';
+            emptyEl.appendChild(textEl);
+            container.insertBefore(emptyEl, container.firstChild);
+            return emptyEl;
+        }
+
+        function clearMessageRows(container) {
+            if (!container) return;
+            var kids = Array.prototype.slice.call(container.children || []);
+            for (var i = 0; i < kids.length; i++) {
+                var el = kids[i];
+                if (!el || el.id === 'xbot-empty') continue;
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }
+        }
+
+        function syncEmptyState() {
+            var emptyEl = ensureEmptyStateEl();
             var textEl = document.getElementById('xbot-empty-text');
             if (!emptyEl || !textEl) return;
             var hasMessages = !!lastMessageRow();
