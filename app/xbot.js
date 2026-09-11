@@ -367,6 +367,11 @@
             return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/keep-alive';
         }
 
+        function getPresenceUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/presence';
+        }
+
         var lastBotPollAt = null;
         var lastBotMessageId = null;
         var seenBotMessageKeys = {};
@@ -387,6 +392,97 @@
         var inactivityKeepBtn = null;
         var historyLoadedOnce = false;
         var realtimeDesired = false;
+        var presenceTimer = null;
+        var presenceInFlight = false;
+        var lastPresenceSignature = '';
+        /** Heartbeat de presença do visitante para o Chat do operador (~TTL Redis 90s). */
+        var PRESENCE_HEARTBEAT_MS = 30000;
+
+        function isWindowFocused() {
+            if (typeof document === 'undefined') return true;
+            if (typeof document.hasFocus === 'function') {
+                try {
+                    return !!document.hasFocus();
+                } catch (e) {
+                    return true;
+                }
+            }
+            return true;
+        }
+
+        function buildPresencePayload(overrides) {
+            overrides = overrides || {};
+            var vid = getVisitorId();
+            if (!vid || !channelId) return null;
+            var chatOpen = overrides.chat_open != null ? !!overrides.chat_open : isChatOpen();
+            var pageVisible =
+                overrides.page_visible != null ? !!overrides.page_visible : isPageVisible();
+            var windowFocused =
+                overrides.window_focused != null ? !!overrides.window_focused : isWindowFocused();
+            var status =
+                overrides.status != null
+                    ? overrides.status
+                    : chatOpen && pageVisible
+                      ? 'online'
+                      : 'away';
+            return {
+                visitor_id: vid,
+                channel_id: channelId,
+                chat_open: chatOpen,
+                page_visible: pageVisible,
+                window_focused: windowFocused,
+                status: status,
+            };
+        }
+
+        function presenceSignature(payload) {
+            if (!payload) return '';
+            return [
+                payload.status,
+                payload.chat_open ? '1' : '0',
+                payload.page_visible ? '1' : '0',
+                payload.window_focused ? '1' : '0',
+            ].join('|');
+        }
+
+        async function sendVisitorPresence(overrides, opts) {
+            opts = opts || {};
+            var url = getPresenceUrl();
+            var payload = buildPresencePayload(overrides);
+            if (!url || !payload) return;
+            var sig = presenceSignature(payload);
+            if (!opts.force && sig === lastPresenceSignature) return;
+            if (presenceInFlight && !opts.force) return;
+            presenceInFlight = true;
+            try {
+                var res = await fetch(url, {
+                    method: 'POST',
+                    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload),
+                    keepalive: !!opts.keepalive,
+                });
+                if (res.ok) lastPresenceSignature = sig;
+            } catch (e) {
+                widgetLog('presence erro', e && e.message);
+            } finally {
+                presenceInFlight = false;
+            }
+        }
+
+        function startPresenceHeartbeat() {
+            stopPresenceHeartbeat();
+            sendVisitorPresence(null, { force: true });
+            presenceTimer = setInterval(function () {
+                sendVisitorPresence(null, { force: true });
+            }, PRESENCE_HEARTBEAT_MS);
+        }
+
+        function stopPresenceHeartbeat() {
+            if (presenceTimer) {
+                clearInterval(presenceTimer);
+                presenceTimer = null;
+            }
+        }
 
         function pollStorageKey() {
             var vid = getVisitorId();
@@ -2555,6 +2651,7 @@
                 chatbox.classList.add('is-visible');
                 startSessionStatusPoll();
                 ensureRealtimeTransport();
+                sendVisitorPresence({ chat_open: true }, { force: true });
                 unreadCount = 0;
                 notification.textContent = '';
                 notification.style.display = 'none';
@@ -2574,6 +2671,7 @@
                 chatbox.classList.remove('is-open');
                 stopSessionStatusPoll();
                 pauseRealtimeTransportIdle();
+                sendVisitorPresence({ chat_open: false }, { force: true });
                 clearMobilePanelStyles();
                 chatCloseTimer = setTimeout(function () {
                     chatCloseTimer = null;
@@ -2597,12 +2695,38 @@
                 if (document.visibilityState === 'hidden') {
                     pauseRealtimeTransportIdle();
                     stopSessionStatusPoll();
+                    sendVisitorPresence(
+                        { page_visible: false, chat_open: isChatOpen() },
+                        { force: true, keepalive: true }
+                    );
                     return;
                 }
+                sendVisitorPresence(
+                    { page_visible: true, chat_open: isChatOpen() },
+                    { force: true }
+                );
                 if (isChatOpen()) {
                     startSessionStatusPoll();
                     ensureRealtimeTransport();
                 }
+            });
+            window.addEventListener('focus', function () {
+                sendVisitorPresence({ window_focused: true }, { force: true });
+            });
+            window.addEventListener('blur', function () {
+                sendVisitorPresence({ window_focused: false }, { force: true });
+            });
+            window.addEventListener('pagehide', function () {
+                sendVisitorPresence(
+                    {
+                        status: 'offline',
+                        chat_open: false,
+                        page_visible: false,
+                        window_focused: false,
+                    },
+                    { force: true, keepalive: true }
+                );
+                stopPresenceHeartbeat();
             });
         }
 
@@ -3251,6 +3375,7 @@
                 if (data.visitor_id && visitorId !== data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
+                sendVisitorPresence({ chat_open: true, page_visible: true }, { force: true });
                 if (data.reply) {
                     var replyText = String(data.reply).trim();
                     if (replyText) ingestBotPayload(null, replyText, 'post');
@@ -3454,6 +3579,7 @@
         }, 500);
 
         syncEmptyState();
+        startPresenceHeartbeat();
 
         widgetLog('UI pronta', {
             visitorId: getVisitorId(),
