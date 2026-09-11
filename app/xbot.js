@@ -631,7 +631,10 @@
             if (!isChatOpen() || welcomeShown) return;
             var welcomeText = pendingWelcomeText || getWelcomeText();
             if (!welcomeText) return;
-            appendMessage(welcomeText, 'bot', { countUnread: false });
+            appendMessage(welcomeText, 'bot', {
+                countUnread: false,
+                animateTyping: true,
+            });
             rememberBotMessage(null, welcomeText);
             welcomeShown = true;
             pendingWelcomeText = null;
@@ -998,19 +1001,20 @@
             }
             clearPendingTyping();
             var actions = extractReplyActions(meta);
+            // history/hydrate: instantâneo; opening/sse/poll/post: typewriter
             var animateTyping = source !== 'history' && source !== 'hydrate';
             if (isMedia) {
                 appendBotMedia(ct, mediaUrl, body, meta, {
-                    countUnread: source !== 'history',
+                    countUnread: source !== 'history' && source !== 'opening',
                     actions: actions,
-                    interactive: source !== 'history',
+                    interactive: source !== 'history' && source !== 'opening',
                     animateTyping: false
                 });
             } else {
                 appendMessage(body, 'bot', {
-                    countUnread: source !== 'history',
+                    countUnread: source !== 'history' && source !== 'opening',
                     actions: actions,
-                    interactive: source !== 'history',
+                    interactive: source !== 'history' && source !== 'opening',
                     animateTyping: animateTyping
                 });
             }
@@ -1310,6 +1314,14 @@
                 clearMessageRows(histContainer);
                 ensureEmptyStateEl();
                 seenBotMessageKeys = {};
+                var hasUserInHistory = false;
+                var botOnlyCount = 0;
+                for (var h = 0; h < list.length; h++) {
+                    if ((list[h].sender || 'bot') === 'user') hasUserInHistory = true;
+                    else botOnlyCount += 1;
+                }
+                // Ao entrar (só abertura do bot, sem fala do visitante): typewriter na abertura.
+                var animateOpening = !hasUserInHistory && botOnlyCount > 0 && botOnlyCount <= 3;
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
@@ -1323,7 +1335,7 @@
                             appendMessage(body, 'user');
                         }
                     } else {
-                        ingestBotPayload(item, body, 'history');
+                        ingestBotPayload(item, body, animateOpening ? 'opening' : 'history');
                     }
                 }
                 if (list.length) welcomeShown = true;
@@ -2078,7 +2090,8 @@
             .xbot-catalog-is-typing {
                 pointer-events: none;
             }
-            .xbot-catalog-typecursor::after {
+            .xbot-catalog-typecursor::after,
+            .xbot-typecursor::after {
                 content: '▋';
                 margin-left: 1px;
                 color: var(--xbot-theme);
@@ -3276,6 +3289,78 @@
             });
         }
 
+        function prefersReducedMotion() {
+            try {
+                return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+            } catch (e) {
+                return false;
+            }
+        }
+
+        var botTypewriterQueue = [];
+        var botTypewriterBusy = false;
+
+        function enqueueBotTypewriter(task) {
+            botTypewriterQueue.push(task);
+            pumpBotTypewriterQueue();
+        }
+
+        function pumpBotTypewriterQueue() {
+            if (botTypewriterBusy) return;
+            var next = botTypewriterQueue.shift();
+            if (!next) return;
+            botTypewriterBusy = true;
+            next(function () {
+                botTypewriterBusy = false;
+                pumpBotTypewriterQueue();
+            });
+        }
+
+        /**
+         * Digita texto plano no elemento e, ao terminar, troca pelo HTML final (markdown).
+         * Usado no welcome/abertura MOBA e nas respostas do bot (não-catálogo).
+         */
+        function runBotTypewriter(textEl, plainText, finalHtml, onDone) {
+            if (!textEl) {
+                if (onDone) onDone();
+                return;
+            }
+            var text = String(plainText || '');
+            var html = String(finalHtml || '');
+            function finish() {
+                textEl.classList.remove('xbot-typecursor');
+                textEl.innerHTML = html;
+                if (typeof scrollMessagesToBottom === 'function') scrollMessagesToBottom();
+                if (onDone) onDone();
+            }
+            if (!text || prefersReducedMotion() || sessionEpisodeEnded) {
+                finish();
+                return;
+            }
+            textEl.textContent = '';
+            textEl.classList.add('xbot-typecursor');
+            var idx = 0;
+            // ~18ms/char, no máx. ~2.4s; mensagens longas avançam em blocos.
+            var targetTicks = Math.max(12, Math.min(120, Math.ceil(text.length / 2)));
+            var step = Math.max(1, Math.ceil(text.length / targetTicks));
+            var delay = 18;
+            function tick() {
+                if (sessionEpisodeEnded) {
+                    finish();
+                    return;
+                }
+                idx = Math.min(text.length, idx + step);
+                textEl.textContent = text.slice(0, idx);
+                if (typeof scrollMessagesToBottom === 'function') scrollMessagesToBottom();
+                if (idx >= text.length) {
+                    finish();
+                    return;
+                }
+                setTimeout(tick, delay);
+            }
+            tick();
+        }
+
         function appendMessage(text, from, opts) {
             if (from === undefined) from = 'user';
             opts = opts || {};
@@ -3315,16 +3400,35 @@
                     'data-xbot-page-size'
                 ]
             });
+            var shouldType = from === 'bot'
+                && !!opts.animateTyping
+                && !hasCatalogGrid
+                && !prefersReducedMotion()
+                && !sessionEpisodeEnded;
             msg.innerHTML = `
                 <div class="xbot-message-content">
-                    <div class="xbot-text">${sanitized}</div>
+                    <div class="xbot-text">${shouldType ? '' : sanitized}</div>
                 </div>
             `;
             if (from === 'bot') {
                 var textRoot = msg.querySelector('.xbot-text');
-                enhanceCopyableCode(textRoot);
-                enhanceCatalogGrid(textRoot, opts);
-                mountReplyActions(msg.querySelector('.xbot-message-content'), opts.actions || [], opts);
+                if (shouldType && textRoot) {
+                    var plainProbe = document.createElement('div');
+                    plainProbe.innerHTML = sanitized;
+                    var plainText = String(plainProbe.textContent || '').replace(/\s+\n/g, '\n').trim();
+                    var actions = opts.actions || [];
+                    enqueueBotTypewriter(function (done) {
+                        runBotTypewriter(textRoot, plainText, sanitized, function () {
+                            enhanceCopyableCode(textRoot);
+                            mountReplyActions(msg.querySelector('.xbot-message-content'), actions, opts);
+                            done();
+                        });
+                    });
+                } else {
+                    enhanceCopyableCode(textRoot);
+                    enhanceCatalogGrid(textRoot, opts);
+                    mountReplyActions(msg.querySelector('.xbot-message-content'), opts.actions || [], opts);
+                }
             }
             const timeEl = document.createElement('div');
             timeEl.className = 'xbot-time';
