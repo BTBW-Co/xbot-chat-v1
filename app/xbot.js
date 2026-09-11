@@ -2428,6 +2428,12 @@
                     border-radius: 0 !important;
                     z-index: 2147483001;
                 }
+                .xbot-chatbox.xbot-keyboard-open .xbot-footer {
+                    display: none !important;
+                }
+                .xbot-chatbox.xbot-keyboard-open .xbot-compose {
+                    padding-bottom: 8px;
+                }
                 .xbot-header {
                     padding: 12px 14px;
                     padding-top: calc(12px + env(safe-area-inset-top, 0px));
@@ -2781,12 +2787,24 @@
 
         function focusMessageInput() {
             if (!isChatOpen() || !input || typeof input.focus !== 'function') return;
-            requestAnimationFrame(function () {
-                if (isChatOpen()) input.focus({ preventScroll: true });
-            });
+            var keep = function () {
+                if (isChatOpen() && input) input.focus({ preventScroll: true });
+            };
+            keep();
+            requestAnimationFrame(keep);
+            // iOS às vezes só reaplica o foco após o ciclo do teclado
+            setTimeout(keep, 0);
+            setTimeout(keep, 50);
         }
 
         const send = chatbox.querySelector('#xbot-send');
+        // Evita blur do input ao clicar em enviar (mantém teclado/foco no mobile)
+        send.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+        });
+        send.addEventListener('pointerdown', function (e) {
+            if (e.pointerType === 'touch' || e.pointerType === 'pen') e.preventDefault();
+        });
         send.addEventListener('click', handleSendMessage);
 
         input.addEventListener('keydown', function (e) {
@@ -2809,14 +2827,12 @@
 
         function clearMobilePanelStyles() {
             chatbox.classList.remove('xbot-keyboard-open');
-            chatbox.style.top = '';
-            chatbox.style.left = '';
-            chatbox.style.right = '';
-            chatbox.style.width = '';
-            chatbox.style.height = '';
-            chatbox.style.maxHeight = '';
-            chatbox.style.bottom = '';
-            chatbox.style.borderRadius = '';
+            [
+                'top', 'left', 'right', 'bottom', 'width', 'max-width',
+                'height', 'max-height', 'border-radius'
+            ].forEach(function (prop) {
+                chatbox.style.removeProperty(prop);
+            });
             // Launcher fica oculto enquanto o chat estiver aberto (evita X duplo).
             if (!chatbox.classList.contains('is-open')) {
                 launcher.classList.remove('xbot-launcher--hidden');
@@ -2849,15 +2865,17 @@
 
             chatbox.classList.add('xbot-keyboard-open');
             var top = Math.max(0, vv.offsetTop);
-            chatbox.style.top = top + 'px';
-            chatbox.style.bottom = 'auto';
-            chatbox.style.left = '0';
-            chatbox.style.right = '0';
-            chatbox.style.width = '100%';
-            chatbox.style.maxWidth = '100%';
-            chatbox.style.height = vv.height + 'px';
-            chatbox.style.maxHeight = vv.height + 'px';
-            chatbox.style.borderRadius = '0';
+            var height = Math.max(0, vv.height);
+            // !important para vencer CSS de hosts fullscreen (ex.: MOBA)
+            chatbox.style.setProperty('top', top + 'px', 'important');
+            chatbox.style.setProperty('bottom', 'auto', 'important');
+            chatbox.style.setProperty('left', '0', 'important');
+            chatbox.style.setProperty('right', '0', 'important');
+            chatbox.style.setProperty('width', '100%', 'important');
+            chatbox.style.setProperty('max-width', '100%', 'important');
+            chatbox.style.setProperty('height', height + 'px', 'important');
+            chatbox.style.setProperty('max-height', height + 'px', 'important');
+            chatbox.style.setProperty('border-radius', '0', 'important');
             launcher.classList.add('xbot-launcher--hidden');
             scheduleScrollMessagesToBottom();
         }
