@@ -182,6 +182,51 @@
     const notificationSound = new Audio('https://notificationsounds.com/soundfiles/b9ece18c950afbfa6b0fdbfa4ff731d3/file-sounds-1102-eventually.mp3');
     notificationSound.volume = 0.5;
 
+    /** Mesmo beep do sino em app.xbotone.com (Web Audio). */
+    var xbotNotifyAudioCtx = null;
+    var xbotNotifyAudioUnlockInstalled = false;
+    function installXbotNotifyAudioUnlock() {
+        if (xbotNotifyAudioUnlockInstalled || typeof window === 'undefined') return;
+        var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        xbotNotifyAudioUnlockInstalled = true;
+        var unlock = function () {
+            try {
+                xbotNotifyAudioCtx = xbotNotifyAudioCtx || new AudioContextClass();
+                if (xbotNotifyAudioCtx.state === 'suspended') {
+                    xbotNotifyAudioCtx.resume().catch(function () {});
+                }
+            } catch (e) { /* áudio bloqueado */ }
+        };
+        window.addEventListener('pointerdown', unlock, { once: true, passive: true });
+        window.addEventListener('keydown', unlock, { once: true });
+    }
+    function playAppNotificationSound() {
+        if (typeof window === 'undefined') return;
+        var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        try {
+            installXbotNotifyAudioUnlock();
+            xbotNotifyAudioCtx = xbotNotifyAudioCtx || new AudioContextClass();
+            var context = xbotNotifyAudioCtx;
+            if (context.state === 'suspended') context.resume().catch(function () {});
+            var now = context.currentTime;
+            var gain = context.createGain();
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.16, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+            gain.connect(context.destination);
+            ;[880, 1174.66].forEach(function (frequency, index) {
+                var oscillator = context.createOscillator();
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(frequency, now + index * 0.12);
+                oscillator.connect(gain);
+                oscillator.start(now + index * 0.12);
+                oscillator.stop(now + 0.28 + index * 0.12);
+            });
+        } catch (e) { /* ignore */ }
+    }
+
     function waitForLibs(callback) {
       const interval = setInterval(() => {
         if (window.marked && window.DOMPurify && window.__xbotConfig && window.__xbotAppearanceReady) {
@@ -206,8 +251,10 @@
             channelId = '',
             apiBaseUrl = '',
             offsetBottom = 20,
-            offsetSide = 20
+            offsetSide = 20,
+            browserNotify = false,
         } = config;
+        var browserNotifyEnabled = !!browserNotify;
 
         function buildAuthHeaders(extra) {
             const h = Object.assign({}, extra || {});
@@ -623,10 +670,60 @@
             return typeof document === 'undefined' || document.visibilityState !== 'hidden';
         }
 
+        /** Com browserNotify (ex.: MOBA), mantém SSE mesmo com aba em background. */
+        function isRealtimeAllowed() {
+            return isChatOpen() && (isPageVisible() || browserNotifyEnabled);
+        }
+
+        function previewTextForNotify(text) {
+            var raw = String(text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            if (!raw) return 'Nova mensagem';
+            return raw.length > 140 ? raw.slice(0, 137) + '…' : raw;
+        }
+
+        function requestBrowserNotifyPermission() {
+            if (!browserNotifyEnabled || typeof Notification === 'undefined') return;
+            if (Notification.permission !== 'default') return;
+            try {
+                var p = Notification.requestPermission();
+                if (p && typeof p.then === 'function') p.catch(function () {});
+            } catch (e) { /* ignore */ }
+        }
+
+        function installBrowserNotifyPermissionPrompt() {
+            if (!browserNotifyEnabled || typeof window === 'undefined') return;
+            if (typeof Notification === 'undefined') return;
+            if (Notification.permission !== 'default') return;
+            var ask = function () {
+                requestBrowserNotifyPermission();
+            };
+            window.addEventListener('pointerdown', ask, { once: true, passive: true });
+            window.addEventListener('keydown', ask, { once: true });
+        }
+
         /**
-         * Transporte em tempo real só com chat aberto + aba visível.
-         * SSE é o caminho principal; poll HTTP só se SSE falhar.
+         * Som do app (sino) + notificação nativa do browser.
+         * Usado no MOBA mesmo com o chat aberto.
          */
+        function notifyBrowserIncoming(bodyText) {
+            if (!browserNotifyEnabled) return;
+            playAppNotificationSound();
+            if (typeof Notification === 'undefined') return;
+            if (Notification.permission !== 'granted') return;
+            try {
+                var n = new Notification(botName || 'Xbot', {
+                    body: previewTextForNotify(bodyText),
+                    tag: 'xbot-browser-message',
+                    // Som customizado já tocado (mesmo do app); evita bip duplo do SO.
+                    silent: true,
+                });
+                n.onclick = function () {
+                    try { window.focus(); } catch (e) { /* ignore */ }
+                    try { n.close(); } catch (e2) { /* ignore */ }
+                };
+            } catch (e) { /* Safari/iOS podem bloquear */ }
+        }
+
         function maybeShowWelcomeMessage() {
             if (!isChatOpen() || welcomeShown) return;
             var welcomeText = pendingWelcomeText || getWelcomeText();
@@ -643,16 +740,16 @@
 
         function ensureRealtimeTransport() {
             if (sessionEpisodeEnded && closureNoticeRendered) return;
-            if (!isChatOpen() || !isPageVisible()) return;
+            if (!isRealtimeAllowed()) return;
             realtimeDesired = true;
             function startTransports() {
-                if (!realtimeDesired || !isChatOpen() || !isPageVisible()) return;
+                if (!realtimeDesired || !isRealtimeAllowed()) return;
                 maybeShowWelcomeMessage();
                 if (!sseLoopRunning) runXchatSse();
                 // Dá ~2.5s para o SSE subir antes de ligar o poll HTTP.
                 setTimeout(function () {
                     if (!realtimeDesired || sseActive || pollTimer) return;
-                    if (!isChatOpen() || !isPageVisible()) return;
+                    if (!isRealtimeAllowed()) return;
                     startBotPoll();
                 }, 2500);
             }
@@ -847,47 +944,52 @@
                 size +
                 '" aria-hidden="true">' +
                 '<g class="xbot-think-root">' +
+                '<g class="xbot-think-spin">' +
                 '<g class="xbot-think-breathe">' +
                 '<g class="xbot-think-bob">' +
-                '<g class="xbot-think-head" fill="#48322a">' +
-                '<circle cx="38.13" cy="49.28" r="22.1"></circle>' +
-                '<circle cx="63.75" cy="49.28" r="22.1"></circle>' +
-                '<path d="M38.13 27.18H63.75V71.38H38.13Z"></path>' +
+                '<g class="xbot-think-head" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">' +
+                '<path d="M42 22 L50 32 L58 22"></path>' +
+                '<rect x="20" y="34" width="60" height="46" rx="14"></rect>' +
                 '</g>' +
-                '<g class="xbot-think-eyes" fill="#fdf3ef">' +
+                '<g class="xbot-think-eyes" fill="currentColor">' +
                 '<g class="xbot-think-eye xbot-think-eye--l">' +
                 '<g class="xbot-think-lid">' +
-                '<path d="M43.28 49.53C43.78 56.82 43.42 58.08 40.79 58.26C38.16 58.44 37.63 57.24 37.13 49.95C36.63 42.67 36.99 41.4 39.62 41.22C42.25 41.04 42.78 42.25 43.28 49.53Z"></path>' +
+                '<rect x="32" y="48" width="11" height="11" rx="2.5"></rect>' +
                 '</g></g>' +
                 '<g class="xbot-think-eye xbot-think-eye--r">' +
                 '<g class="xbot-think-lid">' +
-                '<path d="M61.35 49.05C61.79 57.54 61.33 59 58.16 59.16C55 59.32 54.39 57.92 53.95 49.43C53.51 40.95 53.97 39.49 57.14 39.33C60.31 39.16 60.92 40.57 61.35 49.05Z"></path>' +
+                '<rect x="57" y="48" width="11" height="11" rx="2.5"></rect>' +
                 '</g></g>' +
-                '</g></g></g></g></svg>'
+                '</g></g></g></g></g></svg>'
             );
         }
 
         /**
          * CSS transform em <g> SVG costuma ficar parado em vários browsers.
          * Anima via atributo transform + rAF (sempre funciona).
+         * Olhos olham/piscam + giro 360° periódico.
          */
         function startThinkingFaceAnimation(svg) {
             if (!svg || svg.getAttribute('data-xb-anim') === '1') return;
             svg.setAttribute('data-xb-anim', '1');
+            var spin = svg.querySelector('.xbot-think-spin');
             var breathe = svg.querySelector('.xbot-think-breathe');
             var bob = svg.querySelector('.xbot-think-bob');
             var eyeL = svg.querySelector('.xbot-think-eye--l');
             var eyeR = svg.querySelector('.xbot-think-eye--r');
             var lidL = eyeL && eyeL.querySelector('.xbot-think-lid');
             var lidR = eyeR && eyeR.querySelector('.xbot-think-lid');
-            var lookAmpX = _randRange(1.2, 2.4) * (Math.random() < 0.5 ? -1 : 1);
-            var lookAmpY = _randRange(0.8, 1.7) * (Math.random() < 0.5 ? -1 : 1);
+            var lookAmpX = _randRange(1.6, 3.2) * (Math.random() < 0.5 ? -1 : 1);
+            var lookAmpY = _randRange(1.0, 2.2) * (Math.random() < 0.5 ? -1 : 1);
             var rock = _randRange(0.6, 1.2);
             var phaseBreathe = _randRange(0, Math.PI * 2);
             var phaseBob = _randRange(0, Math.PI * 2);
             var phaseLook = _randRange(0, Math.PI * 2);
-            var blinkPeriod = _randRange(3.6, 5.6);
+            var blinkPeriod = _randRange(3.2, 5.2);
             var blinkPhase = _randRange(0, blinkPeriod);
+            var spinCycle = _randRange(3.6, 5.0);
+            var spinDur = _randRange(0.75, 1.05);
+            var spinPhase = _randRange(0.4, 1.2);
             var t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
             var rafId = 0;
 
@@ -897,15 +999,24 @@
                 );
             }
 
+            function easeInOutCubic(p) {
+                return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+            }
+
             function blinkScale(tSec) {
                 var u = ((tSec + blinkPhase) % blinkPeriod) / blinkPeriod;
-                // piscada rápida ~4% do ciclo
                 if (u > 0.42 && u < 0.48) {
                     var p = (u - 0.42) / 0.06;
                     var k = p < 0.5 ? p * 2 : (1 - p) * 2;
-                    return { sx: 1 + 0.18 * k, sy: 1 - 0.94 * k };
+                    return { sx: 1 + 0.12 * k, sy: 1 - 0.92 * k };
                 }
                 return { sx: 1, sy: 1 };
+            }
+
+            function spinAngle(tSec) {
+                var u = (tSec + spinPhase) % spinCycle;
+                if (u >= spinDur) return 0;
+                return easeInOutCubic(u / spinDur) * 360;
             }
 
             function tick(now) {
@@ -914,16 +1025,19 @@
                     return;
                 }
                 var t = ((now || Date.now()) - t0) / 1000;
-                var breatheScale = 1 + 0.045 * Math.sin(t * ((Math.PI * 2) / 3.4) + phaseBreathe);
+                if (spin) {
+                    spin.setAttribute('transform', 'rotate(' + spinAngle(t).toFixed(2) + ' 50 52)');
+                }
+                var breatheScale = 1 + 0.04 * Math.sin(t * ((Math.PI * 2) / 3.4) + phaseBreathe);
                 if (breathe) {
-                    breathe.setAttribute('transform', around(50, 58, breatheScale, breatheScale));
+                    breathe.setAttribute('transform', around(50, 52, breatheScale, breatheScale));
                 }
                 if (bob) {
-                    var bobY = -1.6 + 0.5 * Math.sin(t * ((Math.PI * 2) / 2.6) + phaseBob);
+                    var bobY = -1.4 + 0.45 * Math.sin(t * ((Math.PI * 2) / 2.6) + phaseBob);
                     var bobRot = rock * Math.sin(t * ((Math.PI * 2) / 2.6) + phaseBob);
                     bob.setAttribute(
                         'transform',
-                        'translate(0 ' + bobY.toFixed(3) + ') rotate(' + bobRot.toFixed(3) + ' 50 55)'
+                        'translate(0 ' + bobY.toFixed(3) + ') rotate(' + bobRot.toFixed(3) + ' 50 52)'
                     );
                 }
                 var lookX =
@@ -935,8 +1049,8 @@
                 if (eyeL) eyeL.setAttribute('transform', 'translate(' + lookX.toFixed(3) + ' ' + lookY.toFixed(3) + ')');
                 if (eyeR) eyeR.setAttribute('transform', 'translate(' + lookX.toFixed(3) + ' ' + lookY.toFixed(3) + ')');
                 var blink = blinkScale(t);
-                if (lidL) lidL.setAttribute('transform', around(40.2, 49.74, blink.sx, blink.sy));
-                if (lidR) lidR.setAttribute('transform', around(57.65, 49.24, blink.sx, blink.sy));
+                if (lidL) lidL.setAttribute('transform', around(37.5, 53.5, blink.sx, blink.sy));
+                if (lidR) lidR.setAttribute('transform', around(62.5, 53.5, blink.sx, blink.sy));
                 rafId = requestAnimationFrame(tick);
             }
 
@@ -1119,6 +1233,9 @@
                     notification.style.display = 'flex';
                     notificationSound.play().catch(function() {});
                 }
+                if (countUnread) {
+                    notifyBrowserIncoming(cap || (ct === 'image' ? 'Imagem' : 'Nova mensagem'));
+                }
                 return;
             } else if (ct === 'video') {
                 var vlabel = cap || 'vídeo';
@@ -1188,7 +1305,7 @@
             try {
                 while (apiBaseUrl && channelId && realtimeDesired) {
                     if (sessionEpisodeEnded && closureNoticeRendered) break;
-                    if (!isChatOpen() || !isPageVisible()) break;
+                    if (!isRealtimeAllowed()) break;
                     var vid = getVisitorId();
                     if (!vid) break;
                     var url = getStreamUrl()
@@ -1264,7 +1381,7 @@
                         if (err && err.name === 'AbortError') break;
                         sseFailCount += 1;
                         widgetLog('SSE indisponível, usando poll', { erro: err && err.message, tentativa: sseFailCount });
-                        if (realtimeDesired && isChatOpen() && isPageVisible()) {
+                        if (realtimeDesired && isRealtimeAllowed()) {
                             if (!pollTimer) startBotPoll();
                         }
                         await new Promise(function (r) { setTimeout(r, Math.min(1500 * sseFailCount, 8000)); });
@@ -1351,7 +1468,7 @@
         async function pollBotMessages() {
             if (sessionEpisodeEnded && closureNoticeRendered) return;
             if (sseActive) return;
-            if (!realtimeDesired || !isChatOpen() || !isPageVisible()) return;
+            if (!realtimeDesired || !isRealtimeAllowed()) return;
             if (!apiBaseUrl || !channelId) return;
             var vid = getVisitorId();
             if (!vid) return;
@@ -1389,7 +1506,7 @@
         function startBotPoll() {
             if (sessionEpisodeEnded && closureNoticeRendered) return;
             if (sseActive) return;
-            if (!realtimeDesired || !isChatOpen() || !isPageVisible()) return;
+            if (!realtimeDesired || !isRealtimeAllowed()) return;
             if (pollTimer || !apiBaseUrl || !channelId) return;
             if (!lastBotPollAt && !sessionEpisodeEnded) {
                 lastBotPollAt = loadLastBotPollAt();
@@ -2277,6 +2394,8 @@
                 display: block;
                 flex-shrink: 0;
                 overflow: visible;
+                color: #00cfe8;
+                filter: drop-shadow(0 0 4px rgba(0, 207, 232, 0.4));
             }
             .xbot-typing-dots span {
                 width: 5px;
@@ -2536,7 +2655,7 @@
             XBOT_ICONS.mic +
             '</button></div>' +
             '<textarea class="xbot-input" id="xbot-input" placeholder="Ou envie uma mensagem…" rows="1"></textarea>' +
-            '<button type="button" class="xbot-send" id="xbot-send" aria-label="Enviar">' +
+            '<button type="button" class="xbot-send" id="xbot-send" aria-label="Enviar" tabindex="-1">' +
             XBOT_ICONS.send +
             '</button></div></div>' +
             '<div class="xbot-footer">' +
@@ -2712,8 +2831,13 @@
         if (typeof document !== 'undefined' && document.addEventListener) {
             document.addEventListener('visibilitychange', function () {
                 if (document.visibilityState === 'hidden') {
-                    pauseRealtimeTransportIdle();
-                    stopSessionStatusPoll();
+                    // MOBA (browserNotify): mantém SSE para notificar em background.
+                    if (!browserNotifyEnabled) {
+                        pauseRealtimeTransportIdle();
+                        stopSessionStatusPoll();
+                    } else {
+                        stopSessionStatusPoll();
+                    }
                     sendVisitorPresence(
                         { page_visible: false, chat_open: isChatOpen() },
                         { force: true, keepalive: true }
@@ -2798,14 +2922,24 @@
         }
 
         const send = chatbox.querySelector('#xbot-send');
-        // Evita blur do input ao clicar em enviar (mantém teclado/foco no mobile)
+        // Evita blur do input ao enviar (mantém teclado aberto no mobile)
+        var sendFromTouch = false;
         send.addEventListener('mousedown', function (e) {
             e.preventDefault();
         });
-        send.addEventListener('pointerdown', function (e) {
-            if (e.pointerType === 'touch' || e.pointerType === 'pen') e.preventDefault();
+        send.addEventListener('touchend', function (e) {
+            e.preventDefault();
+            sendFromTouch = true;
+            handleSendMessage();
+            focusMessageInput();
         });
-        send.addEventListener('click', handleSendMessage);
+        send.addEventListener('click', function () {
+            if (sendFromTouch) {
+                sendFromTouch = false;
+                return;
+            }
+            handleSendMessage();
+        });
 
         input.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -3467,6 +3601,9 @@
                 notification.style.display = 'flex';
                 notificationSound.play().catch(function () {});
             }
+            if (from === 'bot' && countUnread) {
+                notifyBrowserIncoming(text);
+            }
         }
 
         async function sendUserText(text) {
@@ -3700,16 +3837,20 @@
             deliverWelcomeOnPageLoad();
         }, 500);
 
+        installBrowserNotifyPermissionPrompt();
+        installXbotNotifyAudioUnlock();
+
         syncEmptyState();
         startPresenceHeartbeat();
 
         widgetLog('UI pronta', {
             visitorId: getVisitorId(),
             channelId: channelId,
+            browserNotify: browserNotifyEnabled,
             transporte: 'sse-primary (poll fallback; idle até abrir o chat)',
         });
         // Sem poll/SSE no pageload: só quando o visitante abre o chat (e a aba está visível).
-        
+        // Com browserNotify (MOBA), o SSE permanece ativo também em background.
     });
 
 
