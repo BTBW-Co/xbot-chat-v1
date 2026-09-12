@@ -1102,7 +1102,9 @@
             var ct = (item && item.content_type ? String(item.content_type) : 'text').toLowerCase();
             var mediaUrl = meta.media_url || '';
             var isMedia = !!mediaUrl && (ct === 'image' || ct === 'file' || ct === 'video' || ct === 'audio');
-            if (!body && !isMedia) return;
+            var actions = extractReplyActions(meta);
+            var blocks = extractStructuredBlocks(meta);
+            if (!body && !isMedia && !blocks.length && !actions.length) return;
             if (sessionEpisodeEnded && source !== 'history' && !meta.session_closed) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
             var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
@@ -1116,13 +1118,13 @@
                 finalizeSessionEndedState();
             }
             clearPendingTyping();
-            var actions = extractReplyActions(meta);
             // history/hydrate: instantâneo; opening/sse/poll/post: typewriter
             var animateTyping = source !== 'history' && source !== 'hydrate';
             if (isMedia) {
                 appendBotMedia(ct, mediaUrl, body, meta, {
                     countUnread: source !== 'history' && source !== 'opening',
                     actions: actions,
+                    blocks: blocks,
                     interactive: source !== 'history' && source !== 'opening',
                     animateTyping: false
                 });
@@ -1130,6 +1132,7 @@
                 appendMessage(body, 'bot', {
                     countUnread: source !== 'history' && source !== 'opening',
                     actions: actions,
+                    blocks: blocks,
                     interactive: source !== 'history' && source !== 'opening',
                     animateTyping: animateTyping
                 });
@@ -1167,6 +1170,80 @@
                 }
             }
             return out;
+        }
+
+        function extractStructuredBlocks(meta) {
+            if (!meta || typeof meta !== 'object') return [];
+            var raw = null;
+            if (Array.isArray(meta.blocks) && meta.blocks.length) raw = meta.blocks;
+            else if (meta.channel_rendering && Array.isArray(meta.channel_rendering.blocks)) {
+                raw = meta.channel_rendering.blocks;
+            } else if (meta.content_envelope && Array.isArray(meta.content_envelope.blocks)) {
+                raw = meta.content_envelope.blocks;
+            }
+            if (!raw || !raw.length) return [];
+            var out = [];
+            for (var i = 0; i < raw.length; i++) {
+                var block = raw[i];
+                if (!block || typeof block !== 'object') continue;
+                var kind = String(block.kind || '').trim().toLowerCase();
+                if (kind === 'recap' && Array.isArray(block.fields) && block.fields.length) {
+                    var fields = [];
+                    for (var f = 0; f < block.fields.length; f++) {
+                        var field = block.fields[f];
+                        if (!field) continue;
+                        var fl = String(field.label || '').trim();
+                        var fv = String(field.value || '').trim();
+                        if (fl && fv) fields.push({ label: fl, value: fv });
+                    }
+                    if (fields.length) {
+                        out.push({ kind: 'recap', title: String(block.title || '').trim(), fields: fields });
+                    }
+                } else if (kind === 'choice_list' && Array.isArray(block.choices) && block.choices.length >= 2) {
+                    var choices = [];
+                    for (var c = 0; c < block.choices.length; c++) {
+                        var ch = block.choices[c];
+                        if (!ch) continue;
+                        var cl = String(ch.label || '').trim();
+                        if (!cl) continue;
+                        choices.push({
+                            id: String(ch.id || ('choice-' + c)),
+                            label: cl,
+                            description: String(ch.description || '').trim(),
+                            value: String(ch.value || cl).trim() || cl
+                        });
+                    }
+                    if (choices.length >= 2) {
+                        out.push({
+                            kind: 'choice_list',
+                            title: String(block.title || '').trim(),
+                            choices: choices,
+                            allow_free_text: block.allow_free_text !== false,
+                            free_text_placeholder: String(block.free_text_placeholder || '').trim()
+                        });
+                    }
+                } else if (kind === 'step_progress') {
+                    var current = Number(block.current);
+                    var total = Number(block.total);
+                    if (current >= 1 && total >= 2 && current <= total) {
+                        out.push({
+                            kind: 'step_progress',
+                            current: current,
+                            total: total,
+                            label: String(block.label || '').trim()
+                        });
+                    }
+                }
+            }
+            return out;
+        }
+
+        function blocksHaveChoiceList(blocks) {
+            if (!Array.isArray(blocks)) return false;
+            for (var i = 0; i < blocks.length; i++) {
+                if (blocks[i] && blocks[i].kind === 'choice_list') return true;
+            }
+            return false;
         }
 
         function _escHtml(s) {
@@ -2530,6 +2607,188 @@
                 transform: none;
                 pointer-events: none;
             }
+            .xbot-ui-blocks {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                margin-top: 10px;
+                width: 100%;
+                max-width: 100%;
+            }
+            .xbot-recap {
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+                background: color-mix(in srgb, var(--xbot-theme) 6%, var(--xbot-surface));
+                border-radius: 14px;
+                padding: 14px;
+            }
+            .xbot-recap-title {
+                margin: 0 0 10px;
+                font-size: 13px;
+                font-weight: 650;
+                color: var(--xbot-ink);
+            }
+            .xbot-recap-list {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                margin: 0;
+            }
+            .xbot-recap-item {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 0;
+            }
+            .xbot-recap-item dt {
+                font-size: 11px;
+                font-weight: 650;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--xbot-muted);
+            }
+            .xbot-recap-item dd {
+                margin: 0;
+                font-size: 14px;
+                line-height: 1.45;
+                color: var(--xbot-ink);
+                overflow-wrap: anywhere;
+            }
+            .xbot-choice-list {
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+                background: var(--xbot-surface);
+                border-radius: 14px;
+                overflow: hidden;
+            }
+            .xbot-choice-list-title {
+                margin: 0;
+                padding: 12px 14px 10px;
+                border-bottom: 1px solid color-mix(in srgb, var(--xbot-theme) 12%, var(--xbot-border));
+                font-size: 14px;
+                font-weight: 650;
+                color: var(--xbot-ink);
+            }
+            .xbot-choice-list-body {
+                display: flex;
+                flex-direction: column;
+                padding: 4px;
+            }
+            .xbot-choice-item {
+                appearance: none;
+                display: flex;
+                align-items: flex-start;
+                gap: 10px;
+                width: 100%;
+                margin: 0;
+                padding: 10px;
+                border: 0;
+                border-radius: 10px;
+                background: transparent;
+                color: inherit;
+                text-align: left;
+                cursor: pointer;
+                font: inherit;
+            }
+            .xbot-choice-item:hover:not(:disabled) {
+                background: color-mix(in srgb, var(--xbot-theme) 8%, var(--xbot-surface));
+            }
+            .xbot-choice-item:disabled {
+                cursor: default;
+                opacity: 0.62;
+            }
+            .xbot-choice-index {
+                flex: 0 0 auto;
+                width: 22px;
+                height: 22px;
+                border-radius: 8px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 11px;
+                font-weight: 700;
+                color: var(--xbot-muted);
+                background: #f3f4f6;
+            }
+            .xbot-choice-copy {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .xbot-choice-label {
+                font-size: 14px;
+                font-weight: 650;
+                color: var(--xbot-ink);
+            }
+            .xbot-choice-desc {
+                font-size: 12px;
+                line-height: 1.4;
+                color: var(--xbot-muted);
+            }
+            .xbot-choice-free {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 10px 10px;
+            }
+            .xbot-choice-free input {
+                flex: 1 1 auto;
+                min-width: 0;
+                border: 0;
+                background: transparent;
+                padding: 8px 0;
+                font: inherit;
+                font-size: 13px;
+                color: var(--xbot-ink);
+                outline: none;
+            }
+            .xbot-choice-free input::placeholder { color: var(--xbot-subtle); }
+            .xbot-choice-free-send {
+                appearance: none;
+                width: 28px;
+                height: 28px;
+                border: 0;
+                border-radius: 999px;
+                background: var(--xbot-theme);
+                color: #fff;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .xbot-choice-free-send:disabled {
+                opacity: 0.4;
+                cursor: default;
+            }
+            .xbot-step-progress {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                max-width: 100%;
+                padding: 8px 12px;
+                border: 1px solid var(--xbot-border);
+                border-radius: 999px;
+                background: var(--xbot-surface);
+                font-size: 13px;
+                color: var(--xbot-ink);
+            }
+            .xbot-step-progress-count {
+                font-variant-numeric: tabular-nums;
+                font-weight: 650;
+                color: var(--xbot-theme);
+                white-space: nowrap;
+            }
+            .xbot-step-progress-label {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                color: var(--xbot-muted);
+            }
             .xbot-message video {
                 max-width: 100%;
                 border-radius: var(--xbot-radius-md);
@@ -3395,10 +3654,166 @@
             }
         }
 
+        function mountStructuredBlocks(host, blocks, opts) {
+            if (!host || !Array.isArray(blocks) || !blocks.length) return;
+            if (host.querySelector && host.querySelector('.xbot-ui-blocks')) return;
+            var interactive = !opts || opts.interactive !== false;
+            var wrap = document.createElement('div');
+            wrap.className = 'xbot-ui-blocks';
+            wrap.setAttribute('data-xbot', 'ui-blocks');
+
+            function lockChoices(root) {
+                var buttons = root.querySelectorAll('.xbot-choice-item, .xbot-choice-free-send');
+                for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+                var inputs = root.querySelectorAll('.xbot-choice-free input');
+                for (var j = 0; j < inputs.length; j++) inputs[j].disabled = true;
+            }
+
+            blocks.forEach(function (block) {
+                if (!block) return;
+                if (block.kind === 'recap') {
+                    var recap = document.createElement('section');
+                    recap.className = 'xbot-recap';
+                    recap.setAttribute('data-xbot', 'recap');
+                    if (block.title) {
+                        var recapTitle = document.createElement('h3');
+                        recapTitle.className = 'xbot-recap-title';
+                        recapTitle.textContent = block.title;
+                        recap.appendChild(recapTitle);
+                    }
+                    var dl = document.createElement('dl');
+                    dl.className = 'xbot-recap-list';
+                    (block.fields || []).forEach(function (field) {
+                        var item = document.createElement('div');
+                        item.className = 'xbot-recap-item';
+                        var dt = document.createElement('dt');
+                        dt.textContent = field.label;
+                        var dd = document.createElement('dd');
+                        dd.textContent = field.value;
+                        item.appendChild(dt);
+                        item.appendChild(dd);
+                        dl.appendChild(item);
+                    });
+                    recap.appendChild(dl);
+                    wrap.appendChild(recap);
+                    return;
+                }
+                if (block.kind === 'choice_list') {
+                    var list = document.createElement('div');
+                    list.className = 'xbot-choice-list';
+                    list.setAttribute('data-xbot', 'choice-list');
+                    list.setAttribute('role', 'group');
+                    list.setAttribute('aria-label', block.title || 'Opções');
+                    if (block.title) {
+                        var listTitle = document.createElement('div');
+                        listTitle.className = 'xbot-choice-list-title';
+                        listTitle.textContent = block.title;
+                        list.appendChild(listTitle);
+                    }
+                    var body = document.createElement('div');
+                    body.className = 'xbot-choice-list-body';
+                    (block.choices || []).forEach(function (choice, index) {
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'xbot-choice-item';
+                        var idx = document.createElement('span');
+                        idx.className = 'xbot-choice-index';
+                        idx.textContent = String(index + 1);
+                        var copy = document.createElement('span');
+                        copy.className = 'xbot-choice-copy';
+                        var lab = document.createElement('span');
+                        lab.className = 'xbot-choice-label';
+                        lab.textContent = choice.label;
+                        copy.appendChild(lab);
+                        if (choice.description) {
+                            var desc = document.createElement('span');
+                            desc.className = 'xbot-choice-desc';
+                            desc.textContent = choice.description;
+                            copy.appendChild(desc);
+                        }
+                        btn.appendChild(idx);
+                        btn.appendChild(copy);
+                        if (!interactive || sessionEpisodeEnded) {
+                            btn.disabled = true;
+                        } else {
+                            btn.addEventListener('click', function () {
+                                if (sessionEpisodeEnded) return;
+                                lockChoices(list);
+                                sendUserText(choice.value);
+                            });
+                        }
+                        body.appendChild(btn);
+                    });
+                    list.appendChild(body);
+                    if (block.allow_free_text !== false) {
+                        var free = document.createElement('div');
+                        free.className = 'xbot-choice-free';
+                        var freeInput = document.createElement('input');
+                        freeInput.type = 'text';
+                        freeInput.maxLength = 500;
+                        freeInput.placeholder = block.free_text_placeholder || 'Outra coisa? Escreva com suas palavras…';
+                        freeInput.setAttribute('aria-label', 'Responder com suas palavras');
+                        var freeSend = document.createElement('button');
+                        freeSend.type = 'button';
+                        freeSend.className = 'xbot-choice-free-send';
+                        freeSend.setAttribute('aria-label', 'Enviar resposta');
+                        freeSend.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+                        function sendFree() {
+                            var value = String(freeInput.value || '').trim();
+                            if (!value || sessionEpisodeEnded) return;
+                            lockChoices(list);
+                            sendUserText(value);
+                        }
+                        if (!interactive || sessionEpisodeEnded) {
+                            freeInput.disabled = true;
+                            freeSend.disabled = true;
+                        } else {
+                            freeSend.addEventListener('click', sendFree);
+                            freeInput.addEventListener('keydown', function (ev) {
+                                if (ev.key === 'Enter') {
+                                    ev.preventDefault();
+                                    sendFree();
+                                }
+                            });
+                        }
+                        free.appendChild(freeInput);
+                        free.appendChild(freeSend);
+                        list.appendChild(free);
+                    }
+                    wrap.appendChild(list);
+                    return;
+                }
+                if (block.kind === 'step_progress') {
+                    var step = document.createElement('div');
+                    step.className = 'xbot-step-progress';
+                    step.setAttribute('data-xbot', 'step-progress');
+                    step.setAttribute('role', 'status');
+                    var count = document.createElement('span');
+                    count.className = 'xbot-step-progress-count';
+                    count.textContent = 'Passo ' + block.current + ' / ' + block.total;
+                    step.appendChild(count);
+                    if (block.label) {
+                        var sep = document.createElement('span');
+                        sep.setAttribute('aria-hidden', 'true');
+                        sep.textContent = '·';
+                        var lab = document.createElement('span');
+                        lab.className = 'xbot-step-progress-label';
+                        lab.textContent = block.label;
+                        step.appendChild(sep);
+                        step.appendChild(lab);
+                    }
+                    wrap.appendChild(step);
+                }
+            });
+            if (wrap.childNodes.length) host.appendChild(wrap);
+        }
+
         function mountReplyActions(host, actions, opts) {
             if (!host || !Array.isArray(actions) || !actions.length) return;
             // Grid de catálogo já oferece as opções nos cards.
             if (host.querySelector && host.querySelector('[data-xbot="catalog-grid"]')) return;
+            if (host.querySelector && host.querySelector('[data-xbot="choice-list"]')) return;
+            if (blocksHaveChoiceList(opts && opts.blocks)) return;
             var interactive = !opts || opts.interactive !== false;
             var group = document.createElement('div');
             group.className = 'xbot-reply-actions';
@@ -3842,6 +4257,7 @@
                 contentWrap.appendChild(textWrap);
                 msg.appendChild(contentWrap);
                 if (from === 'bot') {
+                    mountStructuredBlocks(contentWrap, opts.blocks || [], opts);
                     mountReplyActions(contentWrap, opts.actions || [], opts);
                 }
             } else {
@@ -3879,17 +4295,22 @@
                     plainProbe.innerHTML = sanitized;
                     var plainText = String(plainProbe.textContent || '').replace(/\s+\n/g, '\n').trim();
                     var actions = opts.actions || [];
+                    var blocks = opts.blocks || [];
                     enqueueBotTypewriter(function (done) {
                         runBotTypewriter(textRoot, plainText, sanitized, function () {
                             enhanceCopyableCode(textRoot);
-                            mountReplyActions(msg.querySelector('.xbot-message-content'), actions, opts);
+                            var contentHost = msg.querySelector('.xbot-message-content');
+                            mountStructuredBlocks(contentHost, blocks, opts);
+                            mountReplyActions(contentHost, actions, opts);
                             done();
                         });
                     });
                 } else {
                     enhanceCopyableCode(textRoot);
                     enhanceCatalogGrid(textRoot, opts);
-                    mountReplyActions(msg.querySelector('.xbot-message-content'), opts.actions || [], opts);
+                    var contentHost = msg.querySelector('.xbot-message-content');
+                    mountStructuredBlocks(contentHost, opts.blocks || [], opts);
+                    mountReplyActions(contentHost, opts.actions || [], opts);
                 }
             }
             }
