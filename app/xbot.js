@@ -1096,6 +1096,64 @@
             container.scrollTop = container.scrollHeight;
         }
 
+        function parseLinkOnlyMessage(text) {
+            var raw = String(text || '').trim();
+            if (!raw) return null;
+            var md = raw.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/i);
+            if (md) {
+                return { title: md[1].trim(), url: md[2].trim() };
+            }
+            var lines = raw.split(/\n+/).map(function (line) { return line.trim(); }).filter(Boolean);
+            var urlRe = /^https?:\/\/[^\s]+$/i;
+            if (lines.length === 1 && urlRe.test(lines[0])) {
+                return { title: '', url: lines[0].replace(/[.,;:]+$/, '') };
+            }
+            if (lines.length === 2 && urlRe.test(lines[1]) && !urlRe.test(lines[0])) {
+                return { title: lines[0], url: lines[1].replace(/[.,;:]+$/, '') };
+            }
+            return null;
+        }
+
+        function canonicalLinkUrl(url) {
+            try {
+                var parsed = new URL(String(url || '').trim());
+                var path = parsed.pathname || '/';
+                if (path !== '/' && path.endsWith('/')) path = path.replace(/\/+$/, '') || '/';
+                return parsed.protocol.toLowerCase() + '//' + parsed.hostname.toLowerCase() + path + parsed.search + parsed.hash;
+            } catch (err) {
+                return String(url || '').trim();
+            }
+        }
+
+        function linkCardHost(url) {
+            try {
+                return new URL(url).hostname.replace(/^www\./, '');
+            } catch (err) {
+                return url;
+            }
+        }
+
+        function buildLinkCardNode(link) {
+            var card = document.createElement('a');
+            card.className = 'xbot-link-card';
+            card.href = link.url;
+            card.target = '_blank';
+            card.rel = 'noopener noreferrer';
+            var kicker = document.createElement('span');
+            kicker.className = 'xbot-link-card-kicker';
+            kicker.textContent = 'Link';
+            var title = document.createElement('span');
+            title.className = 'xbot-link-card-title';
+            title.textContent = link.title || linkCardHost(link.url);
+            var host = document.createElement('span');
+            host.className = 'xbot-link-card-url';
+            host.textContent = linkCardHost(link.url);
+            card.appendChild(kicker);
+            card.appendChild(title);
+            card.appendChild(host);
+            return card;
+        }
+
         function ingestBotPayload(item, content, source) {
             var body = (content || '').trim();
             var meta = (item && item.metadata && typeof item.metadata === 'object') ? item.metadata : {};
@@ -1104,6 +1162,8 @@
             var isMedia = !!mediaUrl && (ct === 'image' || ct === 'file' || ct === 'video' || ct === 'audio');
             var actions = extractReplyActions(meta);
             var blocks = extractStructuredBlocks(meta);
+            var linkOnly = !isMedia ? parseLinkOnlyMessage(body) : null;
+            if (linkOnly && seenBotMessageKeys['link:' + canonicalLinkUrl(linkOnly.url)]) return;
             if (!body && !isMedia && !blocks.length && !actions.length) return;
             if (sessionEpisodeEnded && source !== 'history' && !meta.session_closed) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
@@ -1119,7 +1179,7 @@
             }
             clearPendingTyping();
             // history/hydrate: instantâneo; opening/sse/poll/post: typewriter
-            var animateTyping = source !== 'history' && source !== 'hydrate';
+            var animateTyping = source !== 'history' && source !== 'hydrate' && !linkOnly;
             if (isMedia) {
                 appendBotMedia(ct, mediaUrl, body, meta, {
                     countUnread: source !== 'history' && source !== 'opening',
@@ -1134,10 +1194,12 @@
                     actions: actions,
                     blocks: blocks,
                     interactive: source !== 'history' && source !== 'opening',
-                    animateTyping: animateTyping
+                    animateTyping: animateTyping,
+                    linkCard: linkOnly || null
                 });
             }
             rememberBotMessage(item, dedupKey);
+            if (linkOnly) seenBotMessageKeys['link:' + canonicalLinkUrl(linkOnly.url)] = 1;
             if (item && item.id) saveLastBotMessageId(item.id);
             widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, tipo: ct, len: body.length });
         }
@@ -2809,6 +2871,52 @@
                 border-bottom: 1px solid rgba(var(--xbot-theme-rgb), 0.4);
             }
             .xbot-message a:hover { opacity: 0.85; }
+            .xbot-message-row--link {
+                width: 100%;
+                max-width: 92%;
+            }
+            .xbot-link-card {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                margin: 0;
+                padding: 12px 14px;
+                border: 1px solid var(--xbot-border);
+                border-radius: 12px;
+                background: var(--xbot-surface-alt, #f8fafc);
+                color: var(--xbot-ink, #0f172a);
+                text-decoration: none;
+                border-bottom: 1px solid var(--xbot-border);
+                overflow: hidden;
+            }
+            .xbot-link-card:hover {
+                opacity: 1;
+                border-color: rgba(var(--xbot-theme-rgb), 0.45);
+            }
+            .xbot-link-card-kicker {
+                font-size: 11px;
+                font-weight: 650;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--xbot-muted);
+            }
+            .xbot-link-card-title {
+                font-size: 15px;
+                font-weight: 650;
+                line-height: 1.35;
+                color: inherit;
+                overflow-wrap: anywhere;
+            }
+            .xbot-link-card-url {
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--xbot-theme);
+                overflow-wrap: anywhere;
+                word-break: break-all;
+            }
 
             .xbot-typing {
                 padding: 2px 6px 6px;
@@ -4232,7 +4340,9 @@
             const row = document.createElement('div');
             row.className = `xbot-message-row ${from}`;
             var hasCatalogGrid = from === 'bot' && String(text || '').indexOf('data-xbot="catalog-grid"') !== -1;
+            var linkCard = from === 'bot' ? (opts.linkCard || parseLinkOnlyMessage(text)) : null;
             if (hasCatalogGrid) row.classList.add('xbot-message-row--catalog');
+            if (linkCard) row.classList.add('xbot-message-row--link');
             if (from === 'bot' && botAvatar) {
                 if (shouldShowBotAvatar()) {
                     const av = document.createElement('img');
@@ -4248,6 +4358,9 @@
             col.className = 'xbot-message-col';
             const msg = document.createElement('div');
             msg.className = `xbot-message ${from}`;
+            if (linkCard && !opts.domNode) {
+                opts.domNode = buildLinkCardNode(linkCard);
+            }
             if (opts.domNode) {
                 var contentWrap = document.createElement('div');
                 contentWrap.className = 'xbot-message-content';
