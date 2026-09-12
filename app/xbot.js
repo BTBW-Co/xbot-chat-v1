@@ -1153,8 +1153,16 @@
                 if (!a || typeof a !== 'object') continue;
                 var label = String(a.label || a.value || '').trim();
                 var value = String(a.value || a.label || '').trim();
-                if (!label || !value) continue;
-                out.push({ id: a.id || ('action-' + i), label: label, value: value });
+                var kind = String(a.kind || 'reply').trim().toLowerCase();
+                var url = String(a.url || (kind === 'url' ? value : '') || '').trim();
+                if (!label) continue;
+                if (kind === 'url') {
+                    if (!url) continue;
+                    out.push({ id: a.id || ('action-' + i), label: label, value: value || url, kind: 'url', url: url });
+                } else {
+                    if (!value) continue;
+                    out.push({ id: a.id || ('action-' + i), label: label, value: value, kind: 'reply' });
+                }
             }
             return out;
         }
@@ -2350,6 +2358,10 @@
                 cursor: pointer;
                 max-width: 100%;
                 text-align: left;
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                box-sizing: border-box;
                 transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
             }
             .xbot-reply-action:hover {
@@ -2357,10 +2369,12 @@
                 border-color: rgba(var(--xbot-theme-rgb), 0.55);
             }
             .xbot-reply-action:active { transform: scale(0.98); }
-            .xbot-reply-action:disabled {
+            .xbot-reply-action:disabled,
+            .xbot-reply-action[aria-disabled="true"] {
                 opacity: 0.55;
                 cursor: default;
                 transform: none;
+                pointer-events: none;
             }
             .xbot-message video {
                 max-width: 100%;
@@ -3125,6 +3139,21 @@
             group.setAttribute('role', 'group');
             group.setAttribute('aria-label', 'Opções');
             actions.forEach(function (action) {
+                var isUrl = action && action.kind === 'url' && action.url;
+                if (isUrl) {
+                    var link = document.createElement('a');
+                    link.className = 'xbot-reply-action xbot-reply-action--url';
+                    link.textContent = action.label;
+                    link.href = action.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    if (!interactive || sessionEpisodeEnded) {
+                        link.setAttribute('aria-disabled', 'true');
+                        link.addEventListener('click', function (ev) { ev.preventDefault(); });
+                    }
+                    group.appendChild(link);
+                    return;
+                }
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'xbot-reply-action';
@@ -3135,7 +3164,10 @@
                     btn.addEventListener('click', function () {
                         if (sessionEpisodeEnded) return;
                         var buttons = group.querySelectorAll('.xbot-reply-action');
-                        for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+                        for (var i = 0; i < buttons.length; i++) {
+                            if (buttons[i].tagName === 'BUTTON') buttons[i].disabled = true;
+                            else buttons[i].setAttribute('aria-disabled', 'true');
+                        }
                         sendUserText(action.value);
                     });
                 }
