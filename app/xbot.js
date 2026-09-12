@@ -1106,7 +1106,9 @@
             if (sessionEpisodeEnded && source !== 'history' && !meta.session_closed) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
             var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
-            if (seenBotMessageKeys['c:' + dedupKey]) return;
+            // Dedup por conteúdo só para payloads sem id (otimista/local). Com id, mensagens
+            // repetidas legítimas (ex.: "Como posso te ajudar?") precisam aparecer.
+            if ((!item || !item.id) && seenBotMessageKeys['c:' + dedupKey]) return;
             if (isSessionClosurePayload(item, body)) {
                 if (closureNoticeRendered || pendingSendCount > 0) return;
             }
@@ -1266,7 +1268,11 @@
         }
 
         function rememberBotMessage(item, content) {
-            if (item && item.id) seenBotMessageKeys['id:' + item.id] = true;
+            if (item && item.id) {
+                seenBotMessageKeys['id:' + item.id] = true;
+                if (item.created_at) saveLastBotPollAt(item.created_at);
+                return;
+            }
             var body = (content || '').trim();
             if (body) seenBotMessageKeys['c:' + body] = true;
             if (item && item.created_at) saveLastBotPollAt(item.created_at);
@@ -1454,7 +1460,18 @@
                     var histMedia = histMeta.media_url || '';
                     if (!body && !histMedia) continue;
                     if ((item.sender || 'bot') === 'user') {
-                        if (histMedia && String(item.content_type || '').toLowerCase() === 'image') {
+                        var histCt = String(item.content_type || '').toLowerCase();
+                        if (histMedia && (histCt === 'audio' || histCt === 'ptt')) {
+                            var uAudio =
+                                '<audio controls preload="metadata" style="max-width:100%;min-width:220px;margin:4px 0 8px">' +
+                                '<source src="' + String(histMedia).replace(/"/g, '&quot;') + '"></audio>';
+                            appendMessage(uAudio, 'user', { rawHtml: true });
+                        } else if (histMedia && histCt === 'video') {
+                            var uVideo =
+                                '<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px;margin:4px 0 8px">' +
+                                '<source src="' + String(histMedia).replace(/"/g, '&quot;') + '"></video>';
+                            appendMessage(uVideo, 'user', { rawHtml: true });
+                        } else if (histMedia && histCt === 'image') {
                             appendMessage('![imagem](' + histMedia + ')' + (body ? '\n\n' + body : ''), 'user');
                         } else {
                             appendMessage(body, 'user');
