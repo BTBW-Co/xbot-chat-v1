@@ -1255,12 +1255,18 @@
                 if (cap) vhtml += '<p>' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
                 appendMessage(vhtml, 'bot', Object.assign({}, opts, { rawHtml: true }));
             } else if (ct === 'audio') {
-                var alabel = cap || 'áudio';
-                var ahtml =
-                    '<audio controls preload="metadata" style="max-width:100%;min-width:220px;margin:4px 0 8px">' +
-                    '<source src="' + url.replace(/"/g, '&quot;') + '"></audio>';
-                if (cap && cap.indexOf('🎵') !== 0) ahtml += '<p class="text-xs opacity-80 mt-1">' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
-                appendMessage(ahtml, 'bot', Object.assign({}, opts, { rawHtml: true }));
+                var audioNode = createXbotAudioPlayer(url);
+                if (cap && cap.indexOf('🎵') !== 0) {
+                    var audioWrap = document.createElement('div');
+                    audioWrap.appendChild(audioNode);
+                    var audioCap = document.createElement('p');
+                    audioCap.className = 'text-xs opacity-80 mt-1';
+                    audioCap.textContent = cap;
+                    audioWrap.appendChild(audioCap);
+                    appendMessage('', 'bot', Object.assign({}, opts, { domNode: audioWrap, animateTyping: false }));
+                } else {
+                    appendMessage('', 'bot', Object.assign({}, opts, { domNode: audioNode, animateTyping: false }));
+                }
             } else {
                 var label = cap || (meta && meta.filename) || 'Arquivo';
                 appendMessage('[📎 ' + label + '](' + url + ')', 'bot', opts);
@@ -1462,10 +1468,7 @@
                     if ((item.sender || 'bot') === 'user') {
                         var histCt = String(item.content_type || '').toLowerCase();
                         if (histMedia && (histCt === 'audio' || histCt === 'ptt')) {
-                            var uAudio =
-                                '<audio controls preload="metadata" style="max-width:100%;min-width:220px;margin:4px 0 8px">' +
-                                '<source src="' + String(histMedia).replace(/"/g, '&quot;') + '"></audio>';
-                            appendMessage(uAudio, 'user', { rawHtml: true });
+                            appendMessage('', 'user', { domNode: createXbotAudioPlayer(histMedia) });
                         } else if (histMedia && histCt === 'video') {
                             var uVideo =
                                 '<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px;margin:4px 0 8px">' +
@@ -1572,8 +1575,142 @@
             attach: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
             copy: '<svg class="xbot-copy-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
             mic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>',
-            stop: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+            stop: '<span class="xbot-rec-dot" aria-hidden="true"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+            spinner: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 019 9"/></svg>',
+            play: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+            pause: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>',
         };
+
+        function formatAudioClock(seconds) {
+            if (!isFinite(seconds) || seconds < 0) return '0:00';
+            var total = Math.floor(seconds);
+            var m = Math.floor(total / 60);
+            var s = total % 60;
+            return m + ':' + String(s).padStart(2, '0');
+        }
+
+        function probeHtmlAudioDuration(audio) {
+            return new Promise(function (resolve) {
+                var done = false;
+                function finish(value) {
+                    if (done) return;
+                    done = true;
+                    audio.removeEventListener('loadedmetadata', onMeta);
+                    audio.removeEventListener('durationchange', onMeta);
+                    audio.removeEventListener('timeupdate', onTime);
+                    try { audio.currentTime = 0; } catch (e) { /* ignore */ }
+                    resolve(isFinite(value) && value > 0 ? value : 0);
+                }
+                function onMeta() {
+                    if (isFinite(audio.duration) && audio.duration > 0 && audio.duration !== Infinity) {
+                        finish(audio.duration);
+                    }
+                }
+                function onTime() {
+                    if (isFinite(audio.duration) && audio.duration > 0 && audio.duration !== Infinity) {
+                        finish(audio.duration);
+                    }
+                }
+                if (isFinite(audio.duration) && audio.duration > 0 && audio.duration !== Infinity) {
+                    resolve(audio.duration);
+                    return;
+                }
+                audio.addEventListener('loadedmetadata', onMeta);
+                audio.addEventListener('durationchange', onMeta);
+                audio.addEventListener('timeupdate', onTime);
+                try { audio.currentTime = 1e101; } catch (e) { finish(0); }
+                setTimeout(function () { finish(audio.duration); }, 1500);
+            });
+        }
+
+        /** Player de áudio no estilo do Chat CRM: play + duração total + barra. */
+        function createXbotAudioPlayer(url) {
+            var wrap = document.createElement('div');
+            wrap.className = 'xbot-audio-player';
+            var audio = document.createElement('audio');
+            audio.preload = 'metadata';
+            audio.src = url;
+            var playBtn = document.createElement('button');
+            playBtn.type = 'button';
+            playBtn.className = 'xbot-audio-play';
+            playBtn.setAttribute('aria-label', 'Reproduzir áudio');
+            playBtn.innerHTML = XBOT_ICONS.play;
+            var timeEl = document.createElement('span');
+            timeEl.className = 'xbot-audio-time';
+            timeEl.textContent = '0:00';
+            var track = document.createElement('div');
+            track.className = 'xbot-audio-track';
+            var trackBg = document.createElement('div');
+            trackBg.className = 'xbot-audio-track-bg';
+            var trackFill = document.createElement('div');
+            trackFill.className = 'xbot-audio-track-fill';
+            var range = document.createElement('input');
+            range.type = 'range';
+            range.min = '0';
+            range.max = '1';
+            range.step = '0.01';
+            range.value = '0';
+            range.setAttribute('aria-label', 'Posição do áudio');
+            track.appendChild(trackBg);
+            track.appendChild(trackFill);
+            track.appendChild(range);
+            wrap.appendChild(audio);
+            wrap.appendChild(playBtn);
+            wrap.appendChild(timeEl);
+            wrap.appendChild(track);
+
+            var duration = 0;
+            var seeking = false;
+
+            function syncUi() {
+                var cur = audio.currentTime || 0;
+                var show = (!audio.paused || cur > 0) ? cur : duration;
+                timeEl.textContent = formatAudioClock(show);
+                var max = duration > 0 ? duration : Math.max(cur, 0.1);
+                range.max = String(max);
+                if (!seeking) range.value = String(Math.min(cur, max));
+                var pct = duration > 0 ? Math.min(100, (cur / duration) * 100) : 0;
+                trackFill.style.width = pct + '%';
+                playBtn.innerHTML = audio.paused ? XBOT_ICONS.play : XBOT_ICONS.pause;
+                playBtn.setAttribute('aria-label', audio.paused ? 'Reproduzir áudio' : 'Pausar áudio');
+            }
+
+            playBtn.addEventListener('click', function () {
+                if (!audio.paused) {
+                    audio.pause();
+                    return;
+                }
+                try { audio.currentTime = 0; } catch (e) { /* ignore */ }
+                audio.play().catch(function () { /* ignore */ });
+            });
+            range.addEventListener('input', function () {
+                seeking = true;
+                timeEl.textContent = formatAudioClock(Number(range.value) || 0);
+            });
+            function commitSeek() {
+                seeking = false;
+                try {
+                    audio.currentTime = Number(range.value) || 0;
+                } catch (e) { /* ignore */ }
+                syncUi();
+            }
+            range.addEventListener('change', commitSeek);
+            range.addEventListener('mouseup', commitSeek);
+            range.addEventListener('touchend', commitSeek);
+            audio.addEventListener('timeupdate', syncUi);
+            audio.addEventListener('play', syncUi);
+            audio.addEventListener('pause', syncUi);
+            audio.addEventListener('ended', function () {
+                try { audio.currentTime = 0; } catch (e) { /* ignore */ }
+                syncUi();
+            });
+            probeHtmlAudioDuration(audio).then(function (value) {
+                duration = value || 0;
+                syncUi();
+            });
+            audio.load();
+            return wrap;
+        }
 
         let unreadCount = 0;
         let welcomeShown = false;
@@ -2489,7 +2626,119 @@
             }
             .xbot-icon-btn.is-recording {
                 color: var(--xbot-danger);
-                background: rgba(239, 68, 68, 0.1);
+                background: rgba(239, 68, 68, 0.14);
+                animation: xbot-rec-pulse 1.15s ease-in-out infinite;
+            }
+            .xbot-icon-btn.is-recording .xbot-rec-dot {
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: currentColor;
+                margin-right: 2px;
+                animation: xbot-rec-dot 1.15s ease-in-out infinite;
+            }
+            .xbot-icon-btn.is-uploading {
+                color: var(--xbot-theme);
+                background: rgba(var(--xbot-theme-rgb), 0.12);
+                pointer-events: none;
+                opacity: 0.9;
+            }
+            .xbot-icon-btn.is-uploading svg {
+                animation: xbot-rec-spin 0.85s linear infinite;
+            }
+            @keyframes xbot-rec-pulse {
+                0%, 100% {
+                    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+                    transform: scale(1);
+                }
+                50% {
+                    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+                    transform: scale(1.07);
+                }
+            }
+            @keyframes xbot-rec-dot {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.35; transform: scale(0.75); }
+            }
+            @keyframes xbot-rec-spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            .xbot-audio-player {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-width: 220px;
+                max-width: 280px;
+                padding: 6px 8px;
+                border-radius: 12px;
+                background: rgba(15, 23, 42, 0.04);
+            }
+            .xbot-message.user .xbot-audio-player {
+                background: rgba(255, 255, 255, 0.18);
+            }
+            .xbot-audio-player audio { display: none; }
+            .xbot-audio-play {
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: 50%;
+                background: rgba(15, 23, 42, 0.08);
+                color: var(--xbot-ink);
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .xbot-message.user .xbot-audio-play {
+                background: rgba(255, 255, 255, 0.25);
+                color: inherit;
+            }
+            .xbot-audio-time {
+                font-size: 11px;
+                font-variant-numeric: tabular-nums;
+                font-weight: 600;
+                min-width: 32px;
+                opacity: 0.85;
+            }
+            .xbot-audio-track {
+                position: relative;
+                flex: 1;
+                height: 28px;
+                display: flex;
+                align-items: center;
+                min-width: 0;
+            }
+            .xbot-audio-track-bg,
+            .xbot-audio-track-fill {
+                position: absolute;
+                left: 0;
+                right: 0;
+                height: 3px;
+                border-radius: 99px;
+                background: rgba(15, 23, 42, 0.18);
+            }
+            .xbot-message.user .xbot-audio-track-bg {
+                background: rgba(255, 255, 255, 0.35);
+            }
+            .xbot-audio-track-fill {
+                right: auto;
+                width: 0%;
+                background: rgba(15, 23, 42, 0.55);
+            }
+            .xbot-message.user .xbot-audio-track-fill {
+                background: rgba(255, 255, 255, 0.9);
+            }
+            .xbot-audio-track input[type="range"] {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 28px;
+                opacity: 0;
+                cursor: pointer;
+                margin: 0;
             }
             .xbot-input {
                 flex: 1;
@@ -3584,6 +3833,18 @@
             col.className = 'xbot-message-col';
             const msg = document.createElement('div');
             msg.className = `xbot-message ${from}`;
+            if (opts.domNode) {
+                var contentWrap = document.createElement('div');
+                contentWrap.className = 'xbot-message-content';
+                var textWrap = document.createElement('div');
+                textWrap.className = 'xbot-text';
+                textWrap.appendChild(opts.domNode);
+                contentWrap.appendChild(textWrap);
+                msg.appendChild(contentWrap);
+                if (from === 'bot') {
+                    mountReplyActions(contentWrap, opts.actions || [], opts);
+                }
+            } else {
             var unsafeHTML;
             var treatAsHtml = !!opts.rawHtml
                 || (from === 'bot' && /<\s*(?:p|div|ul|ol|table|strong|img)\b/i.test(String(text || '')));
@@ -3631,6 +3892,7 @@
                     mountReplyActions(msg.querySelector('.xbot-message-content'), opts.actions || [], opts);
                 }
             }
+            }
             const timeEl = document.createElement('div');
             timeEl.className = 'xbot-time';
             timeEl.textContent = formatMessageTime();
@@ -3651,7 +3913,7 @@
                 notificationSound.play().catch(function () {});
             }
             if (from === 'bot' && countUnread) {
-                notifyBrowserIncoming(text);
+                notifyBrowserIncoming(opts.domNode ? 'Áudio' : text);
             }
         }
 
@@ -3790,95 +4052,140 @@
         let mediaRecorder;
         let chunks = [];
         let isRecording = false;
-        
-        audioBtn.addEventListener('click', async () => {
-            if (isRecording) {
-            mediaRecorder.stop();
-            audioBtn.classList.remove('is-recording');
+        let isUploadingAudio = false;
+        let recordingStream = null;
+
+        function setAudioBtnIdle() {
+            audioBtn.classList.remove('is-recording', 'is-uploading');
             audioBtn.innerHTML = XBOT_ICONS.mic;
-            isRecording = false;
-            return;
-            }
-        
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('Seu navegador não suporta gravação de áudio.');
-            return;
-            }
-        
-            try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            chunks = [];
-        
-            mediaRecorder.ondataavailable = e => chunks.push(e.data);
-            mediaRecorder.onstop = async () => {
-                resumeRealtimeAfterUserSend();
-                beginNewEpisodeFromUserMessage();
-                const blob = new Blob(chunks, { type: 'audio/webm' });
-                const formData = new FormData();
-                formData.append('file', blob, 'audio.webm');
+            audioBtn.setAttribute('aria-label', 'Gravar áudio');
+            audioBtn.disabled = false;
+        }
 
-                const audioPreview = document.createElement('audio');
-                audioPreview.controls = true;
-                audioPreview.src = URL.createObjectURL(blob);
-                const audioRow = document.createElement('div');
-                audioRow.className = 'xbot-message-row user';
-                const audioCol = document.createElement('div');
-                audioCol.className = 'xbot-message-col';
-                const audioMsg = document.createElement('div');
-                audioMsg.className = 'xbot-message user';
-                audioMsg.appendChild(audioPreview);
-                const audioTime = document.createElement('div');
-                audioTime.className = 'xbot-time';
-                audioTime.textContent = formatMessageTime();
-                audioCol.appendChild(audioMsg);
-                audioCol.appendChild(audioTime);
-                audioRow.appendChild(audioCol);
-                messages.appendChild(audioRow);
-                syncEmptyState();
-                messages.scrollTop = messages.scrollHeight;
-
-                try {
-                if (window.__xbotConfig.channelId) {
-                    formData.append('channel_id', window.__xbotConfig.channelId);
-                }
-                var vid = getVisitorId();
-                if (vid) formData.append('visitor_id', vid);
-                attachIdentityToFormData(formData);
-                const res = await fetch(getUploadUrl(), {
-                    method: 'POST',
-                    headers: buildAuthHeaders({}),
-                    body: formData
-                });
-                if (!res.ok) throw new Error('upload failed');
-                const data = await res.json();
-                if (data.visitor_id && typeof localStorage !== 'undefined') {
-                    try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
-                }
-                if (data.bot_reply_enabled) {
-                    pendingSendCount++;
-                    _moveOrShowTyping();
-                    pendingSendCount = Math.max(0, pendingSendCount - 1);
-                    setTimeout(function () {
-                        if (pendingSendCount === 0) clearPendingTyping();
-                    }, 30000);
-                } else {
-                    clearPendingTyping();
-                }
-                pollSessionInactivity();
-                } catch (err) {
-                clearPendingTyping();
-                appendMessage('Erro ao enviar o áudio.', 'bot');
-                }
-                messages.scrollTop = messages.scrollHeight;
-            };
-        
-            mediaRecorder.start();
-            isRecording = true;
+        function setAudioBtnRecording() {
+            audioBtn.classList.remove('is-uploading');
             audioBtn.classList.add('is-recording');
             audioBtn.innerHTML = XBOT_ICONS.stop;
+            audioBtn.setAttribute('aria-label', 'Parar gravação');
+            audioBtn.disabled = false;
+        }
+
+        function setAudioBtnUploading() {
+            audioBtn.classList.remove('is-recording');
+            audioBtn.classList.add('is-uploading');
+            audioBtn.innerHTML = XBOT_ICONS.spinner;
+            audioBtn.setAttribute('aria-label', 'Enviando áudio');
+            audioBtn.disabled = true;
+        }
+
+        function pickRecorderMime() {
+            if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
+                return { mimeType: '', filename: 'audio.webm', blobType: 'audio/webm' };
+            }
+            var candidates = [
+                { mimeType: 'audio/webm;codecs=opus', filename: 'audio.webm', blobType: 'audio/webm' },
+                { mimeType: 'audio/webm', filename: 'audio.webm', blobType: 'audio/webm' },
+                { mimeType: 'audio/mp4', filename: 'audio.m4a', blobType: 'audio/mp4' },
+                { mimeType: 'audio/ogg;codecs=opus', filename: 'audio.ogg', blobType: 'audio/ogg' },
+            ];
+            for (var i = 0; i < candidates.length; i++) {
+                if (MediaRecorder.isTypeSupported(candidates[i].mimeType)) return candidates[i];
+            }
+            return { mimeType: '', filename: 'audio.webm', blobType: 'audio/webm' };
+        }
+
+        audioBtn.addEventListener('click', async () => {
+            if (isUploadingAudio) return;
+            if (isRecording) {
+                isUploadingAudio = true;
+                try { mediaRecorder.stop(); } catch (e) { /* ignore */ }
+                isRecording = false;
+                setAudioBtnUploading();
+                return;
+            }
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('Seu navegador não suporta gravação de áudio.');
+                return;
+            }
+
+            try {
+                recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                var picked = pickRecorderMime();
+                mediaRecorder = picked.mimeType
+                    ? new MediaRecorder(recordingStream, { mimeType: picked.mimeType })
+                    : new MediaRecorder(recordingStream);
+                chunks = [];
+
+                mediaRecorder.ondataavailable = e => {
+                    if (e.data && e.data.size) chunks.push(e.data);
+                };
+                mediaRecorder.onstop = async () => {
+                    resumeRealtimeAfterUserSend();
+                    beginNewEpisodeFromUserMessage();
+                    if (recordingStream) {
+                        try {
+                            recordingStream.getTracks().forEach(function (t) { t.stop(); });
+                        } catch (e) { /* ignore */ }
+                        recordingStream = null;
+                    }
+                    var blobType = (mediaRecorder && mediaRecorder.mimeType) || picked.blobType || 'audio/webm';
+                    const blob = new Blob(chunks, { type: blobType.split(';')[0] });
+                    const formData = new FormData();
+                    formData.append('file', blob, picked.filename || 'audio.webm');
+
+                    setAudioBtnUploading();
+                    appendMessage('', 'user', { domNode: createXbotAudioPlayer(URL.createObjectURL(blob)) });
+
+                    try {
+                        if (window.__xbotConfig.channelId) {
+                            formData.append('channel_id', window.__xbotConfig.channelId);
+                        }
+                        var vid = getVisitorId();
+                        if (vid) formData.append('visitor_id', vid);
+                        attachIdentityToFormData(formData);
+                        const res = await fetch(getUploadUrl(), {
+                            method: 'POST',
+                            headers: buildAuthHeaders({}),
+                            body: formData
+                        });
+                        if (!res.ok) throw new Error('upload failed');
+                        const data = await res.json();
+                        if (data.visitor_id && typeof localStorage !== 'undefined') {
+                            try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
+                        }
+                        if (data.bot_reply_enabled) {
+                            pendingSendCount++;
+                            _moveOrShowTyping();
+                            pendingSendCount = Math.max(0, pendingSendCount - 1);
+                            setTimeout(function () {
+                                if (pendingSendCount === 0) clearPendingTyping();
+                            }, 30000);
+                        } else {
+                            clearPendingTyping();
+                        }
+                        pollSessionInactivity();
+                    } catch (err) {
+                        clearPendingTyping();
+                        appendMessage('Erro ao enviar o áudio.', 'bot');
+                    } finally {
+                        isUploadingAudio = false;
+                        setAudioBtnIdle();
+                    }
+                    messages.scrollTop = messages.scrollHeight;
+                };
+
+                mediaRecorder.start(250);
+                isRecording = true;
+                isUploadingAudio = false;
+                setAudioBtnRecording();
             } catch (err) {
-            alert('Erro ao iniciar gravação de áudio.');
+                if (recordingStream) {
+                    try { recordingStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+                    recordingStream = null;
+                }
+                setAudioBtnIdle();
+                alert('Erro ao iniciar gravação de áudio.');
             }
         });
 
