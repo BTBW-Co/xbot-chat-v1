@@ -1315,6 +1315,13 @@
         // Renderiza mensagem do bot com mídia (imagem do produto, arquivo, etc.)
         function appendBotMedia(ct, url, caption, meta, opts) {
             var cap = (caption || '').trim();
+            var filename = meta && typeof meta.filename === 'string' ? String(meta.filename).trim() : '';
+            if ((ct === 'image' || ct === 'video') && cap && (
+                (filename && cap === filename) ||
+                /^[^\s\\/]+\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|mp4|webm|mov|m4v)$/i.test(cap)
+            )) {
+                cap = '';
+            }
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
                 // Constrói DOM diretamente para poder anexar onerror —
