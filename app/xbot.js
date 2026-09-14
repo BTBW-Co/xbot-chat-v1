@@ -1399,6 +1399,7 @@
 
             var finished = false;
             function tryPlay() {
+                if (!wrap.classList.contains('is-unmuted')) vid.muted = true;
                 var p = vid.play();
                 if (p && typeof p.catch === 'function') p.catch(function () {});
             }
@@ -1409,7 +1410,8 @@
                     wrap.setAttribute('aria-label', 'Reproduzir do início');
                 }
                 try { vid.currentTime = 0; } catch (e) { /* ignore */ }
-                tryPlay();
+                var p = vid.play();
+                if (p && typeof p.catch === 'function') p.catch(function () {});
             }
             function onActivate(ev) {
                 if (ev) {
@@ -1434,11 +1436,16 @@
                 finished = true;
                 releasePresentationComposerLock();
             });
+            vid.addEventListener('loadeddata', tryPlay);
+            vid.addEventListener('canplay', tryPlay);
 
             wrap.appendChild(vid);
             wrap.appendChild(unmute);
             acquirePresentationComposerLock();
+            tryPlay();
             requestAnimationFrame(tryPlay);
+            setTimeout(tryPlay, 250);
+            setTimeout(tryPlay, 1000);
             return wrap;
         }
 
@@ -1525,7 +1532,9 @@
                 }
                 return;
             } else if (ct === 'video') {
-                var usePresentationPlayer = isPresentationOpeningMeta(meta) && !visitorHasSpoken;
+                // Sem fala do visitante = abertura: player cinematográfico mesmo se a
+                // API omitir presentation_opening no metadata público.
+                var usePresentationPlayer = !visitorHasSpoken;
                 if (usePresentationPlayer) {
                     appendMessage('', 'bot', Object.assign({}, opts, {
                         domNode: mountPresentationVideo(url),
