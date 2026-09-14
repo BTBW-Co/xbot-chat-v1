@@ -1375,7 +1375,7 @@
             wrap.className = 'xbot-presentation-video';
             wrap.setAttribute('role', 'button');
             wrap.setAttribute('tabindex', '0');
-            wrap.setAttribute('aria-label', 'UNMUTE');
+            wrap.setAttribute('aria-label', 'TAP TO UNMUTE');
 
             var vid = document.createElement('video');
             vid.src = url;
@@ -1395,7 +1395,7 @@
 
             var unmute = document.createElement('span');
             unmute.className = 'xbot-presentation-unmute';
-            unmute.textContent = 'UNMUTE';
+            unmute.textContent = 'TAP TO UNMUTE';
 
             var finished = false;
             function tryPlay() {
@@ -3045,21 +3045,25 @@
             }
             .xbot-presentation-unmute {
                 position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
+                inset: 0;
                 z-index: 2;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 margin: 0;
-                padding: 10px 16px 18px;
-                font-size: 12px;
-                font-weight: 700;
-                letter-spacing: 0.22em;
+                padding: 16px 20px;
+                font-size: clamp(22px, 4.6vw, 36px);
+                font-weight: 800;
+                letter-spacing: 0.14em;
+                line-height: 1.15;
+                text-align: center;
                 text-transform: uppercase;
                 color: #fff;
-                background: linear-gradient(to bottom, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.04));
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.35),
+                    0 4px 12px rgba(0, 0, 0, 0.65),
+                    0 0 28px rgba(0, 0, 0, 0.45);
+                background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.06) 55%, transparent 72%);
                 pointer-events: none;
             }
             .xbot-presentation-video.is-unmuted .xbot-presentation-unmute {
