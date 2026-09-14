@@ -1393,7 +1393,7 @@
             vid.disablePictureInPicture = true;
             vid.disableRemotePlayback = true;
 
-            var unmute = document.createElement('span');
+            var unmute = document.createElement('div');
             unmute.className = 'xbot-presentation-unmute';
             unmute.textContent = 'TAP TO UNMUTE';
 
@@ -3051,10 +3051,10 @@
                 align-items: center;
                 justify-content: center;
                 margin: 0;
-                padding: 16px 20px;
-                font-size: clamp(22px, 4.6vw, 36px);
+                padding: 16px 18px;
+                font-size: clamp(20px, 6.2vw, 30px) !important;
                 font-weight: 800;
-                letter-spacing: 0.14em;
+                letter-spacing: 0.1em;
                 line-height: 1.15;
                 text-align: center;
                 text-transform: uppercase;
@@ -3065,6 +3065,24 @@
                     0 0 28px rgba(0, 0, 0, 0.45);
                 background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.06) 55%, transparent 72%);
                 pointer-events: none;
+                animation: xbot-unmute-breathe 1.7s ease-in-out infinite;
+            }
+            @media (min-width: 768px) {
+                .xbot-presentation-unmute {
+                    font-size: clamp(48px, 5.4vw, 72px) !important;
+                    letter-spacing: 0.12em;
+                    padding: 24px 32px;
+                }
+            }
+            @keyframes xbot-unmute-breathe {
+                0%, 100% { opacity: 0.28; }
+                50% { opacity: 1; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .xbot-presentation-unmute {
+                    animation: none;
+                    opacity: 1;
+                }
             }
             .xbot-presentation-video.is-unmuted .xbot-presentation-unmute {
                 display: none;
