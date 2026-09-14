@@ -600,6 +600,8 @@
         var sessionEndedNoticeShown = false;
         var sessionEpisodeEnded = false;
         var closureNoticeRendered = false;
+        var presentationLockCount = 0;
+        var visitorHasSpoken = false;
 
         function isSessionClosurePayload(item, body) {
             var meta = (item && item.metadata && typeof item.metadata === 'object') ? item.metadata : {};
@@ -628,6 +630,9 @@
                 sessionEndedNoticeShown = false;
                 syncEmptyState();
             }
+            visitorHasSpoken = false;
+            presentationLockCount = 0;
+            setPresentationComposerLocked(false);
         }
 
         function pauseRealtimeTransportAfterClosure() {
@@ -1312,6 +1317,131 @@
             return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
+        function isMediaPlaceholderCaption(text) {
+            var s = String(text || '').trim().toLowerCase();
+            return s === '(vídeo)' || s === '(video)' || s === '(imagem)' || s === '(image)'
+                || s === '(áudio)' || s === '(audio)' || s === '(mídia)' || s === '(media)'
+                || s === '(documento)' || s === '(document)' || s === '(sticker)' || s === '—';
+        }
+
+        function isPresentationOpeningMeta(meta) {
+            return !!(meta && typeof meta === 'object' && (
+                meta.presentation_opening === true || meta.source === 'agent_presentation'
+            ));
+        }
+
+        function isPresentationComposerLocked() {
+            return presentationLockCount > 0;
+        }
+
+        function setPresentationComposerLocked(locked) {
+            var compose = document.querySelector('.xbot-compose');
+            var inputEl = document.getElementById('xbot-input');
+            var sendEl = document.getElementById('xbot-send');
+            var uploadEl = document.getElementById('xbot-upload');
+            var audioEl = document.getElementById('xbot-audio');
+            if (compose) {
+                if (locked) compose.classList.add('is-presentation-locked');
+                else compose.classList.remove('is-presentation-locked');
+            }
+            var nodes = [inputEl, sendEl, uploadEl, audioEl];
+            for (var i = 0; i < nodes.length; i++) {
+                var el = nodes[i];
+                if (!el) continue;
+                el.disabled = !!locked;
+                if (locked) el.setAttribute('aria-disabled', 'true');
+                else el.removeAttribute('aria-disabled');
+            }
+            if (inputEl) inputEl.readOnly = !!locked;
+            if (!locked) {
+                try {
+                    document.dispatchEvent(new CustomEvent('xbot:compose-unlocked'));
+                } catch (e) { /* ignore */ }
+            }
+        }
+
+        function acquirePresentationComposerLock() {
+            presentationLockCount += 1;
+            setPresentationComposerLocked(true);
+        }
+
+        function releasePresentationComposerLock() {
+            presentationLockCount = Math.max(0, presentationLockCount - 1);
+            if (presentationLockCount === 0) setPresentationComposerLocked(false);
+        }
+
+        function mountPresentationVideo(url) {
+            var wrap = document.createElement('div');
+            wrap.className = 'xbot-presentation-video';
+            wrap.setAttribute('role', 'button');
+            wrap.setAttribute('tabindex', '0');
+            wrap.setAttribute('aria-label', 'UNMUTE');
+
+            var vid = document.createElement('video');
+            vid.src = url;
+            vid.muted = true;
+            vid.defaultMuted = true;
+            vid.autoplay = true;
+            vid.playsInline = true;
+            vid.controls = false;
+            vid.preload = 'auto';
+            vid.setAttribute('muted', '');
+            vid.setAttribute('autoplay', '');
+            vid.setAttribute('playsinline', '');
+            vid.setAttribute('webkit-playsinline', '');
+            vid.setAttribute('controlslist', 'nodownload nofullscreen noremoteplayback');
+            vid.disablePictureInPicture = true;
+            vid.disableRemotePlayback = true;
+
+            var unmute = document.createElement('span');
+            unmute.className = 'xbot-presentation-unmute';
+            unmute.textContent = 'UNMUTE';
+
+            var finished = false;
+            function tryPlay() {
+                var p = vid.play();
+                if (p && typeof p.catch === 'function') p.catch(function () {});
+            }
+            function restartFromStart(withSound) {
+                if (withSound) {
+                    vid.muted = false;
+                    wrap.classList.add('is-unmuted');
+                    wrap.setAttribute('aria-label', 'Reproduzir do início');
+                }
+                try { vid.currentTime = 0; } catch (e) { /* ignore */ }
+                tryPlay();
+            }
+            function onActivate(ev) {
+                if (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                }
+                restartFromStart(true);
+            }
+
+            wrap.addEventListener('click', onActivate);
+            wrap.addEventListener('keydown', function (ev) {
+                if (!ev) return;
+                if (ev.key === 'Enter' || ev.key === ' ') onActivate(ev);
+            });
+            vid.addEventListener('ended', function () {
+                if (finished) return;
+                finished = true;
+                releasePresentationComposerLock();
+            });
+            vid.addEventListener('error', function () {
+                if (finished) return;
+                finished = true;
+                releasePresentationComposerLock();
+            });
+
+            wrap.appendChild(vid);
+            wrap.appendChild(unmute);
+            acquirePresentationComposerLock();
+            requestAnimationFrame(tryPlay);
+            return wrap;
+        }
+
         // Renderiza mensagem do bot com mídia (imagem do produto, arquivo, etc.)
         function appendBotMedia(ct, url, caption, meta, opts) {
             var cap = (caption || '').trim();
@@ -1322,6 +1452,7 @@
             )) {
                 cap = '';
             }
+            if (isMediaPlaceholderCaption(cap)) cap = '';
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
                 // Constrói DOM diretamente para poder anexar onerror —
@@ -1394,12 +1525,19 @@
                 }
                 return;
             } else if (ct === 'video') {
-                var vlabel = cap || 'vídeo';
-                var vhtml =
-                    '<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px;margin:4px 0 8px">' +
-                    '<source src="' + url.replace(/"/g, '&quot;') + '"></video>';
-                if (cap) vhtml += '<p>' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
-                appendMessage(vhtml, 'bot', Object.assign({}, opts, { rawHtml: true }));
+                var usePresentationPlayer = isPresentationOpeningMeta(meta) && !visitorHasSpoken;
+                if (usePresentationPlayer) {
+                    appendMessage('', 'bot', Object.assign({}, opts, {
+                        domNode: mountPresentationVideo(url),
+                        animateTyping: false
+                    }));
+                } else {
+                    var vhtml =
+                        '<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px;margin:4px 0 8px">' +
+                        '<source src="' + url.replace(/"/g, '&quot;') + '"></video>';
+                    if (cap) vhtml += '<p>' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+                    appendMessage(vhtml, 'bot', Object.assign({}, opts, { rawHtml: true, animateTyping: false }));
+                }
             } else if (ct === 'audio') {
                 var audioNode = createXbotAudioPlayer(url);
                 if (cap && cap.indexOf('🎵') !== 0) {
@@ -1603,6 +1741,7 @@
                     if ((list[h].sender || 'bot') === 'user') hasUserInHistory = true;
                     else botOnlyCount += 1;
                 }
+                visitorHasSpoken = hasUserInHistory;
                 // Ao entrar (só abertura do bot, sem fala do visitante): typewriter na abertura.
                 var animateOpening = !hasUserInHistory && botOnlyCount > 0 && botOnlyCount <= 3;
                 for (var i = 0; i < list.length; i++) {
@@ -2863,6 +3002,77 @@
                 border-radius: var(--xbot-radius-md);
                 display: block;
                 margin: 4px 0 8px;
+            }
+            .xbot-presentation-video {
+                position: relative;
+                width: 100%;
+                margin: 4px 0 8px;
+                border-radius: var(--xbot-radius-md);
+                overflow: hidden;
+                background: #111;
+                cursor: pointer;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+            .xbot-presentation-video:focus-visible {
+                outline: 2px solid rgba(var(--xbot-theme-rgb), 0.55);
+                outline-offset: 2px;
+            }
+            .xbot-presentation-video video {
+                display: block;
+                width: 100%;
+                max-width: 100%;
+                height: auto;
+                margin: 0;
+                border-radius: 0;
+                pointer-events: none;
+            }
+            .xbot-presentation-video video::-webkit-media-controls,
+            .xbot-presentation-video video::-webkit-media-controls-enclosure,
+            .xbot-presentation-video video::-webkit-media-controls-panel,
+            .xbot-presentation-video video::-webkit-media-controls-start-playback-button {
+                display: none !important;
+                -webkit-appearance: none;
+            }
+            .xbot-presentation-unmute {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 2;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+                padding: 10px 16px 18px;
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 0.22em;
+                text-transform: uppercase;
+                color: #fff;
+                background: linear-gradient(to bottom, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.04));
+                pointer-events: none;
+            }
+            .xbot-presentation-video.is-unmuted .xbot-presentation-unmute {
+                display: none;
+            }
+            .xbot-compose.is-presentation-locked .xbot-input,
+            .xbot-compose.is-presentation-locked .xbot-send,
+            .xbot-compose.is-presentation-locked .xbot-icon-btn {
+                opacity: 0.4;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+            .xbot-send:disabled,
+            .xbot-icon-btn:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+            .xbot-send:disabled:hover,
+            .xbot-icon-btn:disabled:hover {
+                background: transparent;
+                color: inherit;
             }
             .xbot-time {
                 font-size: 10px;
@@ -4344,6 +4554,7 @@
         function appendMessage(text, from, opts) {
             if (from === undefined) from = 'user';
             opts = opts || {};
+            if (from === 'user') visitorHasSpoken = true;
             const row = document.createElement('div');
             row.className = `xbot-message-row ${from}`;
             var hasCatalogGrid = from === 'bot' && String(text || '').indexOf('data-xbot="catalog-grid"') !== -1;
@@ -4461,6 +4672,7 @@
         async function sendUserText(text) {
             const value = String(text || '').trim();
             if (!value) return;
+            if (isPresentationComposerLocked()) return;
 
             resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
@@ -4512,6 +4724,7 @@
         }
 
         async function handleSendMessage() {
+            if (isPresentationComposerLocked()) return;
             const text = input.value.trim();
             if (!text) return;
             await sendUserText(text);
@@ -4529,8 +4742,15 @@
         fileInput.style.display = 'none';
         document.body.appendChild(fileInput);
         
-        uploadBtn.addEventListener('click', () => fileInput.click());
+        uploadBtn.addEventListener('click', () => {
+            if (isPresentationComposerLocked()) return;
+            fileInput.click();
+        });
         fileInput.addEventListener('change', async (e) => {
+            if (isPresentationComposerLocked()) {
+                e.target.value = '';
+                return;
+            }
             const file = e.target.files[0];
             if (!file) return;
 
@@ -4600,7 +4820,7 @@
             audioBtn.classList.remove('is-recording', 'is-uploading');
             audioBtn.innerHTML = XBOT_ICONS.mic;
             audioBtn.setAttribute('aria-label', 'Gravar áudio');
-            audioBtn.disabled = false;
+            audioBtn.disabled = isPresentationComposerLocked();
         }
 
         function setAudioBtnRecording() {
@@ -4637,6 +4857,7 @@
 
         audioBtn.addEventListener('click', async () => {
             if (isUploadingAudio) return;
+            if (isPresentationComposerLocked() && !isRecording) return;
             if (isRecording) {
                 isUploadingAudio = true;
                 try { mediaRecorder.stop(); } catch (e) { /* ignore */ }
