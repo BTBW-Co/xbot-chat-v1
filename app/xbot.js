@@ -1191,7 +1191,10 @@
                     actions: actions,
                     blocks: blocks,
                     interactive: source !== 'history' && source !== 'opening',
-                    animateTyping: false
+                    animateTyping: false,
+                    presentationOpening: source === 'opening' || (
+                        source !== 'history' && source !== 'hydrate' && isPresentationOpeningMeta(meta)
+                    )
                 });
             } else {
                 appendMessage(body, 'bot', {
@@ -1532,9 +1535,9 @@
                 }
                 return;
             } else if (ct === 'video') {
-                // Sem fala do visitante = abertura: player cinematográfico mesmo se a
-                // API omitir presentation_opening no metadata público.
-                var usePresentationPlayer = !visitorHasSpoken;
+                // Abertura recém-persistida: player cinematográfico (TAP TO UNMUTE).
+                // Reload da mesma sessão hidrata como histórico — não reproduz de novo.
+                var usePresentationPlayer = !visitorHasSpoken && !!(opts && opts.presentationOpening);
                 if (usePresentationPlayer) {
                     appendMessage('', 'bot', Object.assign({}, opts, {
                         domNode: mountPresentationVideo(url),
@@ -1751,8 +1754,9 @@
                     else botOnlyCount += 1;
                 }
                 visitorHasSpoken = hasUserInHistory;
-                // Ao entrar (só abertura do bot, sem fala do visitante): typewriter na abertura.
-                var animateOpening = !hasUserInHistory && botOnlyCount > 0 && botOnlyCount <= 3;
+                // Anima a abertura só quando ela acabou de ser persistida neste GET.
+                // Reload da mesma sessão hidrata como histórico (sem typewriter/vídeo TAP TO UNMUTE).
+                var animateOpening = !!data.presentation_started && !hasUserInHistory && botOnlyCount > 0;
                 for (var i = 0; i < list.length; i++) {
                     var item = list[i];
                     var body = (item.content || '').trim();
