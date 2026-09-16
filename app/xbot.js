@@ -1071,6 +1071,68 @@
             if (!root) return;
             var svg = root.querySelector ? root.querySelector('.xbot-think-face') : null;
             if (svg && typeof svg._xbThinkStop === 'function') svg._xbThinkStop();
+            stopThinkingStatusCycle(root);
+        }
+
+        function xbotUiLang() {
+            var raw = '';
+            try {
+                raw = String(
+                    (typeof navigator !== 'undefined' && (navigator.language || navigator.userLanguage)) || ''
+                ).toLowerCase();
+            } catch (e) {
+                raw = '';
+            }
+            if (raw.indexOf('pt') === 0) return 'pt';
+            if (raw.indexOf('es') === 0) return 'es';
+            return 'en';
+        }
+
+        function thinkingStatusWords() {
+            var lang = xbotUiLang();
+            if (lang === 'pt') return ['Explorando', 'Refletindo', 'Pensando', 'Editando', 'Planejando'];
+            if (lang === 'es') return ['Explorando', 'Reflexionando', 'Pensando', 'Editando', 'Planificando'];
+            return ['Exploring', 'Thought', 'Thinking', 'Editing', 'Planning'];
+        }
+
+        function stopThinkingStatusCycle(el) {
+            if (!el) return;
+            if (el._xbThinkStatusTimer) {
+                clearInterval(el._xbThinkStatusTimer);
+                el._xbThinkStatusTimer = 0;
+            }
+            if (el._xbThinkStatusSwap) {
+                clearTimeout(el._xbThinkStatusSwap);
+                el._xbThinkStatusSwap = 0;
+            }
+        }
+
+        function startThinkingStatusCycle(el) {
+            if (!el) return;
+            var label = el.querySelector ? el.querySelector('.xbot-think-status') : null;
+            if (!label) return;
+            if (el._xbThinkStatusTimer) return;
+            var words = thinkingStatusWords();
+            var i = Math.floor(Math.random() * words.length);
+            function applyWord() {
+                label.textContent = words[i];
+                el.setAttribute('aria-label', words[i]);
+            }
+            applyWord();
+            el._xbThinkStatusTimer = setInterval(function () {
+                if (!el.isConnected) {
+                    stopThinkingStatusCycle(el);
+                    return;
+                }
+                i = (i + 1) % words.length;
+                label.classList.add('is-swap');
+                el._xbThinkStatusSwap = setTimeout(function () {
+                    el._xbThinkStatusSwap = 0;
+                    if (!label.isConnected) return;
+                    applyWord();
+                    label.classList.remove('is-swap');
+                }, 160);
+            }, 1700);
         }
 
         // Move o indicador existente para o final (sem piscar) ou cria um novo se não existir.
@@ -1091,12 +1153,12 @@
                 var el = document.createElement('div');
                 el.className = 'xbot-typing';
                 el.setAttribute('aria-live', 'polite');
-                el.setAttribute('aria-label', botName + ' está pensando');
-                el.innerHTML = buildThinkingFaceHtml(36);
+                el.innerHTML = buildThinkingFaceHtml(36) + '<span class="xbot-think-status"></span>';
                 container.appendChild(el);
                 pendingTypingEl = el;
                 var face = el.querySelector('.xbot-think-face');
                 if (face) startThinkingFaceAnimation(face);
+                startThinkingStatusCycle(el);
             }
             container.scrollTop = container.scrollHeight;
         }
@@ -3183,6 +3245,20 @@
                 overflow: visible;
                 color: #00cfe8;
                 filter: drop-shadow(0 0 4px rgba(0, 207, 232, 0.4));
+            }
+            .xbot-think-status {
+                font-size: 13px;
+                font-weight: 500;
+                letter-spacing: 0.01em;
+                color: var(--xbot-muted);
+                white-space: nowrap;
+                opacity: 1;
+                transform: translateY(0);
+                transition: opacity 0.16s ease, transform 0.16s ease;
+            }
+            .xbot-think-status.is-swap {
+                opacity: 0;
+                transform: translateY(3px);
             }
             .xbot-typing-dots span {
                 width: 5px;
