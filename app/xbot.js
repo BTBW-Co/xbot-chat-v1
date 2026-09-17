@@ -2033,11 +2033,211 @@
             return name || 'arquivo';
         }
 
+        function isAppleTouchDevice() {
+            try {
+                var ua = String(navigator.userAgent || '');
+                if (/iPhone|iPad|iPod/i.test(ua)) return true;
+                // iPadOS 13+ se identifica como Mac, mas tem touch
+                if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+            } catch (e) { /* ignore */ }
+            return false;
+        }
+
+        function inferMediaMime(fileName, blobType) {
+            var mime = String(blobType || '').trim().toLowerCase();
+            if (mime && mime !== 'application/octet-stream' && mime !== 'binary/octet-stream') {
+                return mime;
+            }
+            var n = String(fileName || '').toLowerCase();
+            if (/\.mp4$/i.test(n)) return 'video/mp4';
+            if (/\.m4v$/i.test(n)) return 'video/x-m4v';
+            if (/\.mov$/i.test(n)) return 'video/quicktime';
+            if (/\.webm$/i.test(n)) return 'video/webm';
+            if (/\.png$/i.test(n)) return 'image/png';
+            if (/\.jpe?g$/i.test(n)) return 'image/jpeg';
+            if (/\.gif$/i.test(n)) return 'image/gif';
+            if (/\.webp$/i.test(n)) return 'image/webp';
+            if (/\.heic$/i.test(n)) return 'image/heic';
+            if (/\.mp3$/i.test(n)) return 'audio/mpeg';
+            if (/\.m4a$/i.test(n)) return 'audio/mp4';
+            if (/\.wav$/i.test(n)) return 'audio/wav';
+            if (/\.ogg$/i.test(n)) return 'audio/ogg';
+            return mime || 'application/octet-stream';
+        }
+
+        function mediaKindFromMime(mime) {
+            var m = String(mime || '').toLowerCase();
+            if (m.indexOf('image/') === 0) return 'image';
+            if (m.indexOf('video/') === 0) return 'video';
+            if (m.indexOf('audio/') === 0) return 'audio';
+            return 'file';
+        }
+
+        function buildTypedMediaFile(blob, fileName) {
+            var mime = inferMediaMime(fileName, blob && blob.type);
+            var name = String(fileName || 'arquivo');
+            // Garante extensão compatível com a Fototeca do iOS
+            if (mime === 'video/mp4' && !/\.mp4$/i.test(name)) name += '.mp4';
+            if (mime === 'image/jpeg' && !/\.jpe?g$/i.test(name)) name += '.jpg';
+            if (mime === 'image/png' && !/\.png$/i.test(name)) name += '.png';
+            try {
+                if (typeof File !== 'undefined') {
+                    return new File([blob], name, { type: mime });
+                }
+            } catch (e) { /* ignore */ }
+            try {
+                return new Blob([blob], { type: mime });
+            } catch (e2) {
+                return blob;
+            }
+        }
+
+        function closeXbotSaveSheet() {
+            var existing = document.getElementById('xbot-save-sheet');
+            if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+        }
+
+        /**
+         * iOS: após fetch async o gesto do usuário some e navigator.share falha.
+         * Mostra preview + botão "Salvar" (novo toque) → Compartilhar → Salvar na Fototeca.
+         */
+        function openIosSaveSheet(blob, fileName) {
+            closeXbotSaveSheet();
+            var typed = buildTypedMediaFile(blob, fileName);
+            var mime = (typed && typed.type) || inferMediaMime(fileName, blob && blob.type);
+            var kind = mediaKindFromMime(mime);
+            var objectUrl = URL.createObjectURL(typed || blob);
+
+            var sheet = document.createElement('div');
+            sheet.id = 'xbot-save-sheet';
+            sheet.className = 'xbot-save-sheet';
+            sheet.setAttribute('role', 'dialog');
+            sheet.setAttribute('aria-modal', 'true');
+            sheet.setAttribute('aria-label', 'Salvar mídia');
+
+            var card = document.createElement('div');
+            card.className = 'xbot-save-sheet-card';
+
+            var title = document.createElement('div');
+            title.className = 'xbot-save-sheet-title';
+            title.textContent = kind === 'video'
+                ? 'Salvar vídeo'
+                : (kind === 'image' ? 'Salvar foto' : 'Salvar arquivo');
+
+            var hint = document.createElement('p');
+            hint.className = 'xbot-save-sheet-hint';
+            hint.textContent = kind === 'image' || kind === 'video'
+                ? 'Toque em Salvar e escolha “Salvar na Fototeca” (ou Arquivos).'
+                : 'Toque em Salvar e escolha “Salvar em Arquivos”.';
+
+            var preview = document.createElement('div');
+            preview.className = 'xbot-save-sheet-preview';
+            if (kind === 'image') {
+                var img = document.createElement('img');
+                img.src = objectUrl;
+                img.alt = fileName || 'imagem';
+                preview.appendChild(img);
+            } else if (kind === 'video') {
+                var video = document.createElement('video');
+                video.src = objectUrl;
+                video.controls = true;
+                video.setAttribute('playsinline', '');
+                video.setAttribute('webkit-playsinline', '');
+                preview.appendChild(video);
+            } else if (kind === 'audio') {
+                var audio = document.createElement('audio');
+                audio.src = objectUrl;
+                audio.controls = true;
+                preview.appendChild(audio);
+            } else {
+                var fileLabel = document.createElement('div');
+                fileLabel.className = 'xbot-save-sheet-file';
+                fileLabel.textContent = '📎 ' + (fileName || 'arquivo');
+                preview.appendChild(fileLabel);
+            }
+
+            var actions = document.createElement('div');
+            actions.className = 'xbot-save-sheet-actions';
+
+            var saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = 'xbot-save-sheet-primary';
+            saveBtn.textContent = 'Salvar';
+
+            var closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'xbot-save-sheet-secondary';
+            closeBtn.textContent = 'Fechar';
+
+            function cleanup() {
+                closeXbotSaveSheet();
+                setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1500);
+            }
+
+            function doShare() {
+                var fileForShare = typed;
+                if (!(fileForShare instanceof File) && typeof File !== 'undefined') {
+                    try {
+                        fileForShare = new File([blob], fileName || 'arquivo', { type: mime });
+                    } catch (e) { fileForShare = typed; }
+                }
+                if (!navigator.share) {
+                    hint.textContent = 'Pressione e segure a mídia acima e toque em “Adicionar à Fototeca”.';
+                    return;
+                }
+                var payload = { files: [fileForShare], title: fileName || 'arquivo' };
+                var can = true;
+                try {
+                    if (navigator.canShare) can = !!navigator.canShare(payload);
+                } catch (e2) { can = false; }
+                if (!can) {
+                    // Alguns iOS recusam canShare mas aceitam share — tenta mesmo assim.
+                    payload = { files: [fileForShare] };
+                }
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Abrindo…';
+                navigator.share(payload).then(function () {
+                    cleanup();
+                }).catch(function (err) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Salvar';
+                    if (err && err.name === 'AbortError') return;
+                    hint.textContent = (kind === 'image' || kind === 'video')
+                        ? 'Não abriu o compartilhar. Pressione e segure a mídia e toque em “Adicionar à Fototeca”.'
+                        : 'Não abriu o compartilhar. Tente de novo ou use “Salvar em Arquivos”.';
+                    widgetLog('share iOS falhou', err && err.name);
+                });
+            }
+
+            saveBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                doShare();
+            });
+            closeBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                cleanup();
+            });
+            sheet.addEventListener('click', function (ev) {
+                if (ev.target === sheet) cleanup();
+            });
+
+            actions.appendChild(saveBtn);
+            actions.appendChild(closeBtn);
+            card.appendChild(title);
+            card.appendChild(hint);
+            card.appendChild(preview);
+            card.appendChild(actions);
+            sheet.appendChild(card);
+            document.body.appendChild(sheet);
+        }
+
         function downloadMediaUrl(url, filename, messageId, triggerBtn) {
             var href = String(url || '').trim();
             var name = guessMediaFilename(href, filename);
             var msgId = messageId ? String(messageId).trim() : '';
             if (!href && !msgId) return;
+            var onApple = isAppleTouchDevice();
 
             function setBusy(on) {
                 if (!triggerBtn) return;
@@ -2045,11 +2245,12 @@
                 triggerBtn.classList.toggle('is-busy', !!on);
                 triggerBtn.setAttribute('aria-busy', on ? 'true' : 'false');
                 var label = triggerBtn.querySelector('span');
-                if (label) label.textContent = on ? 'Baixando…' : 'Baixar';
+                if (label) label.textContent = on ? 'Preparando…' : (onApple ? 'Salvar' : 'Baixar');
             }
 
             function triggerBlobSave(blob, downloadName) {
-                var objectUrl = URL.createObjectURL(blob);
+                var typed = buildTypedMediaFile(blob, downloadName);
+                var objectUrl = URL.createObjectURL(typed || blob);
                 var a = document.createElement('a');
                 a.href = objectUrl;
                 a.setAttribute('download', downloadName || 'arquivo');
@@ -2063,24 +2264,21 @@
 
             function shareOrSaveBlob(blob) {
                 var fileName = name || 'arquivo';
-                var mime = (blob && blob.type) || 'application/octet-stream';
-                var typed = blob;
-                try {
-                    if (typeof File !== 'undefined') {
-                        typed = new File([blob], fileName, { type: mime });
-                    }
-                } catch (e) { typed = blob; }
+                // iOS: <a download> não grava na Fototeca — sheet com share + long-press.
+                if (onApple) {
+                    openIosSaveSheet(blob, fileName);
+                    return Promise.resolve();
+                }
+                var typed = buildTypedMediaFile(blob, fileName);
                 var canShare = false;
                 try {
                     canShare = !!(navigator.canShare && typed && navigator.canShare({ files: [typed] }));
                 } catch (e2) { canShare = false; }
-                // Mobile: share sheet → Salvar na Fotos / Arquivos.
-                if (canShare && typeof navigator.share === 'function') {
+                if (canShare && typeof navigator.share === 'function' && isMobileLayout()) {
                     return navigator.share({
                         files: [typed],
                         title: fileName,
                     }).catch(function (err) {
-                        // AbortError = usuário cancelou; não cai no download automático.
                         if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')) {
                             return;
                         }
@@ -2120,15 +2318,11 @@
 
             var chain = proxyPromise
                 ? proxyPromise.catch(function () {
-                    // Proxy falhou: tenta blob direto (só funciona se o host tiver CORS).
                     if (!href) throw new Error('download_unavailable');
-                    if (href.indexOf('blob:') === 0) {
-                        return fetchAsBlob(href, {});
-                    }
                     return fetchAsBlob(href, {});
                 })
                 : (href
-                    ? (href.indexOf('blob:') === 0 ? fetchAsBlob(href, {}) : fetchAsBlob(href, {}))
+                    ? fetchAsBlob(href, {})
                     : Promise.reject(new Error('download_unavailable')));
 
             chain
@@ -2137,7 +2331,7 @@
                     if (triggerBtn) {
                         triggerBtn.setAttribute('title', 'Não foi possível baixar');
                         setTimeout(function () {
-                            triggerBtn.setAttribute('title', 'Baixar');
+                            triggerBtn.setAttribute('title', onApple ? 'Salvar' : 'Baixar');
                         }, 2500);
                     }
                     widgetLog('download falhou', { messageId: msgId || null });
@@ -2151,9 +2345,11 @@
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'xbot-media-download';
-            btn.setAttribute('aria-label', 'Baixar arquivo');
-            btn.title = 'Baixar';
-            btn.innerHTML = XBOT_ICONS.download + '<span>Baixar</span>';
+            var apple = isAppleTouchDevice();
+            var actionLabel = apple ? 'Salvar' : 'Baixar';
+            btn.setAttribute('aria-label', apple ? 'Salvar na Fototeca' : 'Baixar arquivo');
+            btn.title = actionLabel;
+            btn.innerHTML = XBOT_ICONS.download + '<span>' + actionLabel + '</span>';
             if (messageId) btn.setAttribute('data-message-id', String(messageId));
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault();
@@ -2929,6 +3125,92 @@
             }
             .xbot-media-download:disabled {
                 pointer-events: none;
+            }
+            .xbot-save-sheet {
+                position: fixed;
+                inset: 0;
+                z-index: 2147483646;
+                display: flex;
+                align-items: flex-end;
+                justify-content: center;
+                padding: 16px;
+                padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+                background: rgba(15, 23, 42, 0.55);
+                -webkit-tap-highlight-color: transparent;
+            }
+            .xbot-save-sheet-card {
+                width: min(100%, 26rem);
+                background: #fff;
+                color: #0f172a;
+                border-radius: 16px;
+                padding: 16px;
+                box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28);
+            }
+            .xbot-save-sheet-title {
+                font-size: 16px;
+                font-weight: 650;
+                letter-spacing: -0.02em;
+            }
+            .xbot-save-sheet-hint {
+                margin: 6px 0 12px;
+                font-size: 13px;
+                line-height: 1.4;
+                color: #64748b;
+            }
+            .xbot-save-sheet-preview {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                max-height: 46vh;
+                overflow: hidden;
+                border-radius: 12px;
+                background: #0f172a0a;
+            }
+            .xbot-save-sheet-preview img,
+            .xbot-save-sheet-preview video {
+                display: block;
+                width: 100%;
+                max-height: 46vh;
+                object-fit: contain;
+                background: #000;
+            }
+            .xbot-save-sheet-preview audio {
+                width: 100%;
+                margin: 12px;
+            }
+            .xbot-save-sheet-file {
+                padding: 18px 12px;
+                font-size: 14px;
+                word-break: break-word;
+            }
+            .xbot-save-sheet-actions {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-top: 14px;
+            }
+            .xbot-save-sheet-primary,
+            .xbot-save-sheet-secondary {
+                width: 100%;
+                border: 0;
+                border-radius: 12px;
+                padding: 12px 14px;
+                font: inherit;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+            }
+            .xbot-save-sheet-primary {
+                background: var(--xbot-theme, #25d366);
+                color: #fff;
+            }
+            .xbot-save-sheet-primary:disabled {
+                opacity: 0.7;
+                cursor: wait;
+            }
+            .xbot-save-sheet-secondary {
+                background: #f1f5f9;
+                color: #334155;
             }
             .xbot-media-download svg {
                 flex-shrink: 0;
