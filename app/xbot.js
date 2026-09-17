@@ -1556,6 +1556,7 @@
                 cap = '';
             }
             if (isMediaPlaceholderCaption(cap)) cap = '';
+            var downloadName = guessMediaFilename(url, filename || (ct === 'video' ? 'video.mp4' : ct === 'image' ? 'imagem.jpg' : ct === 'audio' ? 'audio.webm' : 'arquivo'));
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
                 // Constrói DOM diretamente para poder anexar onerror —
@@ -1581,14 +1582,7 @@
                 contentDiv.className = 'xbot-message-content';
                 var textDiv = document.createElement('div');
                 textDiv.className = 'xbot-text';
-                // Imagem com onerror: se a URL (ex: presigned S3) falhar, esconde silenciosamente
-                var img = document.createElement('img');
-                img.src = url;
-                img.alt = lines[0] || 'imagem';
-                img.loading = 'lazy';
-                img.style.cssText = 'max-width:100%;height:auto;border-radius:12px;display:block;margin:2px 0 6px';
-                img.onerror = function() { this.style.display = 'none'; };
-                textDiv.appendChild(img);
+                textDiv.appendChild(wrapMediaWithDownload(createMediaImageEl(url, lines[0] || 'imagem'), url, downloadName, 'image'));
                 if (lines.length > 0) {
                     var p1 = document.createElement('p');
                     p1.style.margin = '2px 0 0';
@@ -1633,18 +1627,21 @@
                 var usePresentationPlayer = !visitorHasSpoken && !!(opts && opts.presentationOpening);
                 if (usePresentationPlayer) {
                     appendMessage('', 'bot', Object.assign({}, opts, {
-                        domNode: mountPresentationVideo(url),
+                        domNode: wrapMediaWithDownload(mountPresentationVideo(url), url, downloadName, 'video'),
                         animateTyping: false
                     }));
                 } else {
-                    var vhtml =
-                        '<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px;margin:4px 0 8px">' +
-                        '<source src="' + url.replace(/"/g, '&quot;') + '"></video>';
-                    if (cap) vhtml += '<p>' + cap.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
-                    appendMessage(vhtml, 'bot', Object.assign({}, opts, { rawHtml: true, animateTyping: false }));
+                    var videoBlock = document.createElement('div');
+                    videoBlock.appendChild(wrapMediaWithDownload(createMediaVideoEl(url), url, downloadName, 'video'));
+                    if (cap) {
+                        var vCap = document.createElement('p');
+                        vCap.textContent = cap;
+                        videoBlock.appendChild(vCap);
+                    }
+                    appendMessage('', 'bot', Object.assign({}, opts, { domNode: videoBlock, animateTyping: false }));
                 }
             } else if (ct === 'audio') {
-                var audioNode = createXbotAudioPlayer(url);
+                var audioNode = wrapMediaWithDownload(createXbotAudioPlayer(url), url, downloadName, 'audio');
                 if (cap && cap.indexOf('🎵') !== 0) {
                     var audioWrap = document.createElement('div');
                     audioWrap.appendChild(audioNode);
@@ -1658,7 +1655,19 @@
                 }
             } else {
                 var label = cap || (meta && meta.filename) || 'Arquivo';
-                appendMessage('[📎 ' + label + '](' + url + ')', 'bot', opts);
+                var fileCard = document.createElement('div');
+                fileCard.className = 'xbot-media-file';
+                var fileLink = document.createElement('a');
+                fileLink.href = url;
+                fileLink.target = '_blank';
+                fileLink.rel = 'noopener noreferrer';
+                fileLink.className = 'xbot-media-file-name';
+                fileLink.textContent = '📎 ' + label;
+                fileCard.appendChild(fileLink);
+                appendMessage('', 'bot', Object.assign({}, opts, {
+                    domNode: wrapMediaWithDownload(fileCard, url, downloadName || label, 'file'),
+                    animateTyping: false
+                }));
             }
         }
 
@@ -1859,14 +1868,37 @@
                     if ((item.sender || 'bot') === 'user') {
                         var histCt = String(item.content_type || '').toLowerCase();
                         if (histMedia && (histCt === 'audio' || histCt === 'ptt')) {
-                            appendMessage('', 'user', { domNode: createXbotAudioPlayer(histMedia) });
+                            appendMessage('', 'user', {
+                                domNode: wrapMediaWithDownload(
+                                    createXbotAudioPlayer(histMedia),
+                                    histMedia,
+                                    guessMediaFilename(histMedia, 'audio.webm'),
+                                    'audio'
+                                )
+                            });
                         } else if (histMedia && histCt === 'video') {
-                            var uVideo =
-                                '<video controls playsinline preload="metadata" style="max-width:100%;border-radius:12px;margin:4px 0 8px">' +
-                                '<source src="' + String(histMedia).replace(/"/g, '&quot;') + '"></video>';
-                            appendMessage(uVideo, 'user', { rawHtml: true });
+                            appendMessage('', 'user', {
+                                domNode: wrapMediaWithDownload(
+                                    createMediaVideoEl(histMedia),
+                                    histMedia,
+                                    guessMediaFilename(histMedia, 'video.mp4'),
+                                    'video'
+                                )
+                            });
                         } else if (histMedia && histCt === 'image') {
-                            appendMessage('![imagem](' + histMedia + ')' + (body ? '\n\n' + body : ''), 'user');
+                            var userImgBlock = document.createElement('div');
+                            userImgBlock.appendChild(wrapMediaWithDownload(
+                                createMediaImageEl(histMedia, 'imagem'),
+                                histMedia,
+                                guessMediaFilename(histMedia, 'imagem.jpg'),
+                                'image'
+                            ));
+                            if (body) {
+                                var userCap = document.createElement('p');
+                                userCap.textContent = body;
+                                userImgBlock.appendChild(userCap);
+                            }
+                            appendMessage('', 'user', { domNode: userImgBlock });
                         } else {
                             appendMessage(body, 'user');
                         }
@@ -1977,7 +2009,101 @@
             spinner: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 019 9"/></svg>',
             play: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
             pause: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>',
+            download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
         };
+
+        function guessMediaFilename(url, fallback) {
+            var name = (fallback || '').trim();
+            if (name && /\.[a-z0-9]{2,8}$/i.test(name) && name.indexOf('/') < 0) return name;
+            try {
+                var path = new URL(String(url || ''), window.location.href).pathname || '';
+                var base = decodeURIComponent((path.split('/').pop() || '').split('?')[0] || '');
+                if (base && /\.[a-z0-9]{2,8}$/i.test(base)) return base.slice(0, 120);
+            } catch (e) { /* ignore */ }
+            return name || 'arquivo';
+        }
+
+        function downloadMediaUrl(url, filename) {
+            var href = String(url || '').trim();
+            if (!href) return;
+            var name = guessMediaFilename(href, filename);
+            function triggerAnchor(src, downloadName) {
+                var a = document.createElement('a');
+                a.href = src;
+                if (downloadName) a.setAttribute('download', downloadName);
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }
+            // blob: URLs locais: download direto.
+            if (href.indexOf('blob:') === 0) {
+                triggerAnchor(href, name);
+                return;
+            }
+            fetch(href, { mode: 'cors', credentials: 'omit' })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('download_fetch_failed');
+                    return res.blob();
+                })
+                .then(function (blob) {
+                    var objectUrl = URL.createObjectURL(blob);
+                    triggerAnchor(objectUrl, name);
+                    setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2000);
+                })
+                .catch(function () {
+                    triggerAnchor(href, name);
+                });
+        }
+
+        function createMediaDownloadButton(url, filename) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'xbot-media-download';
+            btn.setAttribute('aria-label', 'Baixar arquivo');
+            btn.title = 'Baixar';
+            btn.innerHTML = XBOT_ICONS.download + '<span>Baixar</span>';
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                downloadMediaUrl(url, filename);
+            });
+            return btn;
+        }
+
+        function wrapMediaWithDownload(mediaNode, url, filename, variant) {
+            var wrap = document.createElement('div');
+            wrap.className = 'xbot-media-wrap' + (variant ? ' xbot-media-wrap--' + variant : '');
+            if (mediaNode && mediaNode.nodeType === 1) {
+                mediaNode.classList.add('xbot-media');
+                wrap.appendChild(mediaNode);
+            }
+            wrap.appendChild(createMediaDownloadButton(url, filename));
+            return wrap;
+        }
+
+        function createMediaImageEl(url, alt) {
+            var img = document.createElement('img');
+            img.className = 'xbot-media';
+            img.src = url;
+            img.alt = alt || 'imagem';
+            img.loading = 'lazy';
+            img.onerror = function () { this.style.display = 'none'; };
+            return img;
+        }
+
+        function createMediaVideoEl(url) {
+            var vid = document.createElement('video');
+            vid.className = 'xbot-media';
+            vid.controls = true;
+            vid.setAttribute('playsinline', '');
+            vid.preload = 'metadata';
+            var source = document.createElement('source');
+            source.src = url;
+            vid.appendChild(source);
+            return vid;
+        }
 
         function formatAudioClock(seconds) {
             if (!isFinite(seconds) || seconds < 0) return '0:00';
@@ -2648,6 +2774,88 @@
                 display: block;
                 margin: 2px 0 6px;
             }
+            .xbot-media-wrap {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+                width: min(50%, 15rem);
+                max-width: 100%;
+                margin: 2px 0 4px;
+            }
+            .xbot-media-wrap--audio {
+                width: min(100%, 16rem);
+            }
+            .xbot-media-wrap--file {
+                width: min(100%, 16rem);
+            }
+            .xbot-media {
+                display: block;
+                width: 100%;
+                height: auto;
+                max-width: 100%;
+                border-radius: var(--xbot-radius-md);
+                margin: 0;
+                background: #0f172a0a;
+            }
+            .xbot-media-wrap .xbot-presentation-video {
+                width: 100%;
+                margin: 0;
+            }
+            .xbot-media-wrap .xbot-audio-player {
+                width: 100%;
+                margin: 0;
+            }
+            .xbot-media-download {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                margin: 0;
+                padding: 2px 2px 0;
+                border: 0;
+                background: transparent;
+                color: var(--xbot-muted);
+                font: inherit;
+                font-size: 12px;
+                font-weight: 550;
+                line-height: 1.2;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .xbot-media-download:hover,
+            .xbot-media-download:focus-visible {
+                color: var(--xbot-theme);
+                outline: none;
+            }
+            .xbot-media-download svg {
+                flex-shrink: 0;
+            }
+            .xbot-media-file {
+                display: block;
+                width: 100%;
+                padding: 8px 10px;
+                border-radius: var(--xbot-radius-md);
+                border: 1px solid var(--xbot-border);
+                background: rgba(15, 23, 42, 0.03);
+                font-size: 13px;
+                word-break: break-word;
+            }
+            .xbot-media-file-name {
+                color: inherit;
+                text-decoration: none;
+            }
+            .xbot-media-file-name:hover {
+                color: var(--xbot-theme);
+            }
+            @media screen and (min-width: 601px) {
+                .xbot-media-wrap {
+                    width: min(68%, 24rem);
+                }
+                .xbot-media-wrap--audio,
+                .xbot-media-wrap--file {
+                    width: min(100%, 22rem);
+                }
+            }
             .xbot-message.user {
                 background: rgba(var(--xbot-theme-rgb), 0.12);
                 border: 1px solid rgba(var(--xbot-theme-rgb), 0.22);
@@ -3116,6 +3324,9 @@
                 display: block;
                 margin: 4px 0 8px;
             }
+            .xbot-message .xbot-media {
+                margin: 0;
+            }
             .xbot-presentation-video {
                 position: relative;
                 width: 100%;
@@ -3578,6 +3789,13 @@
                     padding: 14px 12px;
                 }
                 .xbot-message-row.user { max-width: 88%; }
+                .xbot-media-wrap {
+                    width: min(50vw, 14rem);
+                }
+                .xbot-media-wrap--audio,
+                .xbot-media-wrap--file {
+                    width: min(78vw, 16rem);
+                }
                 .xbot-compose {
                     padding: 10px 12px 8px;
                 }
@@ -4911,21 +5129,31 @@
             previewCol.className = 'xbot-message-col';
             const preview = document.createElement('div');
             preview.className = 'xbot-message user';
+            var localPreviewUrl = URL.createObjectURL(file);
             if (file.type.startsWith('image/')) {
-            const img = document.createElement('img');
-            img.src = URL.createObjectURL(file);
-            img.style.maxWidth = '100%';
-            img.style.borderRadius = '10px';
-            preview.appendChild(img);
+                preview.appendChild(wrapMediaWithDownload(
+                    createMediaImageEl(localPreviewUrl, file.name || 'imagem'),
+                    localPreviewUrl,
+                    file.name || 'imagem.jpg',
+                    'image'
+                ));
             } else if (file.type.startsWith('video/')) {
-            const vidEl = document.createElement('video');
-            vidEl.src = URL.createObjectURL(file);
-            vidEl.controls = true;
-            vidEl.style.maxWidth = '100%';
-            vidEl.style.borderRadius = '10px';
-            preview.appendChild(vidEl);
+                preview.appendChild(wrapMediaWithDownload(
+                    createMediaVideoEl(localPreviewUrl),
+                    localPreviewUrl,
+                    file.name || 'video.mp4',
+                    'video'
+                ));
             } else {
-            preview.textContent = 'Anexo: ' + file.name;
+                var filePreview = document.createElement('div');
+                filePreview.className = 'xbot-media-file';
+                filePreview.textContent = '📎 ' + file.name;
+                preview.appendChild(wrapMediaWithDownload(
+                    filePreview,
+                    localPreviewUrl,
+                    file.name || 'arquivo',
+                    'file'
+                ));
             }
             const previewTime = document.createElement('div');
             previewTime.className = 'xbot-time';
@@ -5042,7 +5270,15 @@
                     formData.append('file', blob, picked.filename || 'audio.webm');
 
                     setAudioBtnUploading();
-                    appendMessage('', 'user', { domNode: createXbotAudioPlayer(URL.createObjectURL(blob)) });
+                    var localAudioUrl = URL.createObjectURL(blob);
+                    appendMessage('', 'user', {
+                        domNode: wrapMediaWithDownload(
+                            createXbotAudioPlayer(localAudioUrl),
+                            localAudioUrl,
+                            picked.filename || 'audio.webm',
+                            'audio'
+                        )
+                    });
                     beginWaitingForBot();
 
                     try {
