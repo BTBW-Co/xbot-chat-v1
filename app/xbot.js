@@ -419,6 +419,11 @@
             return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/presence';
         }
 
+        function getMediaDownloadUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/download';
+        }
+
         var lastBotPollAt = null;
         var lastBotMessageId = null;
         var seenBotMessageKeys = {};
@@ -1284,6 +1289,7 @@
                     blocks: blocks,
                     interactive: source !== 'history' && source !== 'opening',
                     animateTyping: false,
+                    messageId: item && item.id ? item.id : null,
                     presentationOpening: source === 'opening' || (
                         source !== 'history' && source !== 'hydrate' && isPresentationOpeningMeta(meta)
                     )
@@ -1559,6 +1565,7 @@
             }
             if (isMediaPlaceholderCaption(cap)) cap = '';
             var downloadName = guessMediaFilename(url, filename || (ct === 'video' ? 'video.mp4' : ct === 'image' ? 'imagem.jpg' : ct === 'audio' ? 'audio.webm' : 'arquivo'));
+            var messageId = opts && opts.messageId ? opts.messageId : null;
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
                 // Constrói DOM diretamente para poder anexar onerror —
@@ -1584,7 +1591,7 @@
                 contentDiv.className = 'xbot-message-content';
                 var textDiv = document.createElement('div');
                 textDiv.className = 'xbot-text';
-                textDiv.appendChild(wrapMediaWithDownload(createMediaImageEl(url, lines[0] || 'imagem'), url, downloadName, 'image'));
+                textDiv.appendChild(wrapMediaWithDownload(createMediaImageEl(url, lines[0] || 'imagem'), url, downloadName, 'image', messageId));
                 if (lines.length > 0) {
                     var p1 = document.createElement('p');
                     p1.style.margin = '2px 0 0';
@@ -1629,12 +1636,12 @@
                 var usePresentationPlayer = !visitorHasSpoken && !!(opts && opts.presentationOpening);
                 if (usePresentationPlayer) {
                     appendMessage('', 'bot', Object.assign({}, opts, {
-                        domNode: wrapMediaWithDownload(mountPresentationVideo(url), url, downloadName, 'video'),
+                        domNode: wrapMediaWithDownload(mountPresentationVideo(url), url, downloadName, 'video', messageId),
                         animateTyping: false
                     }));
                 } else {
                     var videoBlock = document.createElement('div');
-                    videoBlock.appendChild(wrapMediaWithDownload(createMediaVideoEl(url), url, downloadName, 'video'));
+                    videoBlock.appendChild(wrapMediaWithDownload(createMediaVideoEl(url), url, downloadName, 'video', messageId));
                     if (cap) {
                         var vCap = document.createElement('p');
                         vCap.textContent = cap;
@@ -1643,7 +1650,7 @@
                     appendMessage('', 'bot', Object.assign({}, opts, { domNode: videoBlock, animateTyping: false }));
                 }
             } else if (ct === 'audio') {
-                var audioNode = wrapMediaWithDownload(createXbotAudioPlayer(url), url, downloadName, 'audio');
+                var audioNode = wrapMediaWithDownload(createXbotAudioPlayer(url), url, downloadName, 'audio', messageId);
                 if (cap && cap.indexOf('🎵') !== 0) {
                     var audioWrap = document.createElement('div');
                     audioWrap.appendChild(audioNode);
@@ -1659,15 +1666,12 @@
                 var label = cap || (meta && meta.filename) || 'Arquivo';
                 var fileCard = document.createElement('div');
                 fileCard.className = 'xbot-media-file';
-                var fileLink = document.createElement('a');
-                fileLink.href = url;
-                fileLink.target = '_blank';
-                fileLink.rel = 'noopener noreferrer';
-                fileLink.className = 'xbot-media-file-name';
-                fileLink.textContent = '📎 ' + label;
-                fileCard.appendChild(fileLink);
+                var fileNameEl = document.createElement('span');
+                fileNameEl.className = 'xbot-media-file-name';
+                fileNameEl.textContent = '📎 ' + label;
+                fileCard.appendChild(fileNameEl);
                 appendMessage('', 'bot', Object.assign({}, opts, {
-                    domNode: wrapMediaWithDownload(fileCard, url, downloadName || label, 'file'),
+                    domNode: wrapMediaWithDownload(fileCard, url, downloadName || label, 'file', messageId),
                     animateTyping: false
                 }));
             }
@@ -1869,13 +1873,15 @@
                     if (!body && !histMedia) continue;
                     if ((item.sender || 'bot') === 'user') {
                         var histCt = String(item.content_type || '').toLowerCase();
+                        var histMsgId = item.id || null;
                         if (histMedia && (histCt === 'audio' || histCt === 'ptt')) {
                             appendMessage('', 'user', {
                                 domNode: wrapMediaWithDownload(
                                     createXbotAudioPlayer(histMedia),
                                     histMedia,
                                     guessMediaFilename(histMedia, 'audio.webm'),
-                                    'audio'
+                                    'audio',
+                                    histMsgId
                                 )
                             });
                         } else if (histMedia && histCt === 'video') {
@@ -1884,7 +1890,8 @@
                                     createMediaVideoEl(histMedia),
                                     histMedia,
                                     guessMediaFilename(histMedia, 'video.mp4'),
-                                    'video'
+                                    'video',
+                                    histMsgId
                                 )
                             });
                         } else if (histMedia && histCt === 'image') {
@@ -1893,7 +1900,8 @@
                                 createMediaImageEl(histMedia, 'imagem'),
                                 histMedia,
                                 guessMediaFilename(histMedia, 'imagem.jpg'),
-                                'image'
+                                'image',
+                                histMsgId
                             ));
                             if (body) {
                                 var userCap = document.createElement('p');
@@ -2025,80 +2033,138 @@
             return name || 'arquivo';
         }
 
-        function downloadMediaUrl(url, filename) {
+        function downloadMediaUrl(url, filename, messageId, triggerBtn) {
             var href = String(url || '').trim();
-            if (!href) return;
             var name = guessMediaFilename(href, filename);
-            function triggerAnchor(src, downloadName) {
+            var msgId = messageId ? String(messageId).trim() : '';
+            if (!href && !msgId) return;
+
+            function setBusy(on) {
+                if (!triggerBtn) return;
+                triggerBtn.disabled = !!on;
+                triggerBtn.classList.toggle('is-busy', !!on);
+                triggerBtn.setAttribute('aria-busy', on ? 'true' : 'false');
+                var label = triggerBtn.querySelector('span');
+                if (label) label.textContent = on ? 'Baixando…' : 'Baixar';
+            }
+
+            function triggerBlobSave(blob, downloadName) {
+                var objectUrl = URL.createObjectURL(blob);
                 var a = document.createElement('a');
-                a.href = src;
+                a.href = objectUrl;
                 a.setAttribute('download', downloadName || 'arquivo');
                 a.rel = 'noopener';
-                // Sem target=_blank: baixa no device em vez de abrir outra aba.
+                a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
+                setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 4000);
             }
+
             function shareOrSaveBlob(blob) {
                 var fileName = name || 'arquivo';
+                var mime = (blob && blob.type) || 'application/octet-stream';
                 var typed = blob;
                 try {
-                    if (blob && blob.type && typeof File !== 'undefined') {
-                        typed = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
+                    if (typeof File !== 'undefined') {
+                        typed = new File([blob], fileName, { type: mime });
                     }
-                } catch (e) { /* ignore File ctor */ }
+                } catch (e) { typed = blob; }
                 var canShare = false;
                 try {
                     canShare = !!(navigator.canShare && typed && navigator.canShare({ files: [typed] }));
                 } catch (e2) { canShare = false; }
-                if (canShare && navigator.share) {
-                    return navigator.share({ files: [typed], title: fileName }).catch(function () {
-                        var objectUrl = URL.createObjectURL(blob);
-                        triggerAnchor(objectUrl, fileName);
-                        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2500);
+                // Mobile: share sheet → Salvar na Fotos / Arquivos.
+                if (canShare && typeof navigator.share === 'function') {
+                    return navigator.share({
+                        files: [typed],
+                        title: fileName,
+                    }).catch(function (err) {
+                        // AbortError = usuário cancelou; não cai no download automático.
+                        if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')) {
+                            return;
+                        }
+                        triggerBlobSave(blob, fileName);
                     });
                 }
-                var objectUrl = URL.createObjectURL(blob);
-                triggerAnchor(objectUrl, fileName);
-                setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2500);
+                triggerBlobSave(blob, fileName);
                 return Promise.resolve();
             }
-            if (href.indexOf('blob:') === 0) {
-                fetch(href)
-                    .then(function (res) { return res.blob(); })
-                    .then(shareOrSaveBlob)
-                    .catch(function () { triggerAnchor(href, name); });
-                return;
-            }
-            fetch(href, { mode: 'cors', credentials: 'omit' })
-                .then(function (res) {
-                    if (!res.ok) throw new Error('download_fetch_failed');
+
+            function fetchAsBlob(fetchUrl, headers) {
+                return fetch(fetchUrl, {
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'omit',
+                    headers: headers || {},
+                }).then(function (res) {
+                    if (!res.ok) throw new Error('download_http_' + res.status);
                     return res.blob();
+                });
+            }
+
+            setBusy(true);
+
+            var proxyBase = getMediaDownloadUrl();
+            var vid = getVisitorId();
+            var proxyPromise = null;
+            if (proxyBase && channelId && vid && (msgId || href)) {
+                var qs =
+                    '?channel_id=' + encodeURIComponent(channelId) +
+                    '&visitor_id=' + encodeURIComponent(vid) +
+                    '&filename=' + encodeURIComponent(name || 'arquivo');
+                if (msgId) qs += '&message_id=' + encodeURIComponent(msgId);
+                if (href) qs += '&url=' + encodeURIComponent(href);
+                proxyPromise = fetchAsBlob(proxyBase + qs, buildAuthHeaders({}));
+            }
+
+            var chain = proxyPromise
+                ? proxyPromise.catch(function () {
+                    // Proxy falhou: tenta blob direto (só funciona se o host tiver CORS).
+                    if (!href) throw new Error('download_unavailable');
+                    if (href.indexOf('blob:') === 0) {
+                        return fetchAsBlob(href, {});
+                    }
+                    return fetchAsBlob(href, {});
                 })
+                : (href
+                    ? (href.indexOf('blob:') === 0 ? fetchAsBlob(href, {}) : fetchAsBlob(href, {}))
+                    : Promise.reject(new Error('download_unavailable')));
+
+            chain
                 .then(shareOrSaveBlob)
                 .catch(function () {
-                    // Último recurso: download same-document (sem nova aba).
-                    triggerAnchor(href, name);
+                    if (triggerBtn) {
+                        triggerBtn.setAttribute('title', 'Não foi possível baixar');
+                        setTimeout(function () {
+                            triggerBtn.setAttribute('title', 'Baixar');
+                        }, 2500);
+                    }
+                    widgetLog('download falhou', { messageId: msgId || null });
+                })
+                .finally(function () {
+                    setBusy(false);
                 });
         }
 
-        function createMediaDownloadButton(url, filename) {
+        function createMediaDownloadButton(url, filename, messageId) {
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'xbot-media-download';
             btn.setAttribute('aria-label', 'Baixar arquivo');
             btn.title = 'Baixar';
             btn.innerHTML = XBOT_ICONS.download + '<span>Baixar</span>';
+            if (messageId) btn.setAttribute('data-message-id', String(messageId));
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault();
                 ev.stopPropagation();
                 suppressMessagesAutoScroll(2000);
-                downloadMediaUrl(url, filename);
+                downloadMediaUrl(url, filename, messageId || btn.getAttribute('data-message-id'), btn);
             });
             return btn;
         }
 
-        function wrapMediaWithDownload(mediaNode, url, filename, variant) {
+        function wrapMediaWithDownload(mediaNode, url, filename, variant, messageId) {
             var wrap = document.createElement('div');
             wrap.className = 'xbot-media-wrap' + (variant ? ' xbot-media-wrap--' + variant : '');
             if (mediaNode && mediaNode.nodeType === 1) {
@@ -2107,7 +2173,7 @@
                 bindMediaInteractionScrollGuard(mediaNode);
             }
             bindMediaInteractionScrollGuard(wrap);
-            wrap.appendChild(createMediaDownloadButton(url, filename));
+            wrap.appendChild(createMediaDownloadButton(url, filename, messageId));
             return wrap;
         }
 
@@ -2852,10 +2918,17 @@
                 cursor: pointer;
                 -webkit-tap-highlight-color: transparent;
             }
+            .xbot-media-download.is-busy {
+                opacity: 0.7;
+                cursor: wait;
+            }
             .xbot-media-download:hover,
             .xbot-media-download:focus-visible {
                 color: var(--xbot-theme);
                 outline: none;
+            }
+            .xbot-media-download:disabled {
+                pointer-events: none;
             }
             .xbot-media-download svg {
                 flex-shrink: 0;
