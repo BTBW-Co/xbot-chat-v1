@@ -1522,6 +1522,8 @@
                 if (!ev) return;
                 if (ev.key === 'Enter' || ev.key === ' ') onActivate(ev);
             });
+            bindMediaInteractionScrollGuard(wrap);
+            bindMediaInteractionScrollGuard(vid);
             vid.addEventListener('ended', function () {
                 if (finished) return;
                 finished = true;
@@ -1919,7 +1921,7 @@
                 widgetLog('histórico erro', e && e.message);
             } finally {
                 syncEmptyState();
-                scheduleScrollMessagesToBottom();
+                pinMessagesToLatest();
             }
         }
 
@@ -2030,16 +2032,42 @@
             function triggerAnchor(src, downloadName) {
                 var a = document.createElement('a');
                 a.href = src;
-                if (downloadName) a.setAttribute('download', downloadName);
-                a.target = '_blank';
-                a.rel = 'noopener noreferrer';
+                a.setAttribute('download', downloadName || 'arquivo');
+                a.rel = 'noopener';
+                // Sem target=_blank: baixa no device em vez de abrir outra aba.
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
             }
-            // blob: URLs locais: download direto.
+            function shareOrSaveBlob(blob) {
+                var fileName = name || 'arquivo';
+                var typed = blob;
+                try {
+                    if (blob && blob.type && typeof File !== 'undefined') {
+                        typed = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
+                    }
+                } catch (e) { /* ignore File ctor */ }
+                var canShare = false;
+                try {
+                    canShare = !!(navigator.canShare && typed && navigator.canShare({ files: [typed] }));
+                } catch (e2) { canShare = false; }
+                if (canShare && navigator.share) {
+                    return navigator.share({ files: [typed], title: fileName }).catch(function () {
+                        var objectUrl = URL.createObjectURL(blob);
+                        triggerAnchor(objectUrl, fileName);
+                        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2500);
+                    });
+                }
+                var objectUrl = URL.createObjectURL(blob);
+                triggerAnchor(objectUrl, fileName);
+                setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2500);
+                return Promise.resolve();
+            }
             if (href.indexOf('blob:') === 0) {
-                triggerAnchor(href, name);
+                fetch(href)
+                    .then(function (res) { return res.blob(); })
+                    .then(shareOrSaveBlob)
+                    .catch(function () { triggerAnchor(href, name); });
                 return;
             }
             fetch(href, { mode: 'cors', credentials: 'omit' })
@@ -2047,12 +2075,9 @@
                     if (!res.ok) throw new Error('download_fetch_failed');
                     return res.blob();
                 })
-                .then(function (blob) {
-                    var objectUrl = URL.createObjectURL(blob);
-                    triggerAnchor(objectUrl, name);
-                    setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2000);
-                })
+                .then(shareOrSaveBlob)
                 .catch(function () {
+                    // Último recurso: download same-document (sem nova aba).
                     triggerAnchor(href, name);
                 });
         }
@@ -2067,6 +2092,7 @@
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault();
                 ev.stopPropagation();
+                suppressMessagesAutoScroll(2000);
                 downloadMediaUrl(url, filename);
             });
             return btn;
@@ -2078,7 +2104,9 @@
             if (mediaNode && mediaNode.nodeType === 1) {
                 mediaNode.classList.add('xbot-media');
                 wrap.appendChild(mediaNode);
+                bindMediaInteractionScrollGuard(mediaNode);
             }
+            bindMediaInteractionScrollGuard(wrap);
             wrap.appendChild(createMediaDownloadButton(url, filename));
             return wrap;
         }
@@ -2098,10 +2126,12 @@
             vid.className = 'xbot-media';
             vid.controls = true;
             vid.setAttribute('playsinline', '');
+            vid.setAttribute('webkit-playsinline', '');
             vid.preload = 'metadata';
             var source = document.createElement('source');
             source.src = url;
             vid.appendChild(source);
+            bindMediaInteractionScrollGuard(vid);
             return vid;
         }
 
@@ -2700,7 +2730,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
-                scroll-behavior: smooth;
+                scroll-behavior: auto;
                 background: var(--xbot-surface);
                 position: relative;
             }
@@ -2893,9 +2923,44 @@
                 font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
                 margin: 8px 0 4px;
             }
+            .xbot-code-box--lab {
+                padding-top: 12px;
+            }
+            .xbot-code-box--lab.is-collapsed pre {
+                display: none;
+            }
+            .xbot-lab-toggle {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                width: calc(100% - 40px);
+                margin: 0 0 8px;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                color: #c8c8c8;
+                font: inherit;
+                font-size: 12px;
+                font-weight: 550;
+                line-height: 1.3;
+                text-align: left;
+                cursor: pointer;
+            }
+            .xbot-lab-toggle-chevron {
+                flex-shrink: 0;
+                opacity: 0.75;
+                transition: transform 0.15s ease;
+            }
+            .xbot-code-box--lab.is-collapsed .xbot-lab-toggle-chevron {
+                transform: rotate(-90deg);
+            }
+            .xbot-code-box--lab:not(.is-collapsed) .xbot-lab-toggle {
+                margin-bottom: 10px;
+            }
             .xbot-code-box pre {
                 margin: 0;
-                padding-right: 52px;
+                padding-right: 40px;
                 background: transparent;
                 color: inherit;
                 white-space: pre-wrap;
@@ -2909,17 +2974,17 @@
                 background: #2d2d2d;
                 color: #fff;
                 border: 1px solid #444;
-                padding: 6px 8px;
+                padding: 6px;
                 border-radius: 4px;
                 cursor: pointer;
                 display: inline-flex;
                 align-items: center;
-                gap: 4px;
-                font-size: 11px;
-                line-height: 1;
+                justify-content: center;
+                line-height: 0;
+                z-index: 1;
             }
             .xbot-copy-btn:hover { background: #3c3c3c; }
-            .xbot-copy-tooltip { font-family: var(--xbot-font); }
+            .xbot-copy-btn .xbot-copy-icon { display: block; }
             .xbot-text code {
                 max-width: 100%;
                 white-space: pre-wrap;
@@ -3935,16 +4000,82 @@
             }
         }
 
-        function scrollMessagesToBottom() {
-            var el = document.getElementById('xbot-messages');
-            if (!el) return;
-            el.scrollTop = el.scrollHeight;
+        /** Só gruda no fim se o visitante já estava perto do fim (ou force). */
+        var messagesAutoScrollPinned = true;
+        var suppressMessagesAutoScrollUntil = 0;
+
+        function isMessagesNearBottom(el, thresholdPx) {
+            if (!el) return true;
+            var threshold = thresholdPx == null ? 96 : thresholdPx;
+            return (el.scrollHeight - el.scrollTop - el.clientHeight) <= threshold;
         }
 
-        function scheduleScrollMessagesToBottom() {
+        function suppressMessagesAutoScroll(ms) {
+            var forMs = ms == null ? 2800 : ms;
+            suppressMessagesAutoScrollUntil = Date.now() + forMs;
+        }
+
+        function scrollMessagesToBottom(opts) {
+            opts = opts || {};
+            var el = document.getElementById('xbot-messages');
+            if (!el) return;
+            if (!opts.force) {
+                if (Date.now() < suppressMessagesAutoScrollUntil) return;
+                if (!messagesAutoScrollPinned) return;
+            }
+            var prevBehavior = el.style.scrollBehavior;
+            el.style.scrollBehavior = 'auto';
+            el.scrollTop = el.scrollHeight;
+            el.style.scrollBehavior = prevBehavior;
+            messagesAutoScrollPinned = true;
+        }
+
+        function scheduleScrollMessagesToBottom(opts) {
+            var options = opts || {};
             requestAnimationFrame(function () {
-                requestAnimationFrame(scrollMessagesToBottom);
+                requestAnimationFrame(function () {
+                    scrollMessagesToBottom(options);
+                });
             });
+        }
+
+        /** Abertura / histórico: força as últimas mensagens visíveis (mídia pode atrasar o height). */
+        function pinMessagesToLatest() {
+            scrollMessagesToBottom({ force: true });
+            [40, 120, 320, 700, 1400].forEach(function (ms) {
+                setTimeout(function () {
+                    scrollMessagesToBottom({ force: true });
+                }, ms);
+            });
+            var el = document.getElementById('xbot-messages');
+            if (!el || !el.querySelectorAll) return;
+            var media = el.querySelectorAll('img, video');
+            for (var i = 0; i < media.length; i++) {
+                (function (node) {
+                    var bump = function () {
+                        scrollMessagesToBottom({ force: true });
+                    };
+                    if (node.tagName === 'IMG') {
+                        if (!node.complete) node.addEventListener('load', bump, { once: true });
+                    } else {
+                        node.addEventListener('loadedmetadata', bump, { once: true });
+                    }
+                })(media[i]);
+            }
+        }
+
+        function bindMediaInteractionScrollGuard(node) {
+            if (!node || node.getAttribute('data-xbot-scroll-guard') === '1') return;
+            node.setAttribute('data-xbot-scroll-guard', '1');
+            var guard = function () {
+                suppressMessagesAutoScroll(3200);
+            };
+            node.addEventListener('pointerdown', guard, { passive: true });
+            node.addEventListener('touchstart', guard, { passive: true });
+            if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO') {
+                node.addEventListener('play', guard);
+                node.addEventListener('seeking', guard);
+            }
         }
 
         var chatCloseTimer = null;
@@ -4025,12 +4156,16 @@
                 notification.textContent = '';
                 notification.style.display = 'none';
                 clearWelcomeAlertUi();
-                scheduleScrollMessagesToBottom();
+                pinMessagesToLatest();
                 if (isMobileLayout()) {
                     requestAnimationFrame(applyMobileKeyboardLayout);
                 }
                 var openInput = document.getElementById('xbot-input');
-                if (openInput && typeof openInput.focus === 'function') openInput.focus();
+                // Mobile: não focar o input ao abrir — o teclado/viewport compete com play de vídeo
+                // e com o scroll até as últimas mensagens.
+                if (openInput && typeof openInput.focus === 'function' && !isMobileLayout()) {
+                    openInput.focus({ preventScroll: true });
+                }
             } else {
                 var closeInput = document.getElementById('xbot-input');
                 if (closeInput && typeof closeInput.blur === 'function' && document.activeElement === closeInput) {
@@ -4155,6 +4290,11 @@
         const send = chatbox.querySelector('#xbot-send');
         // Evita blur do input ao enviar (mantém teclado aberto no mobile)
         var sendFromTouch = false;
+        if (messages) {
+            messages.addEventListener('scroll', function () {
+                messagesAutoScrollPinned = isMessagesNearBottom(messages, 96);
+            }, { passive: true });
+        }
         send.addEventListener('mousedown', function (e) {
             e.preventDefault();
         });
@@ -4242,7 +4382,9 @@
             chatbox.style.setProperty('max-height', height + 'px', 'important');
             chatbox.style.setProperty('border-radius', '0', 'important');
             launcher.classList.add('xbot-launcher--hidden');
-            scheduleScrollMessagesToBottom();
+            if (isMessagesNearBottom(messages, 140)) {
+                scheduleScrollMessagesToBottom();
+            }
         }
 
         function bindMobileViewportListeners() {
@@ -4308,6 +4450,25 @@
             return s;
         }
 
+        function looksLikeLabResultContext(root, pre) {
+            var code = pre && (pre.querySelector('code') || pre);
+            var cls = (code && (code.getAttribute('class') || '')) || '';
+            if (/\blanguage-lab-output\b|\blab-output\b/i.test(cls)) return true;
+            var host = root || (pre && pre.parentNode);
+            var blob = '';
+            if (host && host.textContent) blob += String(host.textContent);
+            if (pre) {
+                var probe = pre.previousSibling;
+                var hops = 0;
+                while (probe && hops < 6) {
+                    blob = String(probe.textContent || '') + '\n' + blob;
+                    probe = probe.previousSibling;
+                    hops += 1;
+                }
+            }
+            return /execut(?:ei|ou|amos)\s+no\s+laborat[oó]rio|resultado\s*:\s*$|lab(?:oratory)?\s+result|i\s+ran\s+(?:it\s+)?in\s+the\s+lab|ejecut[eé]\s+en\s+el\s+laboratorio/i.test(blob);
+        }
+
         function enhanceCopyableCode(root) {
             if (!root || !root.querySelectorAll) return;
             var nodes = root.querySelectorAll('pre');
@@ -4319,23 +4480,43 @@
                 if (!value) continue;
                 var box = document.createElement('div');
                 box.className = 'xbot-code-box';
+                var isLab = looksLikeLabResultContext(root, pre);
+                if (isLab) {
+                    box.className += ' xbot-code-box--lab is-collapsed';
+                    var toggle = document.createElement('button');
+                    toggle.type = 'button';
+                    toggle.className = 'xbot-lab-toggle';
+                    toggle.setAttribute('aria-expanded', 'false');
+                    toggle.innerHTML =
+                        '<span>Resultado do laboratório</span>' +
+                        '<span class="xbot-lab-toggle-chevron" aria-hidden="true">▾</span>';
+                    toggle.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        var hostBox = ev.currentTarget.closest('.xbot-code-box--lab');
+                        if (!hostBox) return;
+                        var collapsed = hostBox.classList.toggle('is-collapsed');
+                        ev.currentTarget.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                    });
+                    box.appendChild(toggle);
+                }
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'xbot-copy-btn';
                 btn.setAttribute('title', 'Copiar');
-                btn.innerHTML = XBOT_ICONS.copy + '<span class="xbot-copy-tooltip">Copiar</span>';
+                btn.setAttribute('aria-label', 'Copiar');
+                btn.innerHTML = XBOT_ICONS.copy;
                 btn.addEventListener('click', function (ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
                     var button = ev.currentTarget;
-                    var tip = button.querySelector('.xbot-copy-tooltip');
                     var payload = button.getAttribute('data-copy') || '';
                     copyPlainText(payload).then(function () {
                         button.setAttribute('title', 'Copiado!');
-                        if (tip) tip.textContent = 'Copiado!';
+                        button.setAttribute('aria-label', 'Copiado!');
                         setTimeout(function () {
                             button.setAttribute('title', 'Copiar');
-                            if (tip) tip.textContent = 'Copiar';
+                            button.setAttribute('aria-label', 'Copiar');
                         }, 2000);
                     }).catch(function () {});
                 });
