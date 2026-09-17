@@ -1423,7 +1423,9 @@
             var s = String(text || '').trim().toLowerCase();
             return s === '(vídeo)' || s === '(video)' || s === '(imagem)' || s === '(image)'
                 || s === '(áudio)' || s === '(audio)' || s === '(mídia)' || s === '(media)'
-                || s === '(documento)' || s === '(document)' || s === '(sticker)' || s === '—';
+                || s === '(documento)' || s === '(document)' || s === '(sticker)' || s === '—'
+                || s === 'video downloaded by xbot'
+                || s === 'video-downloaded-by-xbot.mp4';
         }
 
         function isPresentationOpeningMeta(meta) {
@@ -1564,7 +1566,13 @@
                 cap = '';
             }
             if (isMediaPlaceholderCaption(cap)) cap = '';
-            var downloadName = guessMediaFilename(url, filename || (ct === 'video' ? 'video.mp4' : ct === 'image' ? 'imagem.jpg' : ct === 'audio' ? 'audio.webm' : 'arquivo'));
+            var downloadName = guessMediaFilename(
+                url,
+                filename || (ct === 'video' ? 'video-downloaded-by-xbot.mp4' : ct === 'image' ? 'imagem.jpg' : ct === 'audio' ? 'audio.webm' : 'arquivo')
+            );
+            if (ct === 'video') {
+                downloadName = brandVideoShareName(downloadName, 'video/mp4');
+            }
             var messageId = opts && opts.messageId ? opts.messageId : null;
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
@@ -1889,7 +1897,7 @@
                                 domNode: wrapMediaWithDownload(
                                     createMediaVideoEl(histMedia),
                                     histMedia,
-                                    guessMediaFilename(histMedia, 'video.mp4'),
+                                    guessMediaFilename(histMedia, 'video-downloaded-by-xbot.mp4'),
                                     'video',
                                     histMsgId
                                 )
@@ -2075,7 +2083,7 @@
 
         function buildTypedMediaFile(blob, fileName) {
             var mime = inferMediaMime(fileName, blob && blob.type);
-            var name = String(fileName || 'arquivo');
+            var name = brandVideoShareName(String(fileName || 'arquivo'), mime);
             // Garante extensão compatível com a Fototeca do iOS
             if (mime === 'video/mp4' && !/\.mp4$/i.test(name)) name += '.mp4';
             if (mime === 'image/jpeg' && !/\.jpe?g$/i.test(name)) name += '.jpg';
@@ -2103,8 +2111,11 @@
          */
         function openIosSaveSheet(blob, fileName) {
             closeXbotSaveSheet();
-            var typed = buildTypedMediaFile(blob, fileName);
-            var mime = (typed && typed.type) || inferMediaMime(fileName, blob && blob.type);
+            var mimeGuess = inferMediaMime(fileName, blob && blob.type);
+            var shareName = brandVideoShareName(fileName, mimeGuess);
+            var shareTitle = brandVideoShareTitle(shareName);
+            var typed = buildTypedMediaFile(blob, shareName);
+            var mime = (typed && typed.type) || mimeGuess;
             var kind = mediaKindFromMime(mime);
             var objectUrl = URL.createObjectURL(typed || blob);
 
@@ -2121,7 +2132,7 @@
             var title = document.createElement('div');
             title.className = 'xbot-save-sheet-title';
             title.textContent = kind === 'video'
-                ? 'Salvar vídeo'
+                ? shareTitle
                 : (kind === 'image' ? 'Salvar foto' : 'Salvar arquivo');
 
             var hint = document.createElement('p');
@@ -2135,15 +2146,17 @@
             if (kind === 'image') {
                 var img = document.createElement('img');
                 img.src = objectUrl;
-                img.alt = fileName || 'imagem';
+                img.alt = shareName || 'imagem';
                 preview.appendChild(img);
             } else if (kind === 'video') {
                 var video = document.createElement('video');
                 video.src = objectUrl;
                 video.controls = true;
+                video.muted = true;
                 video.setAttribute('playsinline', '');
                 video.setAttribute('webkit-playsinline', '');
                 preview.appendChild(video);
+                attachVideoPosterFrame(video);
             } else if (kind === 'audio') {
                 var audio = document.createElement('audio');
                 audio.src = objectUrl;
@@ -2152,7 +2165,7 @@
             } else {
                 var fileLabel = document.createElement('div');
                 fileLabel.className = 'xbot-save-sheet-file';
-                fileLabel.textContent = '📎 ' + (fileName || 'arquivo');
+                fileLabel.textContent = '📎 ' + (shareName || 'arquivo');
                 preview.appendChild(fileLabel);
             }
 
@@ -2178,21 +2191,20 @@
                 var fileForShare = typed;
                 if (!(fileForShare instanceof File) && typeof File !== 'undefined') {
                     try {
-                        fileForShare = new File([blob], fileName || 'arquivo', { type: mime });
+                        fileForShare = new File([blob], shareName || 'arquivo', { type: mime });
                     } catch (e) { fileForShare = typed; }
                 }
                 if (!navigator.share) {
                     hint.textContent = 'Pressione e segure a mídia acima e toque em “Adicionar à Fototeca”.';
                     return;
                 }
-                var payload = { files: [fileForShare], title: fileName || 'arquivo' };
+                var payload = { files: [fileForShare], title: shareTitle };
                 var can = true;
                 try {
                     if (navigator.canShare) can = !!navigator.canShare(payload);
                 } catch (e2) { can = false; }
                 if (!can) {
-                    // Alguns iOS recusam canShare mas aceitam share — tenta mesmo assim.
-                    payload = { files: [fileForShare] };
+                    payload = { files: [fileForShare], title: shareTitle };
                 }
                 saveBtn.disabled = true;
                 saveBtn.textContent = 'Abrindo…';
@@ -2234,7 +2246,10 @@
 
         function downloadMediaUrl(url, filename, messageId, triggerBtn) {
             var href = String(url || '').trim();
-            var name = guessMediaFilename(href, filename);
+            var name = brandVideoShareName(
+                guessMediaFilename(href, filename),
+                inferMediaMime(filename || href, '')
+            );
             var msgId = messageId ? String(messageId).trim() : '';
             if (!href && !msgId) return;
             var onApple = isAppleTouchDevice();
@@ -2277,7 +2292,7 @@
                 if (canShare && typeof navigator.share === 'function' && isMobileLayout()) {
                     return navigator.share({
                         files: [typed],
-                        title: fileName,
+                        title: brandVideoShareTitle(fileName),
                     }).catch(function (err) {
                         if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')) {
                             return;
@@ -2383,6 +2398,78 @@
             return img;
         }
 
+        function brandVideoShareName(fileName, mime) {
+            var n = String(fileName || '').trim();
+            var low = n.toLowerCase();
+            var isVideo = (mime && String(mime).indexOf('video/') === 0) ||
+                /\.(mp4|mov|webm|m4v)$/i.test(low);
+            if (!isVideo) return n || 'arquivo';
+            // Substitui nomes genéricos do lab/yt-dlp ao encaminhar.
+            if (!n ||
+                low === 'video.mp4' ||
+                low === 'video.webm' ||
+                low === 'video.mov' ||
+                /^video[-_.]?\d*\.(mp4|webm|mov|m4v)$/i.test(low) ||
+                /^video\.%\(ext\)s$/i.test(low)) {
+                return 'video-downloaded-by-xbot.mp4';
+            }
+            return n;
+        }
+
+        function brandVideoShareTitle(fileName) {
+            var branded = brandVideoShareName(fileName, 'video/mp4');
+            if (branded === 'video-downloaded-by-xbot.mp4') {
+                return 'Video downloaded by Xbot';
+            }
+            return branded;
+        }
+
+        function attachVideoPosterFrame(vid) {
+            if (!vid || vid.getAttribute('data-xbot-poster') === '1') return;
+            vid.setAttribute('data-xbot-poster', '1');
+            var framed = false;
+            function capturePoster() {
+                if (framed) return;
+                if (!vid.videoWidth || !vid.videoHeight) return;
+                try {
+                    var canvas = document.createElement('canvas');
+                    canvas.width = vid.videoWidth;
+                    canvas.height = vid.videoHeight;
+                    var ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+                    var data = canvas.toDataURL('image/jpeg', 0.72);
+                    if (data && data.indexOf('data:image') === 0) {
+                        vid.setAttribute('poster', data);
+                        framed = true;
+                    }
+                } catch (e) {
+                    // Canvas tainted (CORS) — o seek já deixa um frame visível como capa.
+                }
+            }
+            function seekPreviewFrame() {
+                try {
+                    if (vid.readyState < 1) return;
+                    var t = 0.08;
+                    if (isFinite(vid.duration) && vid.duration > 0 && vid.duration !== Infinity) {
+                        t = Math.min(0.35, Math.max(0.04, vid.duration * 0.03));
+                    }
+                    if (Math.abs((vid.currentTime || 0) - t) > 0.02) {
+                        vid.currentTime = t;
+                    } else {
+                        capturePoster();
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            vid.addEventListener('loadedmetadata', seekPreviewFrame);
+            vid.addEventListener('loadeddata', seekPreviewFrame);
+            vid.addEventListener('seeked', function () {
+                capturePoster();
+            });
+            // Já metadados em cache
+            if (vid.readyState >= 1) seekPreviewFrame();
+        }
+
         function createMediaVideoEl(url) {
             var vid = document.createElement('video');
             vid.className = 'xbot-media';
@@ -2390,9 +2477,20 @@
             vid.setAttribute('playsinline', '');
             vid.setAttribute('webkit-playsinline', '');
             vid.preload = 'metadata';
+            // Ajuda alguns browsers a decodificar o 1º frame para a capa.
+            vid.muted = true;
             var source = document.createElement('source');
             source.src = url;
             vid.appendChild(source);
+            attachVideoPosterFrame(vid);
+            // Ao dar play, volta ao início e libera o áudio se o usuário interagir pelos controles.
+            vid.addEventListener('play', function onFirstPlay() {
+                try {
+                    if (vid.currentTime > 0.5) vid.currentTime = 0;
+                } catch (e) { /* ignore */ }
+                vid.muted = false;
+                vid.removeEventListener('play', onFirstPlay);
+            });
             bindMediaInteractionScrollGuard(vid);
             return vid;
         }
