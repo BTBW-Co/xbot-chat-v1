@@ -944,6 +944,25 @@
             return meta.keeps_typing === true || meta.lab_progress === true;
         }
 
+        function isLabProgressPayload(meta) {
+            if (!meta || typeof meta !== 'object') return false;
+            return meta.lab_progress === true || meta.progress_kind === 'media_download';
+        }
+
+        var pendingDownloadStatus = false;
+
+        function thinkingStatusWords() {
+            var lang = xbotUiLang();
+            if (pendingDownloadStatus) {
+                if (lang === 'pt') return ['Baixando', 'Baixando vídeo', 'Quase lá'];
+                if (lang === 'es') return ['Descargando', 'Descargando vídeo', 'Casi listo'];
+                return ['Downloading', 'Downloading video', 'Almost there'];
+            }
+            if (lang === 'pt') return ['Explorando', 'Refletindo', 'Pensando', 'Editando', 'Planejando'];
+            if (lang === 'es') return ['Explorando', 'Reflexionando', 'Pensando', 'Editando', 'Planificando'];
+            return ['Exploring', 'Thought', 'Thinking', 'Editing', 'Planning'];
+        }
+
         function formatMessageTime(date) {
             return (date || new Date()).toLocaleTimeString([], {
                 hour: '2-digit',
@@ -1120,13 +1139,6 @@
             return 'en';
         }
 
-        function thinkingStatusWords() {
-            var lang = xbotUiLang();
-            if (lang === 'pt') return ['Explorando', 'Refletindo', 'Pensando', 'Editando', 'Planejando'];
-            if (lang === 'es') return ['Explorando', 'Reflexionando', 'Pensando', 'Editando', 'Planificando'];
-            return ['Exploring', 'Thought', 'Thinking', 'Editing', 'Planning'];
-        }
-
         function stopThinkingStatusCycle(el) {
             if (!el) return;
             if (el._xbThinkStatusTimer) {
@@ -1277,7 +1289,19 @@
                 finalizeSessionEndedState();
             }
             var keepTyping = isKeepsTypingPayload(meta);
+            if (isLabProgressPayload(meta)) {
+                pendingDownloadStatus = true;
+                beginWaitingForBot();
+                if (pendingTypingEl) {
+                    stopThinkingStatusCycle(pendingTypingEl);
+                    startThinkingStatusCycle(pendingTypingEl);
+                }
+                rememberBotMessage(item, dedupKey);
+                if (item && item.id) saveLastBotMessageId(item.id);
+                return;
+            }
             if (!keepTyping) {
+                pendingDownloadStatus = false;
                 finishWaitingForBot();
             }
             // history/hydrate: instantâneo; opening/sse/poll/post: typewriter
@@ -1930,7 +1954,12 @@
                     ? lastHist.metadata
                     : {};
                 if (lastHist && (lastHist.sender || 'bot') !== 'user' && isKeepsTypingPayload(lastHistMeta)) {
+                    pendingDownloadStatus = isLabProgressPayload(lastHistMeta);
                     beginWaitingForBot();
+                    if (pendingTypingEl && pendingDownloadStatus) {
+                        stopThinkingStatusCycle(pendingTypingEl);
+                        startThinkingStatusCycle(pendingTypingEl);
+                    }
                 }
                 syncEmptyState();
             } catch (e) {
