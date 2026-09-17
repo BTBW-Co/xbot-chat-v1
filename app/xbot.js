@@ -895,6 +895,8 @@
         }
 
         var pendingSendCount = 0;
+        var pendingTypingSafetyTimer = 0;
+        var TYPING_SAFETY_MS = 15 * 60 * 1000;
 
         function clearPendingTyping() {
             // Remove TODOS os indicadores de "digitando" (envios rápidos podem criar mais de um).
@@ -910,6 +912,31 @@
                 pendingTypingEl.parentNode.removeChild(pendingTypingEl);
             }
             pendingTypingEl = null;
+        }
+
+        function beginWaitingForBot() {
+            pendingSendCount = 1;
+            _moveOrShowTyping();
+            if (pendingTypingSafetyTimer) clearTimeout(pendingTypingSafetyTimer);
+            pendingTypingSafetyTimer = setTimeout(function () {
+                pendingTypingSafetyTimer = 0;
+                pendingSendCount = 0;
+                clearPendingTyping();
+            }, TYPING_SAFETY_MS);
+        }
+
+        function finishWaitingForBot() {
+            if (pendingTypingSafetyTimer) {
+                clearTimeout(pendingTypingSafetyTimer);
+                pendingTypingSafetyTimer = 0;
+            }
+            pendingSendCount = 0;
+            clearPendingTyping();
+        }
+
+        function isKeepsTypingPayload(meta) {
+            if (!meta || typeof meta !== 'object') return false;
+            return meta.keeps_typing === true || meta.lab_progress === true;
         }
 
         function formatMessageTime(date) {
@@ -1244,7 +1271,10 @@
             if (meta.session_closed || isSessionClosurePayload(item, body)) {
                 finalizeSessionEndedState();
             }
-            clearPendingTyping();
+            var keepTyping = isKeepsTypingPayload(meta);
+            if (!keepTyping) {
+                finishWaitingForBot();
+            }
             // history/hydrate: instantâneo; opening/sse/poll/post: typewriter
             var animateTyping = source !== 'history' && source !== 'hydrate' && !linkOnly;
             if (isMedia) {
@@ -1271,6 +1301,7 @@
             rememberBotMessage(item, dedupKey);
             if (linkOnly) seenBotMessageKeys['link:' + canonicalLinkUrl(linkOnly.url)] = 1;
             if (item && item.id) saveLastBotMessageId(item.id);
+            if (keepTyping && pendingSendCount > 0) _moveOrShowTyping();
             widgetLog('mensagem recebida', { via: source || 'unknown', id: item && item.id, tipo: ct, len: body.length });
         }
 
@@ -1844,6 +1875,13 @@
                     }
                 }
                 if (list.length) welcomeShown = true;
+                var lastHist = list.length ? list[list.length - 1] : null;
+                var lastHistMeta = (lastHist && lastHist.metadata && typeof lastHist.metadata === 'object')
+                    ? lastHist.metadata
+                    : {};
+                if (lastHist && (lastHist.sender || 'bot') !== 'user' && isKeepsTypingPayload(lastHistMeta)) {
+                    beginWaitingForBot();
+                }
                 syncEmptyState();
             } catch (e) {
                 widgetLog('histórico erro', e && e.message);
@@ -4788,6 +4826,7 @@
             resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
             appendMessage(value, 'user');
+            beginWaitingForBot();
             if (input) {
                 input.value = '';
                 input.style.height = 'auto';
@@ -4813,19 +4852,14 @@
                 if (data.reply) {
                     var replyText = String(data.reply).trim();
                     if (replyText) ingestBotPayload(null, replyText, 'post');
-                    else clearPendingTyping();
+                    else finishWaitingForBot();
                 } else if (data.bot_reply_enabled) {
-                    pendingSendCount++;
-                    _moveOrShowTyping();
-                    pendingSendCount = Math.max(0, pendingSendCount - 1);
-                    setTimeout(function () {
-                        if (pendingSendCount === 0) clearPendingTyping();
-                    }, 30000);
+                    beginWaitingForBot();
                 } else {
-                    clearPendingTyping();
+                    finishWaitingForBot();
                 }
             } catch (err) {
-                clearPendingTyping();
+                finishWaitingForBot();
                 var errText = 'Não foi possível enviar sua mensagem. Verifique seu **token** e tente novamente. Caso precise de ajuda estamos *[aqui](https://xbot.digital/suporte)* para auxilia-lo..';
                 appendMessage(errText, 'bot');
                 rememberBotMessage(null, errText);
@@ -5009,6 +5043,7 @@
 
                     setAudioBtnUploading();
                     appendMessage('', 'user', { domNode: createXbotAudioPlayer(URL.createObjectURL(blob)) });
+                    beginWaitingForBot();
 
                     try {
                         if (window.__xbotConfig.channelId) {
@@ -5028,18 +5063,13 @@
                             try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                         }
                         if (data.bot_reply_enabled) {
-                            pendingSendCount++;
-                            _moveOrShowTyping();
-                            pendingSendCount = Math.max(0, pendingSendCount - 1);
-                            setTimeout(function () {
-                                if (pendingSendCount === 0) clearPendingTyping();
-                            }, 30000);
+                            beginWaitingForBot();
                         } else {
-                            clearPendingTyping();
+                            finishWaitingForBot();
                         }
                         pollSessionInactivity();
                     } catch (err) {
-                        clearPendingTyping();
+                        finishWaitingForBot();
                         appendMessage('Erro ao enviar o áudio.', 'bot');
                     } finally {
                         isUploadingAudio = false;
