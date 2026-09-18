@@ -1598,6 +1598,9 @@
                 downloadName = brandVideoShareName(downloadName, 'video/mp4');
             }
             var messageId = opts && opts.messageId ? opts.messageId : null;
+            // Flag no metadata (histórico) ou opts (abertura recém-persistida).
+            var isPresentationMedia = !!(opts && opts.presentationOpening) || isPresentationOpeningMeta(meta);
+            var mediaWrapOpts = { allowDownload: !isPresentationMedia };
             if (ct === 'image') {
                 var lines = cap ? cap.split('\n') : [];
                 // Constrói DOM diretamente para poder anexar onerror —
@@ -1623,7 +1626,7 @@
                 contentDiv.className = 'xbot-message-content';
                 var textDiv = document.createElement('div');
                 textDiv.className = 'xbot-text';
-                textDiv.appendChild(wrapMediaWithDownload(createMediaImageEl(url, lines[0] || 'imagem'), url, downloadName, 'image', messageId));
+                textDiv.appendChild(wrapMediaWithDownload(createMediaImageEl(url, lines[0] || 'imagem'), url, downloadName, 'image', messageId, mediaWrapOpts));
                 if (lines.length > 0) {
                     var p1 = document.createElement('p');
                     p1.style.margin = '2px 0 0';
@@ -1668,12 +1671,16 @@
                 var usePresentationPlayer = !visitorHasSpoken && !!(opts && opts.presentationOpening);
                 if (usePresentationPlayer) {
                     appendMessage('', 'bot', Object.assign({}, opts, {
-                        domNode: wrapMediaWithDownload(mountPresentationVideo(url), url, downloadName, 'video', messageId),
+                        domNode: wrapMediaWithDownload(mountPresentationVideo(url), url, downloadName, 'video', messageId, mediaWrapOpts),
                         animateTyping: false
                     }));
                 } else {
                     var videoBlock = document.createElement('div');
-                    videoBlock.appendChild(wrapMediaWithDownload(createMediaVideoEl(url), url, downloadName, 'video', messageId));
+                    var histVideo = createMediaVideoEl(url);
+                    if (isPresentationMedia) {
+                        histVideo.setAttribute('controlslist', 'nodownload');
+                    }
+                    videoBlock.appendChild(wrapMediaWithDownload(histVideo, url, downloadName, 'video', messageId, mediaWrapOpts));
                     if (cap) {
                         var vCap = document.createElement('p');
                         vCap.textContent = cap;
@@ -1682,7 +1689,7 @@
                     appendMessage('', 'bot', Object.assign({}, opts, { domNode: videoBlock, animateTyping: false }));
                 }
             } else if (ct === 'audio') {
-                var audioNode = wrapMediaWithDownload(createXbotAudioPlayer(url), url, downloadName, 'audio', messageId);
+                var audioNode = wrapMediaWithDownload(createXbotAudioPlayer(url), url, downloadName, 'audio', messageId, mediaWrapOpts);
                 if (cap && cap.indexOf('🎵') !== 0) {
                     var audioWrap = document.createElement('div');
                     audioWrap.appendChild(audioNode);
@@ -1703,7 +1710,7 @@
                 fileNameEl.textContent = '📎 ' + label;
                 fileCard.appendChild(fileNameEl);
                 appendMessage('', 'bot', Object.assign({}, opts, {
-                    domNode: wrapMediaWithDownload(fileCard, url, downloadName || label, 'file', messageId),
+                    domNode: wrapMediaWithDownload(fileCard, url, downloadName || label, 'file', messageId, mediaWrapOpts),
                     animateTyping: false
                 }));
             }
@@ -2404,7 +2411,8 @@
             return btn;
         }
 
-        function wrapMediaWithDownload(mediaNode, url, filename, variant, messageId) {
+        function wrapMediaWithDownload(mediaNode, url, filename, variant, messageId, options) {
+            var allowDownload = !options || options.allowDownload !== false;
             var wrap = document.createElement('div');
             wrap.className = 'xbot-media-wrap' + (variant ? ' xbot-media-wrap--' + variant : '');
             if (mediaNode && mediaNode.nodeType === 1) {
@@ -2413,7 +2421,10 @@
                 bindMediaInteractionScrollGuard(mediaNode);
             }
             bindMediaInteractionScrollGuard(wrap);
-            wrap.appendChild(createMediaDownloadButton(url, filename, messageId));
+            // Mídia da mensagem de apresentação: sem ícone de download.
+            if (allowDownload) {
+                wrap.appendChild(createMediaDownloadButton(url, filename, messageId));
+            }
             return wrap;
         }
 
