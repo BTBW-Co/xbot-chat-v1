@@ -369,6 +369,28 @@
             return Object.keys(out).length ? out : null;
         }
 
+        function getVisitorClientHints() {
+            var out = {};
+            var ctx = getXbotContextPayload() || {};
+            if (ctx.pageUrl) out.page_url = String(ctx.pageUrl).slice(0, 2000);
+            if (ctx.pageTitle) out.page_title = String(ctx.pageTitle).slice(0, 255);
+            try {
+                if (typeof document !== 'undefined' && document.referrer) {
+                    out.referrer = String(document.referrer).slice(0, 2000);
+                }
+            } catch (e) { /* ignore */ }
+            try {
+                var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (tz) out.tz = String(tz).slice(0, 80);
+            } catch (e) { /* ignore */ }
+            try {
+                if (typeof navigator !== 'undefined' && navigator.language) {
+                    out.lang = String(navigator.language).slice(0, 80);
+                }
+            } catch (e) { /* ignore */ }
+            return out;
+        }
+
         function attachIdentityToMessageBody(msgBody) {
             var user = getXbotUserPayload();
             var ctx = getXbotContextPayload();
@@ -1864,6 +1886,10 @@
                 + '?channel_id=' + encodeURIComponent(channelId)
                 + '&visitor_id=' + encodeURIComponent(vid)
                 + '&limit=50';
+            var hints = getVisitorClientHints();
+            Object.keys(hints).forEach(function (key) {
+                if (hints[key]) url += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(hints[key]);
+            });
             try {
                 var res = await fetch(url, { headers: buildAuthHeaders({}) });
                 if (!res.ok) {
