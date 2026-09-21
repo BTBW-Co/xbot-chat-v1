@@ -13,7 +13,11 @@ SITE_DEST="$ROOT/../xbot-site-v1/public/xchat/xbot.min.js"
 
 mkdir -p "$OUT_DIR" versions/latest
 TMP_SRC="$(mktemp)"
-sed "s/__XBOT_WIDGET_VERSION__/${VERSION}/g" app/xbot.js > "$TMP_SRC"
+# phoneCountries.js (catálogo do seletor) + xbot.js com versão injetada
+{
+  cat app/phoneCountries.js
+  sed "s/__XBOT_WIDGET_VERSION__/${VERSION}/g" app/xbot.js
+} > "$TMP_SRC"
 npx --yes terser "$TMP_SRC" -c -m -o "$OUT_FILE"
 rm -f "$TMP_SRC"
 cp "$OUT_FILE" "$LATEST"

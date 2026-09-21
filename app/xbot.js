@@ -628,6 +628,7 @@
         var sessionEpisodeEnded = false;
         var closureNoticeRendered = false;
         var presentationLockCount = 0;
+        var choiceComposerLockCount = 0;
         var visitorHasSpoken = false;
 
         function isSessionClosurePayload(item, body) {
@@ -659,7 +660,9 @@
             }
             visitorHasSpoken = false;
             presentationLockCount = 0;
+            choiceComposerLockCount = 0;
             setPresentationComposerLocked(false);
+            setChoiceComposerLocked(false);
         }
 
         function pauseRealtimeTransportAfterClosure() {
@@ -1448,6 +1451,15 @@
                             label: String(block.label || '').trim()
                         });
                     }
+                } else if (kind === 'answer_input') {
+                    var at = String(block.answer_type || 'text').trim().toLowerCase();
+                    out.push({
+                        kind: 'answer_input',
+                        answer_type: at || 'text',
+                        field_key: String(block.field_key || 'answer').trim() || 'answer',
+                        input_placeholder: String(block.input_placeholder || '').trim(),
+                        default_country_code: String(block.default_country_code || '55').replace(/\D/g, '') || '55'
+                    });
                 }
             }
             return out;
@@ -1456,7 +1468,7 @@
         function blocksHaveChoiceList(blocks) {
             if (!Array.isArray(blocks)) return false;
             for (var i = 0; i < blocks.length; i++) {
-                if (blocks[i] && blocks[i].kind === 'choice_list') return true;
+                if (blocks[i] && (blocks[i].kind === 'choice_list' || blocks[i].kind === 'answer_input')) return true;
             }
             return false;
         }
@@ -1518,6 +1530,90 @@
         function releasePresentationComposerLock() {
             presentationLockCount = Math.max(0, presentationLockCount - 1);
             if (presentationLockCount === 0) setPresentationComposerLocked(false);
+        }
+
+        function isChoiceComposerLocked() {
+            return choiceComposerLockCount > 0;
+        }
+
+        function setChoiceComposerLocked(locked) {
+            var compose = document.querySelector('.xbot-compose');
+            var inputEl = document.getElementById('xbot-input');
+            var sendEl = document.getElementById('xbot-send');
+            var uploadEl = document.getElementById('xbot-upload');
+            var audioEl = document.getElementById('xbot-audio');
+            if (compose) {
+                if (locked) compose.classList.add('is-choice-locked');
+                else compose.classList.remove('is-choice-locked');
+            }
+            var nodes = [inputEl, sendEl, uploadEl, audioEl];
+            for (var i = 0; i < nodes.length; i++) {
+                var el = nodes[i];
+                if (!el) continue;
+                // Não sobrescrever lock de apresentação.
+                if (!locked && isPresentationComposerLocked()) continue;
+                el.disabled = !!locked || isPresentationComposerLocked();
+                if (el.disabled) el.setAttribute('aria-disabled', 'true');
+                else el.removeAttribute('aria-disabled');
+            }
+            if (inputEl) {
+                inputEl.readOnly = !!locked || isPresentationComposerLocked();
+                if (locked) {
+                    inputEl.setAttribute('data-prev-placeholder', inputEl.getAttribute('placeholder') || '');
+                    inputEl.placeholder = 'Escolha uma opção acima…';
+                } else if (inputEl.getAttribute('data-prev-placeholder') != null) {
+                    inputEl.placeholder = inputEl.getAttribute('data-prev-placeholder') || 'Ou envie uma mensagem…';
+                    inputEl.removeAttribute('data-prev-placeholder');
+                }
+            }
+        }
+
+        function acquireChoiceComposerLock() {
+            choiceComposerLockCount += 1;
+            setChoiceComposerLocked(true);
+        }
+
+        function releaseChoiceComposerLock() {
+            choiceComposerLockCount = Math.max(0, choiceComposerLockCount - 1);
+            if (choiceComposerLockCount === 0) setChoiceComposerLocked(false);
+        }
+
+        function syncPendingChoiceComposerLock() {
+            releaseChoiceComposerLock();
+            var rows = messages.querySelectorAll('.xbot-message-row');
+            if (!rows.length) return;
+            var last = rows[rows.length - 1];
+            if (!last || !last.classList.contains('bot')) return;
+            var list = last.querySelector('[data-xbot="choice-list"][data-lock-composer="1"]');
+            if (list) {
+                var buttons = list.querySelectorAll('.xbot-choice-item');
+                for (var i = 0; i < buttons.length; i++) {
+                    buttons[i].disabled = false;
+                    (function (btn) {
+                        if (btn.getAttribute('data-choice-bound') === '1') return;
+                        btn.setAttribute('data-choice-bound', '1');
+                        btn.addEventListener('click', function () {
+                            if (sessionEpisodeEnded) return;
+                            var value = btn.getAttribute('data-choice-value') || '';
+                            var root = btn.closest('[data-xbot="choice-list"]');
+                            if (root) {
+                                var all = root.querySelectorAll('.xbot-choice-item, .xbot-choice-free-send');
+                                for (var j = 0; j < all.length; j++) all[j].disabled = true;
+                            }
+                            releaseChoiceComposerLock();
+                            sendUserText(value);
+                        });
+                    })(buttons[i]);
+                }
+                acquireChoiceComposerLock();
+                return;
+            }
+            var answerForm = last.querySelector('[data-xbot="answer-input"][data-lock-composer="1"]');
+            if (answerForm) {
+                var inputs = answerForm.querySelectorAll('input, button, select');
+                for (var k = 0; k < inputs.length; k++) inputs[k].disabled = false;
+                acquireChoiceComposerLock();
+            }
         }
 
         function mountPresentationVideo(url) {
@@ -1994,6 +2090,7 @@
                         startThinkingStatusCycle(pendingTypingEl);
                     }
                 }
+                syncPendingChoiceComposerLock();
                 syncEmptyState();
             } catch (e) {
                 widgetLog('histórico erro', e && e.message);
@@ -3877,6 +3974,251 @@
                 opacity: 0.4;
                 cursor: default;
             }
+            .xbot-answer-input {
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+                background: var(--xbot-surface);
+                border-radius: 14px;
+                padding: 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .xbot-answer-row,
+            .xbot-answer-phone-row {
+                display: flex;
+                align-items: stretch;
+                gap: 8px;
+                width: 100%;
+                min-width: 0;
+            }
+            .xbot-answer-field {
+                flex: 1 1 auto;
+                min-width: 0;
+                border: 1px solid var(--xbot-border);
+                border-radius: 10px;
+                background: #fff;
+                padding: 10px 12px;
+                font: inherit;
+                font-size: 14px;
+                color: var(--xbot-ink);
+                outline: none;
+            }
+            .xbot-answer-field:focus {
+                border-color: color-mix(in srgb, var(--xbot-theme) 55%, var(--xbot-border));
+            }
+            .xbot-answer-area {
+                width: 52px;
+                flex: 0 0 auto;
+                border: 1px solid var(--xbot-border);
+                border-radius: 10px;
+                background: #fff;
+                padding: 10px 4px;
+                font: inherit;
+                font-size: 14px;
+                text-align: center;
+                color: var(--xbot-ink);
+                outline: none;
+            }
+            .xbot-answer-country {
+                position: relative;
+                flex: 0 0 auto;
+                width: 72px;
+            }
+            .xbot-answer-country-btn {
+                appearance: none;
+                width: 100%;
+                height: 100%;
+                min-height: 42px;
+                border: 1px solid var(--xbot-border);
+                border-radius: 10px;
+                background: #fff;
+                padding: 8px 6px;
+                font: inherit;
+                font-size: 13px;
+                font-weight: 650;
+                color: var(--xbot-ink);
+                cursor: pointer;
+            }
+            .xbot-answer-country-panel {
+                position: absolute;
+                left: 0;
+                bottom: calc(100% + 6px);
+                z-index: 40;
+                width: 260px;
+                max-width: min(260px, 70vw);
+                background: #fff;
+                border: 1px solid var(--xbot-border);
+                border-radius: 12px;
+                box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+                overflow: hidden;
+            }
+            .xbot-answer-country-search {
+                width: 100%;
+                box-sizing: border-box;
+                border: 0;
+                border-bottom: 1px solid var(--xbot-border);
+                padding: 10px 12px;
+                font: inherit;
+                font-size: 13px;
+                outline: none;
+            }
+            .xbot-answer-country-list {
+                list-style: none;
+                margin: 0;
+                padding: 4px 0;
+                max-height: 220px;
+                overflow-y: auto;
+            }
+            .xbot-answer-country-option {
+                appearance: none;
+                display: block;
+                width: 100%;
+                border: 0;
+                background: transparent;
+                text-align: left;
+                padding: 8px 12px;
+                font: inherit;
+                font-size: 13px;
+                color: var(--xbot-ink);
+                cursor: pointer;
+            }
+            .xbot-answer-country-option:hover,
+            .xbot-answer-country-option.is-selected {
+                background: color-mix(in srgb, var(--xbot-theme) 10%, #fff);
+            }
+            .xbot-answer-send {
+                appearance: none;
+                width: 36px;
+                height: 36px;
+                align-self: center;
+                border: 0;
+                border-radius: 999px;
+                background: var(--xbot-theme);
+                color: #fff;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .xbot-answer-send:disabled {
+                opacity: 0.4;
+                cursor: default;
+            }
+            .xbot-answer-error {
+                font-size: 12px;
+                color: #b91c1c;
+                padding: 0 2px;
+            }
+            .xbot-answer-date {
+                position: relative;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .xbot-answer-date-trigger {
+                appearance: none;
+                width: 100%;
+                min-height: 42px;
+                border: 1px solid var(--xbot-border);
+                border-radius: 10px;
+                background: #fff;
+                padding: 10px 12px;
+                font: inherit;
+                font-size: 14px;
+                color: var(--xbot-subtle);
+                text-align: left;
+                cursor: pointer;
+            }
+            .xbot-answer-date-trigger.has-value {
+                color: var(--xbot-ink);
+                font-weight: 650;
+            }
+            .xbot-answer-date-panel {
+                position: absolute;
+                left: 0;
+                bottom: calc(100% + 6px);
+                z-index: 40;
+                width: 280px;
+                max-width: min(280px, 82vw);
+                background: #fff;
+                border: 1px solid var(--xbot-border);
+                border-radius: 14px;
+                box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+                padding: 10px;
+                box-sizing: border-box;
+            }
+            .xbot-answer-date-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+            .xbot-answer-date-month {
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--xbot-ink);
+            }
+            .xbot-answer-date-nav {
+                appearance: none;
+                width: 28px;
+                height: 28px;
+                border: 0;
+                border-radius: 8px;
+                background: #f3f4f6;
+                color: var(--xbot-ink);
+                cursor: pointer;
+                font-size: 16px;
+                line-height: 1;
+            }
+            .xbot-answer-date-weekdays {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                gap: 2px;
+                margin-bottom: 4px;
+            }
+            .xbot-answer-date-weekdays span {
+                text-align: center;
+                font-size: 11px;
+                font-weight: 650;
+                color: var(--xbot-subtle);
+                padding: 4px 0;
+            }
+            .xbot-answer-date-grid {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                gap: 2px;
+            }
+            .xbot-answer-date-day {
+                appearance: none;
+                border: 0;
+                border-radius: 8px;
+                background: transparent;
+                min-height: 32px;
+                font: inherit;
+                font-size: 13px;
+                color: var(--xbot-ink);
+                cursor: pointer;
+            }
+            .xbot-answer-date-day.is-empty {
+                cursor: default;
+                visibility: hidden;
+            }
+            .xbot-answer-date-day.is-today {
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xbot-theme) 45%, var(--xbot-border));
+            }
+            .xbot-answer-date-day.is-selected,
+            .xbot-answer-date-day:hover:not(.is-empty) {
+                background: color-mix(in srgb, var(--xbot-theme) 14%, #fff);
+                color: var(--xbot-theme);
+                font-weight: 700;
+            }
+            .xbot-answer-date-day.is-selected {
+                background: var(--xbot-theme);
+                color: #fff;
+            }
             .xbot-step-progress {
                 display: inline-flex;
                 align-items: center;
@@ -3988,7 +4330,10 @@
             }
             .xbot-compose.is-presentation-locked .xbot-input,
             .xbot-compose.is-presentation-locked .xbot-send,
-            .xbot-compose.is-presentation-locked .xbot-icon-btn {
+            .xbot-compose.is-presentation-locked .xbot-icon-btn,
+            .xbot-compose.is-choice-locked .xbot-input,
+            .xbot-compose.is-choice-locked .xbot-send,
+            .xbot-compose.is-choice-locked .xbot-icon-btn {
                 opacity: 0.4;
                 cursor: not-allowed;
                 pointer-events: none;
@@ -5046,6 +5391,330 @@
             }
         }
 
+        function phoneCountries() {
+            return Array.isArray(window.__XBOT_PHONE_COUNTRIES) ? window.__XBOT_PHONE_COUNTRIES : [{ code: '55', name: 'Brasil' }];
+        }
+
+        function digitsOnlyPhone(value) {
+            return String(value || '').replace(/\D/g, '');
+        }
+
+        function validateAnswerClient(answerType, value) {
+            var text = String(value || '').trim();
+            if (!text) return false;
+            var kind = String(answerType || 'text').toLowerCase();
+            if (kind === 'email') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+            if (kind === 'phone') {
+                var d = digitsOnlyPhone(text);
+                return d.length >= 8 && d.length <= 15;
+            }
+            if (kind === 'number') return !isNaN(Number(text.replace(',', '.')));
+            if (kind === 'url') {
+                try {
+                    var u = text.indexOf('://') >= 0 ? text : ('https://' + text);
+                    var parsed = new URL(u);
+                    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+                } catch (e) { return false; }
+            }
+            if (kind === 'date') {
+                return /^\d{4}-\d{2}-\d{2}$/.test(text) || /^\d{2}\/\d{2}\/\d{4}$/.test(text);
+            }
+            if (kind === 'name') return text.length >= 2;
+            return text.length >= 1;
+        }
+
+        function mountAnswerInputBlock(block, interactive, opts) {
+            var form = document.createElement('form');
+            form.className = 'xbot-answer-input';
+            form.setAttribute('data-xbot', 'answer-input');
+            form.setAttribute('data-lock-composer', '1');
+            form.setAttribute('novalidate', 'novalidate');
+            var answerType = String(block.answer_type || 'text').toLowerCase();
+            var placeholder = block.input_placeholder || 'Digite sua resposta…';
+            var err = document.createElement('div');
+            err.className = 'xbot-answer-error';
+            err.hidden = true;
+
+            function lockForm() {
+                var nodes = form.querySelectorAll('input, button, select');
+                for (var i = 0; i < nodes.length; i++) nodes[i].disabled = true;
+            }
+
+            function submitValue(raw) {
+                var value = String(raw || '').trim();
+                if (!value || sessionEpisodeEnded) return;
+                if (!validateAnswerClient(answerType, value)) {
+                    err.textContent = 'Resposta inválida. Verifique e tente de novo.';
+                    err.hidden = false;
+                    return;
+                }
+                err.hidden = true;
+                lockForm();
+                releaseChoiceComposerLock();
+                sendUserText(value);
+            }
+
+            if (answerType === 'phone') {
+                var row = document.createElement('div');
+                row.className = 'xbot-answer-phone-row';
+                var countryWrap = document.createElement('div');
+                countryWrap.className = 'xbot-answer-country';
+                var countryBtn = document.createElement('button');
+                countryBtn.type = 'button';
+                countryBtn.className = 'xbot-answer-country-btn';
+                var countryCode = digitsOnlyPhone(block.default_country_code) || '55';
+                countryBtn.textContent = '+' + countryCode;
+                var countryPanel = document.createElement('div');
+                countryPanel.className = 'xbot-answer-country-panel';
+                countryPanel.hidden = true;
+                var countrySearch = document.createElement('input');
+                countrySearch.type = 'text';
+                countrySearch.className = 'xbot-answer-country-search';
+                countrySearch.placeholder = 'Buscar país ou código…';
+                countrySearch.autocomplete = 'off';
+                var countryList = document.createElement('ul');
+                countryList.className = 'xbot-answer-country-list';
+                countryList.setAttribute('role', 'listbox');
+
+                function renderCountries(filter) {
+                    countryList.innerHTML = '';
+                    var q = String(filter || '').trim().toLowerCase();
+                    var list = phoneCountries();
+                    for (var i = 0; i < list.length; i++) {
+                        var c = list[i];
+                        if (!c) continue;
+                        var label = '+' + c.code + ' — ' + c.name;
+                        if (q && label.toLowerCase().indexOf(q) < 0 && String(c.code).indexOf(q) < 0) continue;
+                        var li = document.createElement('li');
+                        var opt = document.createElement('button');
+                        opt.type = 'button';
+                        opt.className = 'xbot-answer-country-option' + (c.code === countryCode ? ' is-selected' : '');
+                        opt.textContent = label;
+                        opt.setAttribute('data-code', c.code);
+                        opt.addEventListener('click', function (ev) {
+                            countryCode = digitsOnlyPhone(ev.currentTarget.getAttribute('data-code')) || '55';
+                            countryBtn.textContent = '+' + countryCode;
+                            countryPanel.hidden = true;
+                            countrySearch.value = '';
+                            renderCountries('');
+                            areaInput.style.display = countryCode === '55' ? '' : 'none';
+                            if (countryCode !== '55') areaInput.value = '';
+                        });
+                        li.appendChild(opt);
+                        countryList.appendChild(li);
+                        if (countryList.childNodes.length >= 80) break;
+                    }
+                }
+                renderCountries('');
+                countrySearch.addEventListener('input', function () { renderCountries(countrySearch.value); });
+                countryBtn.addEventListener('click', function () {
+                    if (!interactive || sessionEpisodeEnded) return;
+                    countryPanel.hidden = !countryPanel.hidden;
+                    if (!countryPanel.hidden) countrySearch.focus();
+                });
+                countryWrap.appendChild(countryBtn);
+                countryPanel.appendChild(countrySearch);
+                countryPanel.appendChild(countryList);
+                countryWrap.appendChild(countryPanel);
+
+                var areaInput = document.createElement('input');
+                areaInput.type = 'tel';
+                areaInput.inputMode = 'numeric';
+                areaInput.className = 'xbot-answer-area';
+                areaInput.placeholder = 'DDD';
+                areaInput.maxLength = 2;
+                areaInput.style.display = countryCode === '55' ? '' : 'none';
+
+                var nationalInput = document.createElement('input');
+                nationalInput.type = 'tel';
+                nationalInput.inputMode = 'numeric';
+                nationalInput.className = 'xbot-answer-field xbot-answer-national';
+                nationalInput.placeholder = placeholder;
+                nationalInput.autocomplete = 'tel-national';
+
+                var sendBtn = document.createElement('button');
+                sendBtn.type = 'submit';
+                sendBtn.className = 'xbot-answer-send';
+                sendBtn.setAttribute('aria-label', 'Enviar');
+                sendBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+
+                row.appendChild(countryWrap);
+                row.appendChild(areaInput);
+                row.appendChild(nationalInput);
+                row.appendChild(sendBtn);
+                form.appendChild(row);
+                form.appendChild(err);
+
+                form.addEventListener('submit', function (ev) {
+                    ev.preventDefault();
+                    var area = countryCode === '55' ? digitsOnlyPhone(areaInput.value) : '';
+                    var national = digitsOnlyPhone(nationalInput.value);
+                    submitValue(countryCode + area + national);
+                });
+            } else if (answerType === 'date') {
+                var dateRow = document.createElement('div');
+                dateRow.className = 'xbot-answer-row xbot-answer-date-row';
+                var dateWrap = document.createElement('div');
+                dateWrap.className = 'xbot-answer-date';
+                var dateTrigger = document.createElement('button');
+                dateTrigger.type = 'button';
+                dateTrigger.className = 'xbot-answer-date-trigger';
+                dateTrigger.textContent = 'Selecionar data';
+                var selectedIso = '';
+                var view = new Date();
+                view.setDate(1);
+                view.setHours(12, 0, 0, 0);
+
+                var panel = document.createElement('div');
+                panel.className = 'xbot-answer-date-panel';
+                panel.hidden = true;
+                var head = document.createElement('div');
+                head.className = 'xbot-answer-date-head';
+                var prevBtn = document.createElement('button');
+                prevBtn.type = 'button';
+                prevBtn.className = 'xbot-answer-date-nav';
+                prevBtn.setAttribute('aria-label', 'Mês anterior');
+                prevBtn.textContent = '‹';
+                var monthLabel = document.createElement('div');
+                monthLabel.className = 'xbot-answer-date-month';
+                var nextBtn = document.createElement('button');
+                nextBtn.type = 'button';
+                nextBtn.className = 'xbot-answer-date-nav';
+                nextBtn.setAttribute('aria-label', 'Próximo mês');
+                nextBtn.textContent = '›';
+                head.appendChild(prevBtn);
+                head.appendChild(monthLabel);
+                head.appendChild(nextBtn);
+                var weekdays = document.createElement('div');
+                weekdays.className = 'xbot-answer-date-weekdays';
+                ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].forEach(function (w) {
+                    var cell = document.createElement('span');
+                    cell.textContent = w;
+                    weekdays.appendChild(cell);
+                });
+                var grid = document.createElement('div');
+                grid.className = 'xbot-answer-date-grid';
+                panel.appendChild(head);
+                panel.appendChild(weekdays);
+                panel.appendChild(grid);
+
+                var MONTHS_PT = [
+                    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+                ];
+
+                function pad2(n) { return n < 10 ? '0' + n : String(n); }
+                function toIso(d) {
+                    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+                }
+                function formatBr(iso) {
+                    var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                    if (!m) return '';
+                    return m[3] + '/' + m[2] + '/' + m[1];
+                }
+
+                function renderCalendar() {
+                    monthLabel.textContent = MONTHS_PT[view.getMonth()] + ' ' + view.getFullYear();
+                    grid.innerHTML = '';
+                    var year = view.getFullYear();
+                    var month = view.getMonth();
+                    var firstDow = new Date(year, month, 1).getDay();
+                    var daysInMonth = new Date(year, month + 1, 0).getDate();
+                    var todayIso = toIso(new Date());
+                    var i;
+                    for (i = 0; i < firstDow; i++) {
+                        var empty = document.createElement('span');
+                        empty.className = 'xbot-answer-date-day is-empty';
+                        grid.appendChild(empty);
+                    }
+                    for (var day = 1; day <= daysInMonth; day++) {
+                        var iso = year + '-' + pad2(month + 1) + '-' + pad2(day);
+                        var dayBtn = document.createElement('button');
+                        dayBtn.type = 'button';
+                        dayBtn.className = 'xbot-answer-date-day';
+                        dayBtn.textContent = String(day);
+                        dayBtn.setAttribute('data-iso', iso);
+                        if (iso === todayIso) dayBtn.className += ' is-today';
+                        if (iso === selectedIso) dayBtn.className += ' is-selected';
+                        dayBtn.addEventListener('click', function (ev) {
+                            selectedIso = ev.currentTarget.getAttribute('data-iso') || '';
+                            dateTrigger.textContent = formatBr(selectedIso) || 'Selecionar data';
+                            dateTrigger.classList.add('has-value');
+                            panel.hidden = true;
+                            renderCalendar();
+                        });
+                        grid.appendChild(dayBtn);
+                    }
+                }
+                renderCalendar();
+
+                prevBtn.addEventListener('click', function () {
+                    view.setMonth(view.getMonth() - 1);
+                    renderCalendar();
+                });
+                nextBtn.addEventListener('click', function () {
+                    view.setMonth(view.getMonth() + 1);
+                    renderCalendar();
+                });
+                dateTrigger.addEventListener('click', function () {
+                    if (!interactive || sessionEpisodeEnded) return;
+                    panel.hidden = !panel.hidden;
+                });
+
+                dateWrap.appendChild(dateTrigger);
+                dateWrap.appendChild(panel);
+                var sendDate = document.createElement('button');
+                sendDate.type = 'submit';
+                sendDate.className = 'xbot-answer-send';
+                sendDate.setAttribute('aria-label', 'Enviar');
+                sendDate.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+                dateRow.appendChild(dateWrap);
+                dateRow.appendChild(sendDate);
+                form.appendChild(dateRow);
+                form.appendChild(err);
+                form.addEventListener('submit', function (ev) {
+                    ev.preventDefault();
+                    if (!selectedIso) {
+                        err.textContent = 'Selecione uma data.';
+                        err.hidden = false;
+                        return;
+                    }
+                    submitValue(selectedIso);
+                });
+            } else {
+                var row2 = document.createElement('div');
+                row2.className = 'xbot-answer-row';
+                var input = document.createElement('input');
+                input.className = 'xbot-answer-field';
+                input.placeholder = placeholder;
+                if (answerType === 'email') { input.type = 'email'; input.autocomplete = 'email'; }
+                else if (answerType === 'number') { input.type = 'number'; input.inputMode = 'decimal'; }
+                else if (answerType === 'url') { input.type = 'url'; input.autocomplete = 'url'; }
+                else if (answerType === 'name') { input.type = 'text'; input.autocomplete = 'name'; }
+                else { input.type = 'text'; }
+                var send2 = document.createElement('button');
+                send2.type = 'submit';
+                send2.className = 'xbot-answer-send';
+                send2.setAttribute('aria-label', 'Enviar');
+                send2.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+                row2.appendChild(input);
+                row2.appendChild(send2);
+                form.appendChild(row2);
+                form.appendChild(err);
+                form.addEventListener('submit', function (ev) {
+                    ev.preventDefault();
+                    submitValue(input.value);
+                });
+            }
+
+            if (!interactive || sessionEpisodeEnded) {
+                lockForm();
+            } else {
+                acquireChoiceComposerLock();
+            }
+            return form;
+        }
+
         function mountStructuredBlocks(host, blocks, opts) {
             if (!host || !Array.isArray(blocks) || !blocks.length) return;
             if (host.querySelector && host.querySelector('.xbot-ui-blocks')) return;
@@ -5096,6 +5765,8 @@
                     list.setAttribute('data-xbot', 'choice-list');
                     list.setAttribute('role', 'group');
                     list.setAttribute('aria-label', block.title || 'Opções');
+                    var lockComposer = block.allow_free_text === false;
+                    if (lockComposer) list.setAttribute('data-lock-composer', '1');
                     if (block.title) {
                         var listTitle = document.createElement('div');
                         listTitle.className = 'xbot-choice-list-title';
@@ -5108,6 +5779,7 @@
                         var btn = document.createElement('button');
                         btn.type = 'button';
                         btn.className = 'xbot-choice-item';
+                        btn.setAttribute('data-choice-value', choice.value || choice.label || '');
                         var idx = document.createElement('span');
                         idx.className = 'xbot-choice-index';
                         idx.textContent = String(index + 1);
@@ -5131,6 +5803,7 @@
                             btn.addEventListener('click', function () {
                                 if (sessionEpisodeEnded) return;
                                 lockChoices(list);
+                                if (lockComposer) releaseChoiceComposerLock();
                                 sendUserText(choice.value);
                             });
                         }
@@ -5171,8 +5844,14 @@
                         free.appendChild(freeInput);
                         free.appendChild(freeSend);
                         list.appendChild(free);
+                    } else if (interactive && !sessionEpisodeEnded) {
+                        acquireChoiceComposerLock();
                     }
                     wrap.appendChild(list);
+                    return;
+                }
+                if (block.kind === 'answer_input') {
+                    wrap.appendChild(mountAnswerInputBlock(block, interactive, opts));
                     return;
                 }
                 if (block.kind === 'step_progress') {
@@ -5740,6 +6419,7 @@
             const value = String(text || '').trim();
             if (!value) return;
             if (isPresentationComposerLocked()) return;
+            if (isChoiceComposerLocked()) releaseChoiceComposerLock();
 
             resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
