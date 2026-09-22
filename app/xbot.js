@@ -1806,6 +1806,18 @@
                     vid.muted = false;
                     wrap.classList.add('is-unmuted');
                     wrap.setAttribute('aria-label', 'Reproduzir do início');
+                    // Expande à largura da coluna da conversa (web + mobile).
+                    var mediaWrap = wrap.parentElement;
+                    if (mediaWrap && mediaWrap.classList && mediaWrap.classList.contains('xbot-media-wrap')) {
+                        mediaWrap.classList.add('is-presentation-expanded');
+                    }
+                    var row = wrap.closest ? wrap.closest('.xbot-message-row') : null;
+                    if (row) row.classList.add('xbot-message-row--presentation-expanded');
+                    requestAnimationFrame(function () {
+                        try {
+                            wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        } catch (e) { /* ignore */ }
+                    });
                 }
                 try { vid.currentTime = 0; } catch (e) { /* ignore */ }
                 var p = vid.play();
@@ -3519,6 +3531,7 @@
                 width: min(50%, 15rem);
                 max-width: 100%;
                 margin: 2px 0 4px;
+                transition: width 0.38s cubic-bezier(0.22, 1, 0.36, 1);
             }
             .xbot-media-wrap--audio {
                 width: min(100%, 16rem);
@@ -3538,6 +3551,31 @@
             .xbot-media-wrap .xbot-presentation-video {
                 width: 100%;
                 margin: 0;
+            }
+            /* TAP TO UNMUTE: abre o vídeo na largura da coluna da conversa. */
+            .xbot-media-wrap.is-presentation-expanded,
+            .xbot-media-wrap:has(.xbot-presentation-video.is-unmuted) {
+                width: 100% !important;
+                max-width: 100%;
+            }
+            .xbot-message-row.xbot-message-row--presentation-expanded,
+            .xbot-message-row:has(.xbot-presentation-video.is-unmuted) {
+                width: 92%;
+                max-width: 92%;
+            }
+            .xbot-message-row.xbot-message-row--presentation-expanded .xbot-message-col,
+            .xbot-message-row.xbot-message-row--presentation-expanded .xbot-message,
+            .xbot-message-row.xbot-message-row--presentation-expanded .xbot-message-content,
+            .xbot-message-row:has(.xbot-presentation-video.is-unmuted) .xbot-message-col,
+            .xbot-message-row:has(.xbot-presentation-video.is-unmuted) .xbot-message,
+            .xbot-message-row:has(.xbot-presentation-video.is-unmuted) .xbot-message-content {
+                width: 100%;
+                max-width: 100%;
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .xbot-media-wrap {
+                    transition: none;
+                }
             }
             .xbot-media-wrap .xbot-audio-player {
                 width: 100%;
