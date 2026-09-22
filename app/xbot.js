@@ -1580,6 +1580,34 @@
             if (choiceComposerLockCount === 0) setChoiceComposerLocked(false);
         }
 
+        /** Foca o campo de resposta inline no corpo da mensagem (Answer / opção com texto livre). */
+        function focusInlineBodyInput(root) {
+            if (!root || sessionEpisodeEnded) return;
+            var el = null;
+            var form = root.querySelector ? root.querySelector('[data-xbot="answer-input"]') : null;
+            if (form) {
+                el = form.querySelector('input.xbot-answer-national:not(:disabled)')
+                    || form.querySelector('input.xbot-answer-field:not(:disabled)')
+                    || form.querySelector('input.xbot-answer-area:not(:disabled)');
+                if (!el) {
+                    var dateTrigger = form.querySelector('.xbot-answer-date-trigger:not(:disabled)');
+                    if (dateTrigger) el = dateTrigger;
+                }
+            }
+            if (!el && root.querySelector) {
+                el = root.querySelector('.xbot-choice-free input:not(:disabled)');
+            }
+            if (!el || typeof el.focus !== 'function') return;
+            window.setTimeout(function () {
+                try {
+                    el.focus();
+                    if (typeof el.scrollIntoView === 'function') {
+                        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    }
+                } catch (e) { /* ignore */ }
+            }, 0);
+        }
+
         function syncPendingChoiceComposerLock() {
             releaseChoiceComposerLock();
             var rows = messages.querySelectorAll('.xbot-message-row');
@@ -1615,6 +1643,7 @@
                 var inputs = answerForm.querySelectorAll('input, button, select');
                 for (var k = 0; k < inputs.length; k++) inputs[k].disabled = false;
                 acquireChoiceComposerLock();
+                focusInlineBodyInput(last);
             }
         }
 
@@ -3988,8 +4017,14 @@
                 text-decoration: underline;
                 text-underline-offset: 2px;
                 cursor: pointer;
-                padding: 4px 2px;
-                align-self: flex-start;
+                padding: 10px;
+                width: 100%;
+                box-sizing: border-box;
+                text-align: left;
+            }
+            .xbot-answer-back {
+                padding: 4px 0;
+                width: auto;
             }
             .xbot-answer-back:disabled,
             .xbot-choice-back:disabled {
@@ -5908,7 +5943,7 @@
                                 sendUserText('__back__');
                             });
                         }
-                        list.appendChild(choiceBack);
+                        body.appendChild(choiceBack);
                     }
                     wrap.appendChild(list);
                     return;
@@ -5940,6 +5975,11 @@
                 }
             });
             if (wrap.childNodes.length) host.appendChild(wrap);
+            if (interactive && !sessionEpisodeEnded && wrap.querySelector(
+                '[data-xbot="answer-input"], .xbot-choice-free input'
+            )) {
+                focusInlineBodyInput(wrap);
+            }
         }
 
         function mountReplyActions(host, actions, opts) {
