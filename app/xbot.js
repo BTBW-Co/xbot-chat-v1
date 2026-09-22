@@ -1589,20 +1589,40 @@
             if (choiceComposerLockCount === 0) setChoiceComposerLocked(false);
         }
 
+        /** Campo visível e focável (ignora display:none / hidden). */
+        function isAnswerFieldFocusable(el) {
+            if (!el || el.disabled) return false;
+            if (el.hidden || el.getAttribute('aria-hidden') === 'true') return false;
+            try {
+                var style = window.getComputedStyle(el);
+                if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+            } catch (e) { /* ignore */ }
+            return true;
+        }
+
+        /**
+         * Primeiro campo preenchível da esquerda para a direita no Answer:
+         * telefone → DDD (se BR) → número; demais → input / data.
+         */
+        function firstFillableAnswerField(form) {
+            if (!form || !form.querySelector) return null;
+            var area = form.querySelector('input.xbot-answer-area');
+            if (isAnswerFieldFocusable(area)) return area;
+            var national = form.querySelector('input.xbot-answer-national');
+            if (isAnswerFieldFocusable(national)) return national;
+            var field = form.querySelector('input.xbot-answer-field');
+            if (isAnswerFieldFocusable(field)) return field;
+            var dateTrigger = form.querySelector('.xbot-answer-date-trigger');
+            if (isAnswerFieldFocusable(dateTrigger)) return dateTrigger;
+            return null;
+        }
+
         /** Foca o campo de resposta inline no corpo da mensagem (Answer / opção com texto livre). */
         function focusInlineBodyInput(root) {
             if (!root || sessionEpisodeEnded) return;
             var el = null;
             var form = root.querySelector ? root.querySelector('[data-xbot="answer-input"]') : null;
-            if (form) {
-                el = form.querySelector('input.xbot-answer-national:not(:disabled)')
-                    || form.querySelector('input.xbot-answer-field:not(:disabled)')
-                    || form.querySelector('input.xbot-answer-area:not(:disabled)');
-                if (!el) {
-                    var dateTrigger = form.querySelector('.xbot-answer-date-trigger:not(:disabled)');
-                    if (dateTrigger) el = dateTrigger;
-                }
-            }
+            if (form) el = firstFillableAnswerField(form);
             if (!el && root.querySelector) {
                 el = root.querySelector('.xbot-choice-free input:not(:disabled)');
             }
@@ -5751,6 +5771,7 @@
                             renderCountries('');
                             areaInput.style.display = countryCode === '55' ? '' : 'none';
                             if (countryCode !== '55') areaInput.value = '';
+                            focusPhoneFirstFillable();
                         });
                         li.appendChild(opt);
                         countryList.appendChild(li);
@@ -5780,6 +5801,7 @@
                 areaInput.placeholder = 'DDD';
                 areaInput.maxLength = 2;
                 areaInput.style.display = countryCode === '55' ? '' : 'none';
+                areaInput.setAttribute('aria-label', 'DDD');
 
                 var nationalInput = document.createElement('input');
                 nationalInput.type = 'tel';
@@ -5787,12 +5809,55 @@
                 nationalInput.className = 'xbot-answer-field xbot-answer-national';
                 nationalInput.placeholder = placeholder;
                 nationalInput.autocomplete = 'tel-national';
+                nationalInput.setAttribute('aria-label', 'Número');
 
                 var sendBtn = document.createElement('button');
                 sendBtn.type = 'submit';
                 sendBtn.className = 'xbot-answer-send';
                 sendBtn.setAttribute('aria-label', 'Enviar');
                 sendBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+
+                function phoneTabStops() {
+                    var stops = [countryBtn];
+                    if (isAnswerFieldFocusable(areaInput)) stops.push(areaInput);
+                    if (isAnswerFieldFocusable(nationalInput)) stops.push(nationalInput);
+                    if (!sendBtn.disabled) stops.push(sendBtn);
+                    return stops;
+                }
+
+                function focusPhoneFirstFillable() {
+                    var target = isAnswerFieldFocusable(areaInput) ? areaInput : nationalInput;
+                    if (!target || typeof target.focus !== 'function') return;
+                    try {
+                        target.focus({ preventScroll: true });
+                    } catch (e) {
+                        try { target.focus(); } catch (e2) { /* ignore */ }
+                    }
+                }
+
+                /** Tab / Shift+Tab navega país → DDD → número → enviar (sem ciclar; sai para Voltar). */
+                function onPhoneTabKey(ev) {
+                    if (ev.key !== 'Tab' || sessionEpisodeEnded) return;
+                    var stops = phoneTabStops();
+                    if (stops.length < 2) return;
+                    var idx = stops.indexOf(ev.currentTarget);
+                    if (idx < 0) return;
+                    var nextIdx = ev.shiftKey ? idx - 1 : idx + 1;
+                    if (nextIdx < 0 || nextIdx >= stops.length) return;
+                    var next = stops[nextIdx];
+                    if (!next) return;
+                    ev.preventDefault();
+                    try {
+                        next.focus({ preventScroll: true });
+                    } catch (e) {
+                        try { next.focus(); } catch (e2) { /* ignore */ }
+                    }
+                }
+
+                countryBtn.addEventListener('keydown', onPhoneTabKey);
+                areaInput.addEventListener('keydown', onPhoneTabKey);
+                nationalInput.addEventListener('keydown', onPhoneTabKey);
+                sendBtn.addEventListener('keydown', onPhoneTabKey);
 
                 row.appendChild(countryWrap);
                 row.appendChild(areaInput);
