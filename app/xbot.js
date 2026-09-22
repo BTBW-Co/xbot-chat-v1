@@ -4303,6 +4303,8 @@
                 -webkit-appearance: none;
                 background: transparent;
                 cursor: pointer;
+                --xbot-scale-pct: 50%;
+                --xbot-scale-track: color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
             }
             .xbot-answer-scale-slider:focus {
                 outline: none;
@@ -4316,12 +4318,23 @@
             .xbot-answer-scale-slider::-webkit-slider-runnable-track {
                 height: 8px;
                 border-radius: 999px;
-                background: color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+                background: linear-gradient(
+                    to right,
+                    var(--xbot-theme) 0%,
+                    var(--xbot-theme) var(--xbot-scale-pct),
+                    var(--xbot-scale-track) var(--xbot-scale-pct),
+                    var(--xbot-scale-track) 100%
+                );
             }
             .xbot-answer-scale-slider::-moz-range-track {
                 height: 8px;
                 border-radius: 999px;
-                background: color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+                background: var(--xbot-scale-track);
+            }
+            .xbot-answer-scale-slider::-moz-range-progress {
+                height: 8px;
+                border-radius: 999px;
+                background: var(--xbot-theme);
             }
             .xbot-answer-scale-slider::-webkit-slider-thumb {
                 -webkit-appearance: none;
@@ -6235,11 +6248,18 @@
 
                 function syncScaleUi() {
                     var v = String(range.value);
+                    var num = Number(range.value);
+                    var span = scaleMax - scaleMin;
+                    var pct = span > 0 ? ((num - scaleMin) / span) * 100 : 0;
+                    if (!isFinite(pct)) pct = 0;
+                    pct = Math.max(0, Math.min(100, pct));
                     scaleValue.textContent = v;
                     range.setAttribute('aria-valuenow', v);
+                    range.style.setProperty('--xbot-scale-pct', pct + '%');
                 }
                 range.addEventListener('input', syncScaleUi);
                 range.addEventListener('change', syncScaleUi);
+                syncScaleUi();
 
                 scaleRow.appendChild(scaleMinLbl);
                 scaleRow.appendChild(range);
