@@ -1463,6 +1463,20 @@
                         default_country_code: String(block.default_country_code || '55').replace(/\D/g, '') || '55',
                         allow_back: block.allow_back === true
                     });
+                } else if (kind === 'file_input') {
+                    var exts = [];
+                    var rawExts = Array.isArray(block.allowed_extensions) ? block.allowed_extensions : [];
+                    for (var e = 0; e < rawExts.length; e++) {
+                        var ext = String(rawExts[e] || '').trim().toLowerCase().replace(/^\./, '');
+                        if (ext && exts.indexOf(ext) === -1) exts.push(ext);
+                    }
+                    out.push({
+                        kind: 'file_input',
+                        field_key: String(block.field_key || 'file').trim() || 'file',
+                        allowed_extensions: exts,
+                        input_placeholder: String(block.input_placeholder || '').trim(),
+                        allow_back: block.allow_back === true
+                    });
                 }
             }
             return out;
@@ -1471,7 +1485,11 @@
         function blocksHaveChoiceList(blocks) {
             if (!Array.isArray(blocks)) return false;
             for (var i = 0; i < blocks.length; i++) {
-                if (blocks[i] && (blocks[i].kind === 'choice_list' || blocks[i].kind === 'answer_input')) return true;
+                if (blocks[i] && (
+                    blocks[i].kind === 'choice_list'
+                    || blocks[i].kind === 'answer_input'
+                    || blocks[i].kind === 'file_input'
+                )) return true;
             }
             return false;
         }
@@ -1571,7 +1589,15 @@
                 inputEl.readOnly = !!locked || isPresentationComposerLocked();
                 if (locked) {
                     inputEl.setAttribute('data-prev-placeholder', inputEl.getAttribute('placeholder') || '');
-                    inputEl.placeholder = 'Escolha uma opção acima…';
+                    var pendingFile = messages && messages.querySelector
+                        ? messages.querySelector('[data-xbot="file-input"][data-lock-composer="1"]')
+                        : null;
+                    var pendingAnswer = messages && messages.querySelector
+                        ? messages.querySelector('[data-xbot="answer-input"][data-lock-composer="1"]')
+                        : null;
+                    if (pendingFile) inputEl.placeholder = 'Envie um arquivo acima…';
+                    else if (pendingAnswer) inputEl.placeholder = 'Responda no campo acima…';
+                    else inputEl.placeholder = 'Escolha uma opção acima…';
                 } else if (inputEl.getAttribute('data-prev-placeholder') != null) {
                     inputEl.placeholder = inputEl.getAttribute('data-prev-placeholder') || 'Ou envie uma mensagem…';
                     inputEl.removeAttribute('data-prev-placeholder');
@@ -1673,6 +1699,14 @@
                 for (var k = 0; k < inputs.length; k++) inputs[k].disabled = false;
                 acquireChoiceComposerLock();
                 focusInlineBodyInput(last);
+                return;
+            }
+            var fileForm = last.querySelector('[data-xbot="file-input"][data-lock-composer="1"]');
+            if (fileForm) {
+                var fileNodes = fileForm.querySelectorAll('input, button');
+                for (var f = 0; f < fileNodes.length; f++) fileNodes[f].disabled = false;
+                fileForm.classList.remove('is-done', 'is-uploading');
+                acquireChoiceComposerLock();
             }
         }
 
@@ -4066,7 +4100,8 @@
                 box-shadow: none;
             }
             .xbot-answer-back,
-            .xbot-choice-back {
+            .xbot-choice-back,
+            .xbot-file-back {
                 appearance: none;
                 border: 0;
                 background: transparent;
@@ -4082,18 +4117,95 @@
                 box-sizing: border-box;
                 text-align: left;
             }
-            .xbot-answer-back {
+            .xbot-answer-back,
+            .xbot-file-back {
                 padding: 4px 2px;
                 width: auto;
             }
             .xbot-answer-back:hover:not(:disabled),
-            .xbot-choice-back:hover:not(:disabled) {
+            .xbot-choice-back:hover:not(:disabled),
+            .xbot-file-back:hover:not(:disabled) {
                 color: color-mix(in srgb, var(--xbot-theme) 78%, #0f172a);
             }
             .xbot-answer-back:disabled,
-            .xbot-choice-back:disabled {
+            .xbot-choice-back:disabled,
+            .xbot-file-back:disabled {
                 opacity: 0.45;
                 cursor: default;
+            }
+            .xbot-file-input {
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid color-mix(in srgb, var(--xbot-theme) 40%, var(--xbot-border));
+                background: color-mix(in srgb, var(--xbot-theme) 12%, #ffffff);
+                border-radius: 16px;
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .xbot-file-dropzone {
+                appearance: none;
+                border: 1.5px dashed color-mix(in srgb, var(--xbot-theme) 55%, var(--xbot-border));
+                background: color-mix(in srgb, var(--xbot-theme) 8%, #ffffff);
+                border-radius: 14px;
+                padding: 18px 14px;
+                width: 100%;
+                box-sizing: border-box;
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                text-align: center;
+                color: #334155;
+                font: inherit;
+                transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+            }
+            .xbot-file-dropzone:hover:not(:disabled),
+            .xbot-file-dropzone:focus-visible {
+                border-color: var(--xbot-theme);
+                background: color-mix(in srgb, var(--xbot-theme) 14%, #ffffff);
+                outline: none;
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--xbot-theme) 18%, transparent);
+            }
+            .xbot-file-dropzone.is-dragover {
+                border-color: var(--xbot-theme);
+                background: color-mix(in srgb, var(--xbot-theme) 18%, #ffffff);
+                box-shadow: 0 0 0 3px color-mix(in srgb, var(--xbot-theme) 22%, transparent);
+            }
+            .xbot-file-dropzone:disabled {
+                opacity: 0.55;
+                cursor: default;
+            }
+            .xbot-file-dropzone-icon {
+                width: 28px;
+                height: 28px;
+                color: var(--xbot-theme);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .xbot-file-dropzone-icon svg {
+                width: 28px;
+                height: 28px;
+            }
+            .xbot-file-dropzone-title {
+                font-size: 13px;
+                font-weight: 650;
+                color: #0f172a;
+                line-height: 1.35;
+            }
+            .xbot-file-dropzone-hint {
+                font-size: 11px;
+                color: #64748b;
+                line-height: 1.35;
+            }
+            .xbot-file-error {
+                font-size: 12px;
+                color: #b91c1c;
+                line-height: 1.35;
             }
             .xbot-answer-input {
                 width: 100%;
@@ -5687,6 +5799,182 @@
             }
         }
 
+        function extensionFromFilename(name) {
+            var base = String(name || '').trim();
+            if (!base || base.indexOf('.') < 0) return '';
+            return base.split('.').pop().trim().toLowerCase();
+        }
+
+        function fileMatchesAllowedExtensions(file, allowed) {
+            if (!file) return false;
+            var list = Array.isArray(allowed) ? allowed : [];
+            if (!list.length) return true;
+            var ext = extensionFromFilename(file.name);
+            if (ext && list.indexOf(ext) !== -1) return true;
+            var mime = String(file.type || '').toLowerCase();
+            if (!mime) return false;
+            if (mime === 'image/jpeg' && (list.indexOf('jpg') !== -1 || list.indexOf('jpeg') !== -1)) return true;
+            var subtype = mime.split('/').pop().split(';')[0].trim();
+            if (subtype === 'jpeg') subtype = 'jpg';
+            return !!(subtype && list.indexOf(subtype) !== -1);
+        }
+
+        function mountFileInputBlock(block, interactive, opts) {
+            var form = document.createElement('div');
+            form.className = 'xbot-file-input';
+            form.setAttribute('data-xbot', 'file-input');
+            form.setAttribute('data-lock-composer', '1');
+            form.setAttribute('role', 'group');
+            form.setAttribute('aria-label', 'Envio de arquivo');
+
+            var allowed = Array.isArray(block.allowed_extensions) ? block.allowed_extensions.slice() : [];
+            var accept = allowed.length
+                ? allowed.map(function (e) { return '.' + String(e).replace(/^\./, ''); }).join(',')
+                : '.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp';
+            var hintText = allowed.length
+                ? ('Formatos: ' + allowed.join(', '))
+                : 'PDF, DOC ou imagens';
+            var titleText = block.input_placeholder || 'Arraste o arquivo ou clique para enviar';
+
+            var err = document.createElement('div');
+            err.className = 'xbot-file-error';
+            err.hidden = true;
+
+            var drop = document.createElement('button');
+            drop.type = 'button';
+            drop.className = 'xbot-file-dropzone';
+            drop.setAttribute('aria-label', titleText);
+
+            var icon = document.createElement('span');
+            icon.className = 'xbot-file-dropzone-icon';
+            icon.innerHTML = XBOT_ICONS.attach;
+            icon.setAttribute('aria-hidden', 'true');
+
+            var title = document.createElement('span');
+            title.className = 'xbot-file-dropzone-title';
+            title.textContent = titleText;
+
+            var hint = document.createElement('span');
+            hint.className = 'xbot-file-dropzone-hint';
+            hint.textContent = hintText;
+
+            drop.appendChild(icon);
+            drop.appendChild(title);
+            drop.appendChild(hint);
+
+            var hiddenInput = document.createElement('input');
+            hiddenInput.type = 'file';
+            hiddenInput.accept = accept;
+            hiddenInput.style.display = 'none';
+            hiddenInput.setAttribute('tabindex', '-1');
+
+            function lockForm() {
+                form.classList.add('is-done');
+                drop.disabled = true;
+                hiddenInput.disabled = true;
+                var buttons = form.querySelectorAll('button');
+                for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+            }
+
+            function showError(msg) {
+                err.textContent = msg || 'Arquivo inválido.';
+                err.hidden = false;
+            }
+
+            function submitFile(file) {
+                if (!file || sessionEpisodeEnded || form.classList.contains('is-uploading') || form.classList.contains('is-done')) {
+                    return;
+                }
+                if (!fileMatchesAllowedExtensions(file, allowed)) {
+                    showError('Formato não aceito. Use: ' + (allowed.length ? allowed.join(', ') : 'pdf, doc, imagens'));
+                    return;
+                }
+                err.hidden = true;
+                form.classList.add('is-uploading');
+                drop.disabled = true;
+                title.textContent = 'Enviando…';
+                releaseChoiceComposerLock();
+                uploadUserFile(file).then(function (data) {
+                    if (data) {
+                        lockForm();
+                        return;
+                    }
+                    form.classList.remove('is-uploading');
+                    drop.disabled = false;
+                    title.textContent = titleText;
+                    showError('Não foi possível enviar. Tente de novo.');
+                    acquireChoiceComposerLock();
+                });
+            }
+
+            function submitBack() {
+                if (sessionEpisodeEnded) return;
+                err.hidden = true;
+                lockForm();
+                releaseChoiceComposerLock();
+                sendUserText('__back__');
+            }
+
+            drop.addEventListener('click', function () {
+                if (drop.disabled || sessionEpisodeEnded) return;
+                hiddenInput.click();
+            });
+            hiddenInput.addEventListener('change', function () {
+                var file = hiddenInput.files && hiddenInput.files[0];
+                hiddenInput.value = '';
+                if (file) submitFile(file);
+            });
+
+            ;['dragenter', 'dragover'].forEach(function (evtName) {
+                drop.addEventListener(evtName, function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    if (drop.disabled || sessionEpisodeEnded) return;
+                    drop.classList.add('is-dragover');
+                });
+            });
+            ;['dragleave', 'dragend', 'drop'].forEach(function (evtName) {
+                drop.addEventListener(evtName, function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    drop.classList.remove('is-dragover');
+                });
+            });
+            drop.addEventListener('drop', function (ev) {
+                if (drop.disabled || sessionEpisodeEnded) return;
+                var dt = ev.dataTransfer;
+                var file = dt && dt.files && dt.files[0];
+                if (file) submitFile(file);
+            });
+
+            form.appendChild(drop);
+            form.appendChild(hiddenInput);
+            form.appendChild(err);
+
+            if (block.allow_back === true) {
+                var backBtn = document.createElement('button');
+                backBtn.type = 'button';
+                backBtn.className = 'xbot-file-back';
+                backBtn.textContent = 'Voltar';
+                if (!interactive || sessionEpisodeEnded) {
+                    backBtn.disabled = true;
+                } else {
+                    backBtn.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        submitBack();
+                    });
+                }
+                form.appendChild(backBtn);
+            }
+
+            if (!interactive || sessionEpisodeEnded) {
+                lockForm();
+            } else {
+                acquireChoiceComposerLock();
+            }
+            return form;
+        }
+
         function mountAnswerInputBlock(block, interactive, opts) {
             var form = document.createElement('form');
             form.className = 'xbot-answer-input';
@@ -6298,6 +6586,10 @@
                 }
                 if (block.kind === 'answer_input') {
                     wrap.appendChild(mountAnswerInputBlock(block, interactive, opts));
+                    return;
+                }
+                if (block.kind === 'file_input') {
+                    wrap.appendChild(mountFileInputBlock(block, interactive, opts));
                     return;
                 }
                 if (block.kind === 'step_progress') {
@@ -6933,90 +7225,103 @@
             appendMessage(message, 'bot');
         };        
         
-        // Upload de Arquivos (pdf, imagens)
+        // Upload de Arquivos (pdf, imagens) — composer e bloco Straight file_input
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
-        fileInput.accept = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov';
+        fileInput.accept = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.doc,.docx';
         fileInput.style.display = 'none';
         document.body.appendChild(fileInput);
-        
-        uploadBtn.addEventListener('click', () => {
-            if (isPresentationComposerLocked()) return;
-            fileInput.click();
-        });
-        fileInput.addEventListener('change', async (e) => {
-            if (isPresentationComposerLocked()) {
-                e.target.value = '';
-                return;
-            }
-            const file = e.target.files[0];
-            if (!file) return;
+
+        async function uploadUserFile(file) {
+            if (!file) return null;
+            if (isPresentationComposerLocked()) return null;
+            if (isChoiceComposerLocked()) releaseChoiceComposerLock();
+
+            resumeRealtimeAfterUserSend();
+            beginNewEpisodeFromUserMessage();
 
             const formData = new FormData();
             formData.append('file', file);
             var vid = getVisitorId();
             if (vid) formData.append('visitor_id', vid);
             attachIdentityToFormData(formData);
-        
-            const previewRow = document.createElement('div');
-            previewRow.className = 'xbot-message-row user';
-            const previewCol = document.createElement('div');
-            previewCol.className = 'xbot-message-col';
-            const preview = document.createElement('div');
-            preview.className = 'xbot-message user';
+            if (window.__xbotConfig.channelId) {
+                formData.append('channel_id', window.__xbotConfig.channelId);
+            }
+
             var localPreviewUrl = URL.createObjectURL(file);
+            var mediaNode;
             if (file.type.startsWith('image/')) {
-                preview.appendChild(wrapMediaWithDownload(
+                mediaNode = wrapMediaWithDownload(
                     createMediaImageEl(localPreviewUrl, file.name || 'imagem'),
                     localPreviewUrl,
                     file.name || 'imagem.jpg',
                     'image'
-                ));
+                );
             } else if (file.type.startsWith('video/')) {
-                preview.appendChild(wrapMediaWithDownload(
+                mediaNode = wrapMediaWithDownload(
                     createMediaVideoEl(localPreviewUrl),
                     localPreviewUrl,
                     file.name || 'video.mp4',
                     'video'
-                ));
+                );
             } else {
                 var filePreview = document.createElement('div');
                 filePreview.className = 'xbot-media-file';
-                filePreview.textContent = '📎 ' + file.name;
-                preview.appendChild(wrapMediaWithDownload(
+                filePreview.textContent = '📎 ' + (file.name || 'arquivo');
+                mediaNode = wrapMediaWithDownload(
                     filePreview,
                     localPreviewUrl,
                     file.name || 'arquivo',
                     'file'
-                ));
+                );
             }
-            const previewTime = document.createElement('div');
-            previewTime.className = 'xbot-time';
-            previewTime.textContent = formatMessageTime();
-            previewCol.appendChild(preview);
-            previewCol.appendChild(previewTime);
-            previewRow.appendChild(previewCol);
-            messages.appendChild(previewRow);
-            syncEmptyState();
-            scrollMessagesToBottom({ force: true });
-        
+            appendMessage('', 'user', { domNode: mediaNode });
+            beginWaitingForBot();
+            pollSessionInactivity();
+
             try {
-            if (window.__xbotConfig.channelId) {
-                formData.append('channel_id', window.__xbotConfig.channelId);
-            }
-            const res = await fetch(getUploadUrl(), {
-                method: 'POST',
-                headers: buildAuthHeaders({}),
-                body: formData
-            });
-            const data = await res.json();
-            appendMessage('Arquivo recebido: [' + file.name + '](' + (data.url || '#') + ')', 'bot');
+                const res = await fetch(getUploadUrl(), {
+                    method: 'POST',
+                    headers: buildAuthHeaders({}),
+                    body: formData
+                });
+                const data = await res.json().catch(function () { return {}; });
+                if (!res.ok) throw new Error('upload failed');
+                if (data.visitor_id && typeof localStorage !== 'undefined') {
+                    try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
+                }
+                sendVisitorPresence({ chat_open: true, page_visible: true }, { force: true });
+                if (data.bot_reply_enabled) {
+                    beginWaitingForBot();
+                } else {
+                    finishWaitingForBot();
+                }
+                return data;
             } catch (err) {
-            appendMessage('Erro ao enviar o arquivo.', 'bot');
+                finishWaitingForBot();
+                appendMessage('Erro ao enviar o arquivo.', 'bot');
+                return null;
+            } finally {
+                scrollMessagesToBottom({ force: true });
             }
-            scrollMessagesToBottom({ force: true });
+        }
+
+        uploadBtn.addEventListener('click', () => {
+            if (isPresentationComposerLocked()) return;
+            if (isChoiceComposerLocked()) return;
+            fileInput.click();
         });
-        
+        fileInput.addEventListener('change', async (e) => {
+            if (isPresentationComposerLocked() || isChoiceComposerLocked()) {
+                e.target.value = '';
+                return;
+            }
+            const file = e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
+            await uploadUserFile(file);
+        }); 
         // Gravação de Áudio
         let mediaRecorder;
         let chunks = [];
