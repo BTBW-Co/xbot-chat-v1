@@ -1342,7 +1342,8 @@
                     presentationOpening: source === 'opening' || (
                         source !== 'history' && source !== 'hydrate' && isPresentationOpeningMeta(meta)
                     ),
-                    tapToUnmute: source !== 'history' && source !== 'hydrate' && isTapToUnmuteMeta(meta)
+                    tapToUnmute: source !== 'history' && source !== 'hydrate' && isTapToUnmuteMeta(meta),
+                    waitUntilVideoEnds: source !== 'history' && source !== 'hydrate' && isWaitUntilVideoEndsMeta(meta)
                 });
             } else {
                 appendMessage(body, 'bot', {
@@ -1536,6 +1537,14 @@
                 meta.straight_media === true ||
                 meta.source === 'straight_media'
             ));
+        }
+
+        function isWaitUntilVideoEndsMeta(meta) {
+            if (!meta || typeof meta !== 'object') return false;
+            if (!isTapToUnmuteMeta(meta) && meta.source !== 'straight_media') return false;
+            if (meta.wait_until_video_ends === false) return false;
+            // Default true para Straight Media em vídeo (pipeline aguarda o ended no XChat).
+            return meta.wait_until_video_ends === true || meta.straight_media === true || meta.source === 'straight_media';
         }
 
         function isPresentationComposerLocked() {
@@ -1742,6 +1751,7 @@
 
         function mountPresentationVideo(url, opts) {
             var lockComposer = !(opts && opts.lockComposer === false);
+            var onEnded = opts && typeof opts.onEnded === 'function' ? opts.onEnded : null;
             var wrap = document.createElement('div');
             wrap.className = 'xbot-presentation-video';
             wrap.setAttribute('role', 'button');
@@ -1769,6 +1779,14 @@
             unmute.textContent = 'TAP TO UNMUTE';
 
             var finished = false;
+            function finishPlayback() {
+                if (finished) return;
+                finished = true;
+                if (lockComposer) releasePresentationComposerLock();
+                if (onEnded) {
+                    try { onEnded(); } catch (e) { /* ignore */ }
+                }
+            }
             function tryPlay() {
                 if (!wrap.classList.contains('is-unmuted')) vid.muted = true;
                 var p = vid.play();
@@ -1799,16 +1817,8 @@
             });
             bindMediaInteractionScrollGuard(wrap);
             bindMediaInteractionScrollGuard(vid);
-            vid.addEventListener('ended', function () {
-                if (finished) return;
-                finished = true;
-                if (lockComposer) releasePresentationComposerLock();
-            });
-            vid.addEventListener('error', function () {
-                if (finished) return;
-                finished = true;
-                if (lockComposer) releasePresentationComposerLock();
-            });
+            vid.addEventListener('ended', finishPlayback);
+            vid.addEventListener('error', finishPlayback);
             vid.addEventListener('loadeddata', tryPlay);
             vid.addEventListener('canplay', tryPlay);
 
@@ -1915,11 +1925,17 @@
                     (!visitorHasSpoken && !!(opts && opts.presentationOpening)) ||
                     !!(opts && opts.tapToUnmute)
                 );
+                var waitUntilVideoEnds = !!(opts && opts.waitUntilVideoEnds);
                 if (usePresentationPlayer) {
                     appendMessage('', 'bot', Object.assign({}, opts, {
                         domNode: wrapMediaWithDownload(
                             mountPresentationVideo(url, {
-                                lockComposer: !(opts && opts.tapToUnmute)
+                                // Straight com wait trava o composer até o vídeo acabar (como abertura).
+                                // Straight sem wait: TAP TO UNMUTE sem travar.
+                                lockComposer: !!(opts && opts.presentationOpening) || waitUntilVideoEnds,
+                                onEnded: waitUntilVideoEnds ? function () {
+                                    sendSilentVideoEndedAck();
+                                } : null
                             }),
                             url,
                             downloadName,
@@ -2555,8 +2571,11 @@
                 triggerBtn.disabled = !!on;
                 triggerBtn.classList.toggle('is-busy', !!on);
                 triggerBtn.setAttribute('aria-busy', on ? 'true' : 'false');
-                var label = triggerBtn.querySelector('span');
-                if (label) label.textContent = on ? 'Preparando…' : (onApple ? 'Salvar' : 'Baixar');
+                if (on) {
+                    triggerBtn.setAttribute('title', 'Preparando…');
+                } else {
+                    triggerBtn.setAttribute('title', onApple ? 'Salvar' : 'Baixar');
+                }
             }
 
             function triggerBlobSave(blob, downloadName) {
@@ -2660,7 +2679,8 @@
             var actionLabel = apple ? 'Salvar' : 'Baixar';
             btn.setAttribute('aria-label', apple ? 'Salvar na Fototeca' : 'Baixar arquivo');
             btn.title = actionLabel;
-            btn.innerHTML = XBOT_ICONS.download + '<span>' + actionLabel + '</span>';
+            // Só o ícone — label fica no title/aria-label (acessibilidade).
+            btn.innerHTML = XBOT_ICONS.download;
             if (messageId) btn.setAttribute('data-message-id', String(messageId));
             btn.addEventListener('click', function (ev) {
                 ev.preventDefault();
@@ -3507,18 +3527,22 @@
             .xbot-media-download {
                 display: inline-flex;
                 align-items: center;
-                gap: 5px;
+                justify-content: center;
+                gap: 0;
                 margin: 0;
-                padding: 2px 2px 0;
+                padding: 4px 2px 0;
                 border: 0;
                 background: transparent;
                 color: var(--xbot-muted);
                 font: inherit;
                 font-size: 12px;
                 font-weight: 550;
-                line-height: 1.2;
+                line-height: 1;
                 cursor: pointer;
                 -webkit-tap-highlight-color: transparent;
+            }
+            .xbot-media-download span {
+                display: none;
             }
             .xbot-media-download.is-busy {
                 opacity: 0.7;
@@ -4756,6 +4780,8 @@
                 cursor: pointer;
                 -webkit-user-select: none;
                 user-select: none;
+                container-type: inline-size;
+                container-name: xbot-pres-video;
             }
             .xbot-presentation-video:focus-visible {
                 outline: 2px solid rgba(var(--xbot-theme-rgb), 0.55);
@@ -4784,14 +4810,19 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                box-sizing: border-box;
                 margin: 0;
-                padding: 16px 18px;
-                font-size: clamp(20px, 6.2vw, 30px) !important;
+                padding: clamp(6px, 4cqi, 16px) clamp(8px, 5cqi, 18px);
+                /* Tamanho relativo ao frame do vídeo (não ao viewport). */
+                font-size: clamp(11px, 7.2cqi, 28px) !important;
                 font-weight: 800;
-                letter-spacing: 0.1em;
-                line-height: 1.15;
+                letter-spacing: 0.06em;
+                line-height: 1.1;
                 text-align: center;
                 text-transform: uppercase;
+                white-space: nowrap;
+                max-width: 100%;
+                overflow: hidden;
                 color: #fff;
                 text-shadow:
                     0 1px 0 rgba(0, 0, 0, 0.35),
@@ -4801,11 +4832,9 @@
                 pointer-events: none;
                 animation: xbot-unmute-breathe 1.7s ease-in-out infinite;
             }
-            @media (min-width: 768px) {
+            @supports not (font-size: 1cqi) {
                 .xbot-presentation-unmute {
-                    font-size: clamp(48px, 5.4vw, 72px) !important;
-                    letter-spacing: 0.12em;
-                    padding: 24px 32px;
+                    font-size: clamp(12px, 4.2vw, 22px) !important;
                 }
             }
             @keyframes xbot-unmute-breathe {
@@ -7580,6 +7609,46 @@
             }
             if (from === 'bot' && countUnread) {
                 notifyBrowserIncoming(opts.domNode ? 'Áudio' : text);
+            }
+        }
+
+        async function sendSilentVideoEndedAck() {
+            // Ack silencioso: não cria bolha, não libera episodio, não trava no composer lock.
+            try {
+                const visitorId = getVisitorId();
+                const msgBody = attachIdentityToMessageBody({
+                    message: '__video_ended__',
+                    action: {
+                        id: 'video-ended',
+                        label: 'video_ended',
+                        value: '__video_ended__',
+                        kind: 'reply'
+                    }
+                });
+                if (visitorId) msgBody.visitor_id = visitorId;
+                if (channelId) msgBody.channel_id = channelId;
+                beginWaitingForBot();
+                const response = await fetch(getMessageUrl(), {
+                    method: 'POST',
+                    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(msgBody)
+                });
+                const data = await response.json().catch(function () { return {}; });
+                if (data && data.visitor_id && visitorId !== data.visitor_id && typeof localStorage !== 'undefined') {
+                    try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
+                }
+                if (data && data.reply) {
+                    var replyText = String(data.reply).trim();
+                    if (replyText) ingestBotPayload(null, replyText, 'post');
+                    else finishWaitingForBot();
+                } else if (data && data.bot_reply_enabled) {
+                    beginWaitingForBot();
+                } else {
+                    finishWaitingForBot();
+                }
+            } catch (err) {
+                finishWaitingForBot();
+                widgetLog('video_ended ack falhou', err);
             }
         }
 
