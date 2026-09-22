@@ -1636,6 +1636,8 @@
             if (isAnswerFieldFocusable(area)) return area;
             var national = form.querySelector('input.xbot-answer-national');
             if (isAnswerFieldFocusable(national)) return national;
+            var otpDigit = form.querySelector('input.xbot-answer-otp-digit');
+            if (isAnswerFieldFocusable(otpDigit)) return otpDigit;
             var field = form.querySelector('input.xbot-answer-field');
             if (isAnswerFieldFocusable(field)) return field;
             var dateTrigger = form.querySelector('.xbot-answer-date-trigger');
@@ -4220,12 +4222,50 @@
                 box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(var(--xbot-theme-rgb), 0.12);
             }
             .xbot-answer-row,
-            .xbot-answer-phone-row {
+            .xbot-answer-phone-row,
+            .xbot-answer-otp-row {
                 display: flex;
                 align-items: stretch;
                 gap: 8px;
                 width: 100%;
                 min-width: 0;
+            }
+            .xbot-answer-otp-digits {
+                display: flex;
+                align-items: stretch;
+                gap: 6px;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .xbot-answer-otp-digit {
+                flex: 1 1 0;
+                width: 100%;
+                min-width: 0;
+                max-width: 48px;
+                aspect-ratio: 1 / 1;
+                box-sizing: border-box;
+                border: 1px solid color-mix(in srgb, var(--xbot-theme) 18%, var(--xbot-border));
+                border-radius: 12px;
+                background: #ffffff;
+                padding: 0;
+                font: inherit;
+                font-size: 18px;
+                font-weight: 650;
+                letter-spacing: 0;
+                text-align: center;
+                color: var(--xbot-ink);
+                outline: none;
+                transition: border-color 0.15s ease, box-shadow 0.15s ease;
+                -moz-appearance: textfield;
+            }
+            .xbot-answer-otp-digit::-webkit-outer-spin-button,
+            .xbot-answer-otp-digit::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+            .xbot-answer-otp-digit:focus {
+                border-color: var(--xbot-theme);
+                box-shadow: 0 0 0 3px rgba(var(--xbot-theme-rgb), 0.18);
             }
             .xbot-answer-field {
                 flex: 1 1 auto;
@@ -5779,6 +5819,10 @@
                 return /^\d{4}-\d{2}-\d{2}$/.test(text) || /^\d{2}\/\d{2}\/\d{4}$/.test(text);
             }
             if (kind === 'name') return text.length >= 2;
+            if (kind === 'otp') {
+                var otpDigits = digitsOnlyPhone(text);
+                return otpDigits.length === 6;
+            }
             return text.length >= 1;
         }
 
@@ -6160,6 +6204,138 @@
                     var national = digitsOnlyPhone(nationalInput.value);
                     submitValue(countryCode + area + national);
                 });
+            } else if (answerType === 'otp') {
+                var otpLen = 6;
+                var otpRow = document.createElement('div');
+                otpRow.className = 'xbot-answer-otp-row';
+                var otpDigits = document.createElement('div');
+                otpDigits.className = 'xbot-answer-otp-digits';
+                otpDigits.setAttribute('role', 'group');
+                otpDigits.setAttribute('aria-label', 'Código de verificação');
+                var otpInputs = [];
+                var otpSubmitting = false;
+
+                function otpCodeValue() {
+                    var out = '';
+                    for (var i = 0; i < otpInputs.length; i++) {
+                        out += digitsOnlyPhone(otpInputs[i].value).slice(0, 1);
+                    }
+                    return out;
+                }
+
+                function focusOtpAt(idx) {
+                    var target = otpInputs[idx];
+                    if (!target || typeof target.focus !== 'function') return;
+                    try {
+                        target.focus({ preventScroll: true });
+                        target.select();
+                    } catch (e) {
+                        try { target.focus(); } catch (e2) { /* ignore */ }
+                    }
+                }
+
+                function fillOtpFrom(startIdx, digits) {
+                    var chars = digitsOnlyPhone(digits);
+                    if (!chars) return;
+                    var i = startIdx;
+                    var c = 0;
+                    while (i < otpLen && c < chars.length) {
+                        otpInputs[i].value = chars.charAt(c);
+                        i += 1;
+                        c += 1;
+                    }
+                    if (i < otpLen) focusOtpAt(i);
+                    else focusOtpAt(otpLen - 1);
+                    maybeAutoSubmitOtp();
+                }
+
+                function maybeAutoSubmitOtp() {
+                    if (otpSubmitting || sessionEpisodeEnded) return;
+                    var code = otpCodeValue();
+                    if (code.length !== otpLen) return;
+                    otpSubmitting = true;
+                    submitValue(code);
+                    if (otpInputs[0] && !otpInputs[0].disabled) otpSubmitting = false;
+                }
+
+                for (var d = 0; d < otpLen; d++) {
+                    (function (idx) {
+                        var digit = document.createElement('input');
+                        digit.type = 'text';
+                        digit.inputMode = 'numeric';
+                        digit.autocomplete = idx === 0 ? 'one-time-code' : 'off';
+                        digit.className = 'xbot-answer-otp-digit';
+                        digit.maxLength = 1;
+                        digit.setAttribute('aria-label', 'Dígito ' + (idx + 1) + ' de ' + otpLen);
+                        digit.setAttribute('data-otp-index', String(idx));
+                        digit.addEventListener('input', function () {
+                            var raw = digit.value;
+                            var only = digitsOnlyPhone(raw);
+                            if (only.length > 1) {
+                                digit.value = '';
+                                fillOtpFrom(idx, only);
+                                return;
+                            }
+                            digit.value = only.slice(0, 1);
+                            if (digit.value && idx < otpLen - 1) focusOtpAt(idx + 1);
+                            maybeAutoSubmitOtp();
+                        });
+                        digit.addEventListener('keydown', function (ev) {
+                            if (ev.key === 'Backspace') {
+                                if (!digit.value && idx > 0) {
+                                    ev.preventDefault();
+                                    otpInputs[idx - 1].value = '';
+                                    focusOtpAt(idx - 1);
+                                }
+                                return;
+                            }
+                            if (ev.key === 'ArrowLeft' && idx > 0) {
+                                ev.preventDefault();
+                                focusOtpAt(idx - 1);
+                                return;
+                            }
+                            if (ev.key === 'ArrowRight' && idx < otpLen - 1) {
+                                ev.preventDefault();
+                                focusOtpAt(idx + 1);
+                                return;
+                            }
+                            if (ev.key === 'Enter') {
+                                ev.preventDefault();
+                                submitValue(otpCodeValue());
+                            }
+                        });
+                        digit.addEventListener('paste', function (ev) {
+                            var clip = '';
+                            try {
+                                clip = (ev.clipboardData || window.clipboardData).getData('text') || '';
+                            } catch (e) { clip = ''; }
+                            var pasted = digitsOnlyPhone(clip);
+                            if (!pasted) return;
+                            ev.preventDefault();
+                            fillOtpFrom(idx, pasted);
+                        });
+                        otpInputs.push(digit);
+                        otpDigits.appendChild(digit);
+                    })(d);
+                }
+
+                var sendOtp = document.createElement('button');
+                sendOtp.type = 'submit';
+                sendOtp.className = 'xbot-answer-send';
+                sendOtp.setAttribute('aria-label', 'Enviar');
+                sendOtp.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+
+                otpRow.appendChild(otpDigits);
+                otpRow.appendChild(sendOtp);
+                form.appendChild(otpRow);
+                form.appendChild(err);
+                form.addEventListener('submit', function (ev) {
+                    ev.preventDefault();
+                    submitValue(otpCodeValue());
+                });
+                if (interactive && !sessionEpisodeEnded) {
+                    setTimeout(function () { focusOtpAt(0); }, 0);
+                }
             } else if (answerType === 'date') {
                 var dateRow = document.createElement('div');
                 dateRow.className = 'xbot-answer-row xbot-answer-date-row';
