@@ -1437,6 +1437,7 @@
                             title: String(block.title || '').trim(),
                             choices: choices,
                             allow_free_text: block.allow_free_text !== false,
+                            allow_back: block.allow_back === true,
                             free_text_placeholder: String(block.free_text_placeholder || '').trim()
                         });
                     }
@@ -1458,7 +1459,8 @@
                         answer_type: at || 'text',
                         field_key: String(block.field_key || 'answer').trim() || 'answer',
                         input_placeholder: String(block.input_placeholder || '').trim(),
-                        default_country_code: String(block.default_country_code || '55').replace(/\D/g, '') || '55'
+                        default_country_code: String(block.default_country_code || '55').replace(/\D/g, '') || '55',
+                        allow_back: block.allow_back === true
                     });
                 }
             }
@@ -3974,6 +3976,26 @@
                 opacity: 0.4;
                 cursor: default;
             }
+            .xbot-answer-back,
+            .xbot-choice-back {
+                appearance: none;
+                border: 0;
+                background: transparent;
+                color: var(--xbot-subtle);
+                font: inherit;
+                font-size: 12px;
+                font-weight: 650;
+                text-decoration: underline;
+                text-underline-offset: 2px;
+                cursor: pointer;
+                padding: 4px 2px;
+                align-self: flex-start;
+            }
+            .xbot-answer-back:disabled,
+            .xbot-choice-back:disabled {
+                opacity: 0.45;
+                cursor: default;
+            }
             .xbot-answer-input {
                 width: 100%;
                 box-sizing: border-box;
@@ -5454,6 +5476,14 @@
                 sendUserText(value);
             }
 
+            function submitBack() {
+                if (sessionEpisodeEnded) return;
+                err.hidden = true;
+                lockForm();
+                releaseChoiceComposerLock();
+                sendUserText('__back__');
+            }
+
             if (answerType === 'phone') {
                 var row = document.createElement('div');
                 row.className = 'xbot-answer-phone-row';
@@ -5707,6 +5737,22 @@
                 });
             }
 
+            if (block.allow_back === true) {
+                var backBtn = document.createElement('button');
+                backBtn.type = 'button';
+                backBtn.className = 'xbot-answer-back';
+                backBtn.textContent = 'Voltar';
+                if (!interactive || sessionEpisodeEnded) {
+                    backBtn.disabled = true;
+                } else {
+                    backBtn.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        submitBack();
+                    });
+                }
+                form.appendChild(backBtn);
+            }
+
             if (!interactive || sessionEpisodeEnded) {
                 lockForm();
             } else {
@@ -5724,7 +5770,7 @@
             wrap.setAttribute('data-xbot', 'ui-blocks');
 
             function lockChoices(root) {
-                var buttons = root.querySelectorAll('.xbot-choice-item, .xbot-choice-free-send');
+                var buttons = root.querySelectorAll('.xbot-choice-item, .xbot-choice-free-send, .xbot-choice-back');
                 for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
                 var inputs = root.querySelectorAll('.xbot-choice-free input');
                 for (var j = 0; j < inputs.length; j++) inputs[j].disabled = true;
@@ -5846,6 +5892,23 @@
                         list.appendChild(free);
                     } else if (interactive && !sessionEpisodeEnded) {
                         acquireChoiceComposerLock();
+                    }
+                    if (block.allow_back === true) {
+                        var choiceBack = document.createElement('button');
+                        choiceBack.type = 'button';
+                        choiceBack.className = 'xbot-choice-back';
+                        choiceBack.textContent = 'Voltar';
+                        if (!interactive || sessionEpisodeEnded) {
+                            choiceBack.disabled = true;
+                        } else {
+                            choiceBack.addEventListener('click', function () {
+                                if (sessionEpisodeEnded) return;
+                                lockChoices(list);
+                                if (lockComposer) releaseChoiceComposerLock();
+                                sendUserText('__back__');
+                            });
+                        }
+                        list.appendChild(choiceBack);
                     }
                     wrap.appendChild(list);
                     return;
