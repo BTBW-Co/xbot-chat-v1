@@ -3348,6 +3348,14 @@
                 overflow-wrap: anywhere;
                 word-break: break-word;
             }
+            /* Popovers de data/telefone abrem para fora do card — não cortar. */
+            .xbot-message:has([data-xbot="answer-input"]) {
+                overflow: visible;
+            }
+            .xbot-message-row:has([data-xbot="answer-input"]) {
+                position: relative;
+                z-index: 6;
+            }
             @keyframes xbotFadeIn {
                 to { opacity: 1; transform: translateY(0); }
             }
@@ -3899,17 +3907,17 @@
             .xbot-choice-list {
                 width: 100%;
                 box-sizing: border-box;
-                border: 1px solid color-mix(in srgb, var(--xbot-theme) 32%, var(--xbot-border));
-                background: #ffffff;
+                border: 1px solid color-mix(in srgb, var(--xbot-theme) 40%, var(--xbot-border));
+                background: color-mix(in srgb, var(--xbot-theme) 12%, #ffffff);
                 border-radius: 16px;
                 overflow: hidden;
-                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.06);
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(var(--xbot-theme-rgb), 0.12);
             }
             .xbot-choice-list-title {
                 margin: 0;
                 padding: 12px 14px 10px;
-                border-bottom: 1px solid color-mix(in srgb, var(--xbot-theme) 16%, var(--xbot-border));
-                background: color-mix(in srgb, var(--xbot-theme) 6%, #ffffff);
+                border-bottom: 1px solid color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+                background: color-mix(in srgb, var(--xbot-theme) 16%, #ffffff);
                 font-size: 14px;
                 font-weight: 650;
                 color: var(--xbot-ink);
@@ -3919,7 +3927,7 @@
                 flex-direction: column;
                 padding: 6px;
                 gap: 2px;
-                background: #ffffff;
+                background: transparent;
             }
             .xbot-choice-item {
                 appearance: none;
@@ -3931,7 +3939,7 @@
                 padding: 11px 12px;
                 border: 0;
                 border-radius: 12px;
-                background: #ffffff;
+                background: transparent;
                 color: inherit;
                 text-align: left;
                 cursor: pointer;
@@ -3939,8 +3947,8 @@
                 transition: background 0.15s ease, box-shadow 0.15s ease;
             }
             .xbot-choice-item:hover:not(:disabled) {
-                background: color-mix(in srgb, var(--xbot-theme) 10%, #ffffff);
-                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xbot-theme) 22%, transparent);
+                background: color-mix(in srgb, var(--xbot-theme) 18%, #ffffff);
+                box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xbot-theme) 28%, transparent);
             }
             .xbot-choice-item:disabled {
                 cursor: default;
@@ -4048,14 +4056,14 @@
             .xbot-answer-input {
                 width: 100%;
                 box-sizing: border-box;
-                border: 1px solid color-mix(in srgb, var(--xbot-theme) 32%, var(--xbot-border));
-                background: #ffffff;
+                border: 1px solid color-mix(in srgb, var(--xbot-theme) 40%, var(--xbot-border));
+                background: color-mix(in srgb, var(--xbot-theme) 12%, #ffffff);
                 border-radius: 16px;
                 padding: 12px;
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
-                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.06);
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(var(--xbot-theme-rgb), 0.12);
             }
             .xbot-answer-row,
             .xbot-answer-phone-row {
@@ -4131,6 +4139,7 @@
                 position: absolute;
                 left: 0;
                 bottom: calc(100% + 6px);
+                top: auto;
                 z-index: 40;
                 width: 260px;
                 max-width: min(260px, 70vw);
@@ -4139,6 +4148,10 @@
                 border-radius: 14px;
                 box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
                 overflow: hidden;
+            }
+            .xbot-answer-country-panel.is-open-down {
+                bottom: auto;
+                top: calc(100% + 6px);
             }
             .xbot-answer-country-search {
                 width: 100%;
@@ -4243,6 +4256,7 @@
                 position: absolute;
                 left: 0;
                 bottom: calc(100% + 6px);
+                top: auto;
                 z-index: 40;
                 width: 280px;
                 max-width: min(280px, 82vw);
@@ -4252,6 +4266,10 @@
                 box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
                 padding: 12px;
                 box-sizing: border-box;
+            }
+            .xbot-answer-date-panel.is-open-down {
+                bottom: auto;
+                top: calc(100% + 6px);
             }
             .xbot-answer-date-head {
                 display: flex;
@@ -5534,6 +5552,23 @@
             return text.length >= 1;
         }
 
+        /** Abre o popover para cima; se não couber na área de mensagens, abre para baixo. */
+        function placeAnswerPopover(panel, anchor) {
+            if (!panel || !anchor) return;
+            panel.classList.remove('is-open-down');
+            var messages = document.getElementById('xbot-messages');
+            if (!messages) return;
+            var panelH = panel.offsetHeight || 0;
+            if (panelH < 8) panelH = panel.classList.contains('xbot-answer-date-panel') ? 300 : 260;
+            var anchorRect = anchor.getBoundingClientRect();
+            var messagesRect = messages.getBoundingClientRect();
+            var spaceAbove = anchorRect.top - messagesRect.top;
+            var spaceBelow = messagesRect.bottom - anchorRect.bottom;
+            if (spaceAbove < panelH + 10 && spaceBelow > spaceAbove) {
+                panel.classList.add('is-open-down');
+            }
+        }
+
         function mountAnswerInputBlock(block, interactive, opts) {
             var form = document.createElement('form');
             form.className = 'xbot-answer-input';
@@ -5628,8 +5663,12 @@
                 countrySearch.addEventListener('input', function () { renderCountries(countrySearch.value); });
                 countryBtn.addEventListener('click', function () {
                     if (!interactive || sessionEpisodeEnded) return;
-                    countryPanel.hidden = !countryPanel.hidden;
-                    if (!countryPanel.hidden) countrySearch.focus();
+                    var opening = !!countryPanel.hidden;
+                    countryPanel.hidden = !opening;
+                    if (opening) {
+                        placeAnswerPopover(countryPanel, countryBtn);
+                        countrySearch.focus();
+                    }
                 });
                 countryWrap.appendChild(countryBtn);
                 countryPanel.appendChild(countrySearch);
@@ -5777,7 +5816,9 @@
                 });
                 dateTrigger.addEventListener('click', function () {
                     if (!interactive || sessionEpisodeEnded) return;
-                    panel.hidden = !panel.hidden;
+                    var opening = !!panel.hidden;
+                    panel.hidden = !opening;
+                    if (opening) placeAnswerPopover(panel, dateTrigger);
                 });
 
                 dateWrap.appendChild(dateTrigger);
