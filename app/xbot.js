@@ -4862,23 +4862,23 @@
             }
             .xbot-presentation-unmute {
                 position: absolute;
-                inset: 0;
+                /* 10% de margem de cada lado da janela do player. */
+                inset: 0 10%;
                 z-index: 2;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 box-sizing: border-box;
                 margin: 0;
-                padding: clamp(6px, 4cqi, 16px) clamp(8px, 5cqi, 18px);
-                /* Tamanho relativo ao frame do vídeo (não ao viewport). */
-                font-size: clamp(11px, 7.2cqi, 28px) !important;
+                padding: clamp(4px, 2.5cqi, 10px) 0;
+                /* Cabe em ~80% da largura do frame (TAP TO UNMUTE + tracking). */
+                font-size: clamp(10px, 5cqi, 18px) !important;
                 font-weight: 800;
-                letter-spacing: 0.06em;
+                letter-spacing: 0.05em;
                 line-height: 1.1;
                 text-align: center;
                 text-transform: uppercase;
                 white-space: nowrap;
-                max-width: 100%;
                 overflow: hidden;
                 color: #fff;
                 text-shadow:
@@ -4891,7 +4891,7 @@
             }
             @supports not (font-size: 1cqi) {
                 .xbot-presentation-unmute {
-                    font-size: clamp(12px, 4.2vw, 22px) !important;
+                    font-size: clamp(10px, 3vw, 16px) !important;
                 }
             }
             @keyframes xbot-unmute-breathe {
