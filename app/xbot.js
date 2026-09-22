@@ -1788,6 +1788,9 @@
                     try { el.focus(); } catch (e2) { /* ignore */ }
                 }
                 scheduleScrollMessagesToBottom();
+                if (typeof applyMobileKeyboardLayout === 'function' && isMobileLayout()) {
+                    scheduleMobileKeyboardLayoutSettle();
+                }
             }, 0);
         }
 
@@ -5992,6 +5995,53 @@
             }
         }
 
+        /** Composer OU campo Answer / texto livre no corpo da mensagem. */
+        function isEditableChatTextField(el) {
+            if (!el || !chatbox.contains(el)) return false;
+            if (el === input) return true;
+            var tag = String(el.tagName || '').toLowerCase();
+            if (tag === 'textarea') return true;
+            if (tag !== 'input') return false;
+            var type = String(el.type || 'text').toLowerCase();
+            if (
+                type === 'button' ||
+                type === 'submit' ||
+                type === 'checkbox' ||
+                type === 'radio' ||
+                type === 'file' ||
+                type === 'range' ||
+                type === 'hidden' ||
+                type === 'image' ||
+                type === 'reset'
+            ) {
+                return false;
+            }
+            return true;
+        }
+
+        function isAnyChatTextFieldFocused() {
+            return isEditableChatTextField(document.activeElement);
+        }
+
+        /** Garante o campo focado (Answer inline) acima do teclado após reflow. */
+        function ensureFocusedChatFieldVisible() {
+            var ae = document.activeElement;
+            if (!ae || !messages.contains(ae)) return;
+            try {
+                ae.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+            } catch (e) { /* ignore */ }
+            if (messagesAutoScrollPinned || isMessagesNearBottom(messages, 160)) {
+                scrollMessagesToBottom({ force: true, ignoreMs: 900 });
+            }
+        }
+
+        function scheduleMobileKeyboardLayoutSettle() {
+            requestAnimationFrame(applyMobileKeyboardLayout);
+            setTimeout(applyMobileKeyboardLayout, 50);
+            setTimeout(applyMobileKeyboardLayout, 150);
+            setTimeout(applyMobileKeyboardLayout, 350);
+        }
+
         function applyMobileKeyboardLayout() {
             if (!isMobileLayout() || !chatbox.classList.contains('is-open')) {
                 if (messagesKeyboardOpen) {
@@ -6007,13 +6057,14 @@
             }
 
             var vv = window.visualViewport;
-            var inputFocused = document.activeElement === input;
+            var textFocused = isAnyChatTextFieldFocused();
             var keyboardLikely = false;
-            if (vv && inputFocused) {
-                keyboardLikely = vv.height < window.innerHeight * 0.92;
+            if (vv) {
+                keyboardLikely = vv.height < window.innerHeight * 0.88;
             }
-            // Layout de teclado ativo: foco no composer (iOS abre o teclado depois do focus).
-            var nextKeyboardOpen = !!(inputFocused || keyboardLikely);
+            // Composer OU Answer inline: foco já indica teclado (iOS abre depois do focus).
+            // keyboardLikely cobre o reflow contínuo enquanto o teclado anima.
+            var nextKeyboardOpen = !!(textFocused || (keyboardLikely && messagesKeyboardOpen));
             var shouldStick =
                 messagesAutoScrollPinned || isMessagesNearBottom(messages, 160);
             var keyboardChanged = nextKeyboardOpen !== messagesKeyboardOpen;
@@ -6033,6 +6084,7 @@
                 messagesKeyboardOpen = true;
                 if (keyboardChanged && shouldStick) {
                     stickMessagesAfterKeyboardChange();
+                    ensureFocusedChatFieldVisible();
                 }
                 return;
             }
@@ -6058,8 +6110,15 @@
 
             // Abriu/fechou teclado OU reflow contínuo com pin: mantém a última mensagem visível.
             if (shouldStick) {
-                if (keyboardChanged) stickMessagesAfterKeyboardChange();
-                else scheduleScrollMessagesToBottom({ force: true, ignoreMs: 900 });
+                if (keyboardChanged) {
+                    stickMessagesAfterKeyboardChange();
+                    ensureFocusedChatFieldVisible();
+                    setTimeout(ensureFocusedChatFieldVisible, 120);
+                    setTimeout(ensureFocusedChatFieldVisible, 320);
+                } else {
+                    scheduleScrollMessagesToBottom({ force: true, ignoreMs: 900 });
+                    ensureFocusedChatFieldVisible();
+                }
             }
         }
 
@@ -6072,13 +6131,12 @@
                 vv.addEventListener('scroll', applyMobileKeyboardLayout);
             }
             window.addEventListener('resize', applyMobileKeyboardLayout);
-            input.addEventListener('focus', function () {
-                requestAnimationFrame(applyMobileKeyboardLayout);
-                setTimeout(applyMobileKeyboardLayout, 50);
-                setTimeout(applyMobileKeyboardLayout, 150);
-                setTimeout(applyMobileKeyboardLayout, 350);
+            // Composer + Answer inline (delegation): qualquer campo de texto do chat.
+            chatbox.addEventListener('focusin', function (ev) {
+                if (!isEditableChatTextField(ev && ev.target)) return;
+                scheduleMobileKeyboardLayoutSettle();
             });
-            input.addEventListener('blur', function () {
+            chatbox.addEventListener('focusout', function () {
                 setTimeout(applyMobileKeyboardLayout, 120);
             });
         }
