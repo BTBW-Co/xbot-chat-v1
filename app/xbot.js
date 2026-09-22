@@ -6752,13 +6752,27 @@
                     maybeAutoSubmitOtp();
                 }
 
+                function submitOtpOnce(code) {
+                    if (otpSubmitting || sessionEpisodeEnded) return;
+                    var value = String(code || otpCodeValue() || '').trim();
+                    if (value.length !== otpLen) return;
+                    if (!validateAnswerClient(answerType, value)) {
+                        err.textContent = 'Resposta inválida. Verifique e tente de novo.';
+                        err.hidden = false;
+                        return;
+                    }
+                    otpSubmitting = true;
+                    err.hidden = true;
+                    lockForm();
+                    releaseChoiceComposerLock();
+                    sendUserText(value);
+                }
+
                 function maybeAutoSubmitOtp() {
                     if (otpSubmitting || sessionEpisodeEnded) return;
                     var code = otpCodeValue();
                     if (code.length !== otpLen) return;
-                    otpSubmitting = true;
-                    submitValue(code);
-                    if (otpInputs[0] && !otpInputs[0].disabled) otpSubmitting = false;
+                    submitOtpOnce(code);
                 }
 
                 for (var d = 0; d < otpLen; d++) {
@@ -6804,7 +6818,7 @@
                             }
                             if (ev.key === 'Enter') {
                                 ev.preventDefault();
-                                submitValue(otpCodeValue());
+                                submitOtpOnce(otpCodeValue());
                             }
                         });
                         digit.addEventListener('paste', function (ev) {
@@ -6834,7 +6848,7 @@
                 form.appendChild(err);
                 form.addEventListener('submit', function (ev) {
                     ev.preventDefault();
-                    submitValue(otpCodeValue());
+                    submitOtpOnce(otpCodeValue());
                 });
                 if (interactive && !sessionEpisodeEnded) {
                     setTimeout(function () { focusOtpAt(0); }, 0);
