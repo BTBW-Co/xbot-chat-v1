@@ -1682,13 +1682,22 @@
                         btn.addEventListener('click', function () {
                             if (sessionEpisodeEnded) return;
                             var value = btn.getAttribute('data-choice-value') || '';
+                            var label = btn.getAttribute('data-choice-label') || value;
+                            var choiceId = btn.getAttribute('data-choice-id') || '';
                             var root = btn.closest('[data-xbot="choice-list"]');
                             if (root) {
                                 var all = root.querySelectorAll('.xbot-choice-item, .xbot-choice-free-send');
                                 for (var j = 0; j < all.length; j++) all[j].disabled = true;
                             }
                             releaseChoiceComposerLock();
-                            sendUserText(value);
+                            sendUserText(label || value, {
+                                action: {
+                                    id: choiceId || 'choice',
+                                    label: label || value,
+                                    value: value || label,
+                                    kind: 'reply'
+                                }
+                            });
                         });
                     })(buttons[i]);
                 }
@@ -6672,7 +6681,11 @@
                         var btn = document.createElement('button');
                         btn.type = 'button';
                         btn.className = 'xbot-choice-item';
-                        btn.setAttribute('data-choice-value', choice.value || choice.label || '');
+                        var choiceValue = choice.value || choice.label || '';
+                        var choiceLabel = choice.label || choiceValue;
+                        btn.setAttribute('data-choice-value', choiceValue);
+                        btn.setAttribute('data-choice-label', choiceLabel);
+                        if (choice.id) btn.setAttribute('data-choice-id', String(choice.id));
                         var idx = document.createElement('span');
                         idx.className = 'xbot-choice-index';
                         idx.textContent = String(index + 1);
@@ -6697,7 +6710,14 @@
                                 if (sessionEpisodeEnded) return;
                                 lockChoices(list);
                                 if (lockComposer) releaseChoiceComposerLock();
-                                sendUserText(choice.value);
+                                sendUserText(choiceLabel, {
+                                    action: {
+                                        id: choice.id || ('choice-' + index),
+                                        label: choiceLabel,
+                                        value: choiceValue,
+                                        kind: 'reply'
+                                    }
+                                });
                             });
                         }
                         body.appendChild(btn);
@@ -6839,7 +6859,16 @@
                             if (buttons[i].tagName === 'BUTTON') buttons[i].disabled = true;
                             else buttons[i].setAttribute('aria-disabled', 'true');
                         }
-                        sendUserText(action.value);
+                        var replyLabel = action.label || action.value;
+                        var replyValue = action.value || action.label;
+                        sendUserText(replyLabel, {
+                            action: {
+                                id: action.id || 'action',
+                                label: replyLabel,
+                                value: replyValue,
+                                kind: 'reply'
+                            }
+                        });
                     });
                 }
                 group.appendChild(btn);
@@ -7338,11 +7367,25 @@
             }
         }
 
-        async function sendUserText(text) {
+        async function sendUserText(text, opts) {
             const value = String(text || '').trim();
             if (!value) return;
             if (isPresentationComposerLocked()) return;
             if (isChoiceComposerLocked()) releaseChoiceComposerLock();
+
+            var actionPayload = null;
+            if (opts && opts.action && typeof opts.action === 'object') {
+                var aLabel = String(opts.action.label || value).trim();
+                var aValue = String(opts.action.value || value).trim();
+                if (aLabel && aValue) {
+                    actionPayload = {
+                        id: String(opts.action.id || 'action').slice(0, 80),
+                        label: aLabel.slice(0, 80),
+                        value: aValue.slice(0, 500),
+                        kind: opts.action.kind === 'url' ? 'url' : 'reply'
+                    };
+                }
+            }
 
             resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
@@ -7358,6 +7401,7 @@
             try {
                 const visitorId = getVisitorId();
                 const msgBody = attachIdentityToMessageBody({ message: value });
+                if (actionPayload) msgBody.action = actionPayload;
                 if (visitorId) msgBody.visitor_id = visitorId;
                 if (channelId) msgBody.channel_id = channelId;
                 const response = await fetch(getMessageUrl(), {
