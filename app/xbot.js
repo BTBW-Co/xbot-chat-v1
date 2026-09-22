@@ -1229,7 +1229,7 @@
                 if (face) startThinkingFaceAnimation(face);
                 startThinkingStatusCycle(el);
             }
-            container.scrollTop = container.scrollHeight;
+            scrollMessagesToBottom();
         }
 
         function parseLinkOnlyMessage(text) {
@@ -1609,11 +1609,11 @@
             if (!el || typeof el.focus !== 'function') return;
             window.setTimeout(function () {
                 try {
-                    el.focus();
-                    if (typeof el.scrollIntoView === 'function') {
-                        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-                    }
-                } catch (e) { /* ignore */ }
+                    if (typeof el.focus === 'function') el.focus({ preventScroll: true });
+                } catch (e) {
+                    try { el.focus(); } catch (e2) { /* ignore */ }
+                }
+                scheduleScrollMessagesToBottom();
             }, 0);
         }
 
@@ -4301,9 +4301,28 @@
                 margin-bottom: 8px;
             }
             .xbot-answer-date-month {
+                appearance: none;
+                border: 0;
+                background: transparent;
+                padding: 4px 8px;
+                border-radius: 8px;
+                font: inherit;
                 font-size: 13px;
                 font-weight: 700;
                 color: var(--xbot-ink);
+                cursor: pointer;
+                line-height: 1.2;
+                transition: background 0.12s ease, color 0.12s ease;
+            }
+            .xbot-answer-date-month:hover,
+            .xbot-answer-date-month:focus-visible {
+                background: color-mix(in srgb, var(--xbot-theme) 12%, #ffffff);
+                color: var(--xbot-theme);
+                outline: none;
+            }
+            .xbot-answer-date-month[disabled] {
+                cursor: default;
+                pointer-events: none;
             }
             .xbot-answer-date-nav {
                 appearance: none;
@@ -4333,10 +4352,19 @@
                 color: var(--xbot-subtle);
                 padding: 4px 0;
             }
+            .xbot-answer-date-weekdays[hidden] {
+                display: none;
+            }
             .xbot-answer-date-grid {
                 display: grid;
                 grid-template-columns: repeat(7, 1fr);
                 gap: 2px;
+            }
+            .xbot-answer-date-grid.is-months,
+            .xbot-answer-date-grid.is-years {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 4px;
+                min-height: 196px;
             }
             .xbot-answer-date-day {
                 appearance: none;
@@ -4349,6 +4377,13 @@
                 color: var(--xbot-ink);
                 cursor: pointer;
                 transition: background 0.12s ease, color 0.12s ease;
+            }
+            .xbot-answer-date-grid.is-months .xbot-answer-date-day,
+            .xbot-answer-date-grid.is-years .xbot-answer-date-day {
+                min-height: 44px;
+                font-size: 12px;
+                font-weight: 650;
+                border-radius: 12px;
             }
             .xbot-answer-date-day.is-empty {
                 cursor: default;
@@ -5018,10 +5053,12 @@
         /** Só gruda no fim se o visitante já estava perto do fim (ou force). */
         var messagesAutoScrollPinned = true;
         var suppressMessagesAutoScrollUntil = 0;
+        var messagesStickBound = false;
+        var messagesStickScrollRaf = 0;
 
         function isMessagesNearBottom(el, thresholdPx) {
             if (!el) return true;
-            var threshold = thresholdPx == null ? 96 : thresholdPx;
+            var threshold = thresholdPx == null ? 120 : thresholdPx;
             return (el.scrollHeight - el.scrollTop - el.clientHeight) <= threshold;
         }
 
@@ -5034,6 +5071,7 @@
             opts = opts || {};
             var el = document.getElementById('xbot-messages');
             if (!el) return;
+            if (opts.force) messagesAutoScrollPinned = true;
             if (!opts.force) {
                 if (Date.now() < suppressMessagesAutoScrollUntil) return;
                 if (!messagesAutoScrollPinned) return;
@@ -5052,6 +5090,48 @@
                     scrollMessagesToBottom(options);
                 });
             });
+        }
+
+        /** Mantém o fim visível enquanto o pin estiver ativo (mensagem crescendo / Answer / mídia). */
+        function requestStickMessagesToBottom() {
+            if (messagesStickScrollRaf) return;
+            messagesStickScrollRaf = requestAnimationFrame(function () {
+                messagesStickScrollRaf = 0;
+                scrollMessagesToBottom();
+            });
+        }
+
+        function bindMessagesStickToBottom(el) {
+            if (!el || messagesStickBound) return;
+            messagesStickBound = true;
+            el.addEventListener('scroll', function () {
+                // Enquanto o visitante lê o histórico, não puxa para o fim.
+                messagesAutoScrollPinned = isMessagesNearBottom(el, 120);
+            }, { passive: true });
+            if (typeof MutationObserver !== 'undefined') {
+                var mo = new MutationObserver(function () {
+                    requestStickMessagesToBottom();
+                });
+                mo.observe(el, { childList: true, subtree: true, characterData: true });
+            }
+            if (typeof ResizeObserver !== 'undefined') {
+                var ro = new ResizeObserver(function () {
+                    requestStickMessagesToBottom();
+                });
+                function watchNode(node) {
+                    if (node && node.nodeType === 1) {
+                        try { ro.observe(node); } catch (e) { /* ignore */ }
+                    }
+                }
+                Array.prototype.forEach.call(el.children || [], watchNode);
+                var childMo = new MutationObserver(function (mutations) {
+                    for (var i = 0; i < mutations.length; i++) {
+                        var added = mutations[i].addedNodes || [];
+                        for (var j = 0; j < added.length; j++) watchNode(added[j]);
+                    }
+                });
+                childMo.observe(el, { childList: true });
+            }
         }
 
         /** Abertura / histórico: força as últimas mensagens visíveis (mídia pode atrasar o height). */
@@ -5305,11 +5385,7 @@
         const send = chatbox.querySelector('#xbot-send');
         // Evita blur do input ao enviar (mantém teclado aberto no mobile)
         var sendFromTouch = false;
-        if (messages) {
-            messages.addEventListener('scroll', function () {
-                messagesAutoScrollPinned = isMessagesNearBottom(messages, 96);
-            }, { passive: true });
-        }
+        if (messages) bindMessagesStickToBottom(messages);
         send.addEventListener('mousedown', function (e) {
             e.preventDefault();
         });
@@ -5744,6 +5820,7 @@
                 var view = new Date();
                 view.setDate(1);
                 view.setHours(12, 0, 0, 0);
+                var calMode = 'days';
 
                 var panel = document.createElement('div');
                 panel.className = 'xbot-answer-date-panel';
@@ -5755,8 +5832,10 @@
                 prevBtn.className = 'xbot-answer-date-nav';
                 prevBtn.setAttribute('aria-label', 'Mês anterior');
                 prevBtn.textContent = '‹';
-                var monthLabel = document.createElement('div');
+                var monthLabel = document.createElement('button');
+                monthLabel.type = 'button';
                 monthLabel.className = 'xbot-answer-date-month';
+                monthLabel.setAttribute('aria-label', 'Escolher mês e ano');
                 var nextBtn = document.createElement('button');
                 nextBtn.type = 'button';
                 nextBtn.className = 'xbot-answer-date-nav';
@@ -5782,6 +5861,10 @@
                     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
                 ];
+                var MONTHS_SHORT_PT = [
+                    'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+                    'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+                ];
 
                 function pad2(n) { return n < 10 ? '0' + n : String(n); }
                 function toIso(d) {
@@ -5792,15 +5875,84 @@
                     if (!m) return '';
                     return m[3] + '/' + m[2] + '/' + m[1];
                 }
+                function decadeStart(y) {
+                    return Math.floor(y / 10) * 10;
+                }
 
                 function renderCalendar() {
-                    monthLabel.textContent = MONTHS_PT[view.getMonth()] + ' ' + view.getFullYear();
-                    grid.innerHTML = '';
                     var year = view.getFullYear();
                     var month = view.getMonth();
+                    var today = new Date();
+                    var todayYear = today.getFullYear();
+                    var todayMonth = today.getMonth();
+                    var selectedParts = String(selectedIso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                    var selectedYear = selectedParts ? Number(selectedParts[1]) : null;
+                    var selectedMonth = selectedParts ? Number(selectedParts[2]) - 1 : null;
+                    grid.innerHTML = '';
+                    grid.className = 'xbot-answer-date-grid';
+                    weekdays.hidden = calMode !== 'days';
+                    monthLabel.disabled = false;
+
+                    if (calMode === 'years') {
+                        var start = decadeStart(year);
+                        var end = start + 9;
+                        monthLabel.textContent = start + ' – ' + end;
+                        monthLabel.setAttribute('aria-label', 'Década ' + start + ' a ' + end);
+                        monthLabel.disabled = true;
+                        prevBtn.setAttribute('aria-label', 'Década anterior');
+                        nextBtn.setAttribute('aria-label', 'Próxima década');
+                        grid.className += ' is-years';
+                        for (var y = start; y <= end; y++) {
+                            (function (yr) {
+                                var yearBtn = document.createElement('button');
+                                yearBtn.type = 'button';
+                                yearBtn.className = 'xbot-answer-date-day';
+                                yearBtn.textContent = String(yr);
+                                if (yr === todayYear) yearBtn.className += ' is-today';
+                                if (selectedYear === yr) yearBtn.className += ' is-selected';
+                                yearBtn.addEventListener('click', function () {
+                                    view.setFullYear(yr);
+                                    calMode = 'months';
+                                    renderCalendar();
+                                });
+                                grid.appendChild(yearBtn);
+                            })(y);
+                        }
+                        return;
+                    }
+
+                    if (calMode === 'months') {
+                        monthLabel.textContent = String(year);
+                        monthLabel.setAttribute('aria-label', 'Escolher ano');
+                        prevBtn.setAttribute('aria-label', 'Ano anterior');
+                        nextBtn.setAttribute('aria-label', 'Próximo ano');
+                        grid.className += ' is-months';
+                        for (var m = 0; m < 12; m++) {
+                            (function (mo) {
+                                var monthBtn = document.createElement('button');
+                                monthBtn.type = 'button';
+                                monthBtn.className = 'xbot-answer-date-day';
+                                monthBtn.textContent = MONTHS_SHORT_PT[mo];
+                                if (year === todayYear && mo === todayMonth) monthBtn.className += ' is-today';
+                                if (selectedYear === year && selectedMonth === mo) monthBtn.className += ' is-selected';
+                                monthBtn.addEventListener('click', function () {
+                                    view.setMonth(mo);
+                                    calMode = 'days';
+                                    renderCalendar();
+                                });
+                                grid.appendChild(monthBtn);
+                            })(m);
+                        }
+                        return;
+                    }
+
+                    monthLabel.textContent = MONTHS_PT[month] + ' ' + year;
+                    monthLabel.setAttribute('aria-label', 'Escolher mês e ano');
+                    prevBtn.setAttribute('aria-label', 'Mês anterior');
+                    nextBtn.setAttribute('aria-label', 'Próximo mês');
                     var firstDow = new Date(year, month, 1).getDay();
                     var daysInMonth = new Date(year, month + 1, 0).getDate();
-                    var todayIso = toIso(new Date());
+                    var todayIso = toIso(today);
                     var i;
                     for (i = 0; i < firstDow; i++) {
                         var empty = document.createElement('span');
@@ -5821,6 +5973,7 @@
                             dateTrigger.textContent = formatBr(selectedIso) || 'Selecionar data';
                             dateTrigger.classList.add('has-value');
                             panel.hidden = true;
+                            calMode = 'days';
                             renderCalendar();
                         });
                         grid.appendChild(dayBtn);
@@ -5828,19 +5981,32 @@
                 }
                 renderCalendar();
 
+                monthLabel.addEventListener('click', function () {
+                    if (calMode === 'days') calMode = 'months';
+                    else if (calMode === 'months') calMode = 'years';
+                    renderCalendar();
+                });
                 prevBtn.addEventListener('click', function () {
-                    view.setMonth(view.getMonth() - 1);
+                    if (calMode === 'years') view.setFullYear(view.getFullYear() - 10);
+                    else if (calMode === 'months') view.setFullYear(view.getFullYear() - 1);
+                    else view.setMonth(view.getMonth() - 1);
                     renderCalendar();
                 });
                 nextBtn.addEventListener('click', function () {
-                    view.setMonth(view.getMonth() + 1);
+                    if (calMode === 'years') view.setFullYear(view.getFullYear() + 10);
+                    else if (calMode === 'months') view.setFullYear(view.getFullYear() + 1);
+                    else view.setMonth(view.getMonth() + 1);
                     renderCalendar();
                 });
                 dateTrigger.addEventListener('click', function () {
                     if (!interactive || sessionEpisodeEnded) return;
                     var opening = !!panel.hidden;
                     panel.hidden = !opening;
-                    if (opening) placeAnswerPopover(panel, dateTrigger);
+                    if (opening) {
+                        calMode = 'days';
+                        renderCalendar();
+                        placeAnswerPopover(panel, dateTrigger);
+                    }
                 });
 
                 dateWrap.appendChild(dateTrigger);
@@ -6486,8 +6652,10 @@
             function finish() {
                 textEl.classList.remove('xbot-typecursor');
                 textEl.innerHTML = html;
-                if (typeof scrollMessagesToBottom === 'function') scrollMessagesToBottom();
+                // Blocos (Answer, opções, etc.) entram no onDone e aumentam a altura —
+                // scroll depois para a mensagem aparecer por inteiro.
                 if (onDone) onDone();
+                scheduleScrollMessagesToBottom();
             }
             if (!text || prefersReducedMotion() || sessionEpisodeEnded) {
                 finish();
@@ -6620,7 +6788,9 @@
             messages.appendChild(row);
             syncEmptyState();
             if (opts.scroll !== false) {
-                scrollMessagesToBottom();
+                // Envio do visitante reativa o stick; bot só segue se ainda estiver no fim.
+                if (from === 'user') scrollMessagesToBottom({ force: true });
+                else scheduleScrollMessagesToBottom();
             }
 
             var countUnread = opts.countUnread !== false;
@@ -6763,7 +6933,7 @@
             previewRow.appendChild(previewCol);
             messages.appendChild(previewRow);
             syncEmptyState();
-            messages.scrollTop = messages.scrollHeight;
+            scrollMessagesToBottom({ force: true });
         
             try {
             if (window.__xbotConfig.channelId) {
@@ -6779,7 +6949,7 @@
             } catch (err) {
             appendMessage('Erro ao enviar o arquivo.', 'bot');
             }
-            messages.scrollTop = messages.scrollHeight;
+            scrollMessagesToBottom({ force: true });
         });
         
         // Gravação de Áudio
@@ -6911,7 +7081,7 @@
                         isUploadingAudio = false;
                         setAudioBtnIdle();
                     }
-                    messages.scrollTop = messages.scrollHeight;
+                    scrollMessagesToBottom({ force: true });
                 };
 
                 mediaRecorder.start(250);
