@@ -98,6 +98,10 @@
                 data.offset_bottom != null ? data.offset_bottom : cfg.offsetBottom,
               offsetSide:
                 data.offset_side != null ? data.offset_side : cfg.offsetSide,
+              typingSpeed:
+                data.typing_speed === 'medium' || data.typing_speed === 'slow' || data.typing_speed === 'fast'
+                  ? data.typing_speed
+                  : (cfg.typingSpeed || 'fast'),
               botReplyEnabled:
                 typeof data.bot_reply_enabled === 'boolean'
                   ? data.bot_reply_enabled
@@ -252,6 +256,7 @@
             apiBaseUrl = '',
             offsetBottom = 20,
             offsetSide = 20,
+            typingSpeed = 'fast',
             browserNotify = false,
         } = config;
         var browserNotifyEnabled = !!browserNotify;
@@ -1787,6 +1792,10 @@
                     try { onEnded(); } catch (e) { /* ignore */ }
                 }
             }
+            function wasWatchedUnmuted() {
+                // Só conta como concluído após TAP TO UNMUTE + assistir até o fim com som.
+                return wrap.classList.contains('is-unmuted') && !vid.muted;
+            }
             function tryPlay() {
                 if (!wrap.classList.contains('is-unmuted')) vid.muted = true;
                 var p = vid.play();
@@ -1809,6 +1818,15 @@
                 }
                 restartFromStart(true);
             }
+            function onPlaybackEnded() {
+                if (wasWatchedUnmuted()) {
+                    finishPlayback();
+                    return;
+                }
+                // Autoplay mudo terminou sem engajamento: recomeça mudo até o tap.
+                try { vid.currentTime = 0; } catch (e) { /* ignore */ }
+                tryPlay();
+            }
 
             wrap.addEventListener('click', onActivate);
             wrap.addEventListener('keydown', function (ev) {
@@ -1817,7 +1835,8 @@
             });
             bindMediaInteractionScrollGuard(wrap);
             bindMediaInteractionScrollGuard(vid);
-            vid.addEventListener('ended', finishPlayback);
+            vid.addEventListener('ended', onPlaybackEnded);
+            // Erro de mídia: libera lock / avança para não prender o visitante.
             vid.addEventListener('error', finishPlayback);
             vid.addEventListener('loadeddata', tryPlay);
             vid.addEventListener('canplay', tryPlay);
@@ -7448,7 +7467,23 @@
         /**
          * Digita texto plano no elemento e, ao terminar, troca pelo HTML final (markdown).
          * Usado no welcome/abertura MOBA e nas respostas do bot (não-catálogo).
+         * Velocidade: fast (padrão atual) | medium | slow — config do canal (widget-config).
          */
+        function resolveTypingSpeedProfile() {
+            var live = (window.__xbotConfig && window.__xbotConfig.typingSpeed) || typingSpeed || 'fast';
+            var key = String(live || 'fast').toLowerCase();
+            if (key === 'medium') {
+                // ~1.8× mais lento que o atual; mensagens longas ainda limitadas.
+                return { delay: 32, lengthDivisor: 1.25, minTicks: 18, maxTicks: 180 };
+            }
+            if (key === 'slow') {
+                // ~2.7× mais lento; tipicamente mais caractere a caractere.
+                return { delay: 48, lengthDivisor: 1, minTicks: 24, maxTicks: 240 };
+            }
+            // fast — comportamento atual (~18ms/tick, teto ~2.4s).
+            return { delay: 18, lengthDivisor: 2, minTicks: 12, maxTicks: 120 };
+        }
+
         function runBotTypewriter(textEl, plainText, finalHtml, onDone) {
             if (!textEl) {
                 if (onDone) onDone();
@@ -7471,10 +7506,13 @@
             textEl.textContent = '';
             textEl.classList.add('xbot-typecursor');
             var idx = 0;
-            // ~18ms/char, no máx. ~2.4s; mensagens longas avançam em blocos.
-            var targetTicks = Math.max(12, Math.min(120, Math.ceil(text.length / 2)));
+            var profile = resolveTypingSpeedProfile();
+            var targetTicks = Math.max(
+                profile.minTicks,
+                Math.min(profile.maxTicks, Math.ceil(text.length / profile.lengthDivisor))
+            );
             var step = Math.max(1, Math.ceil(text.length / targetTicks));
-            var delay = 18;
+            var delay = profile.delay;
             function tick() {
                 if (sessionEpisodeEnded) {
                     finish();
