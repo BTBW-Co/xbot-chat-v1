@@ -1455,12 +1455,29 @@
                     }
                 } else if (kind === 'answer_input') {
                     var at = String(block.answer_type || 'text').trim().toLowerCase();
+                    var scaleMin = Number(block.scale_min);
+                    var scaleMax = Number(block.scale_max);
+                    var scaleDefault = Number(block.scale_default);
+                    if (!isFinite(scaleMin)) scaleMin = 0;
+                    if (!isFinite(scaleMax)) scaleMax = 10;
+                    if (scaleMax < scaleMin) {
+                        var tmpScale = scaleMin;
+                        scaleMin = scaleMax;
+                        scaleMax = tmpScale;
+                    }
+                    if (!isFinite(scaleDefault)) {
+                        scaleDefault = scaleMin + Math.floor((scaleMax - scaleMin) / 2);
+                    }
+                    scaleDefault = Math.max(scaleMin, Math.min(scaleMax, Math.round(scaleDefault)));
                     out.push({
                         kind: 'answer_input',
                         answer_type: at || 'text',
                         field_key: String(block.field_key || 'answer').trim() || 'answer',
                         input_placeholder: String(block.input_placeholder || '').trim(),
                         default_country_code: String(block.default_country_code || '55').replace(/\D/g, '') || '55',
+                        scale_min: scaleMin,
+                        scale_max: scaleMax,
+                        scale_default: scaleDefault,
                         allow_back: block.allow_back === true
                     });
                 } else if (kind === 'file_input') {
@@ -1638,6 +1655,8 @@
             if (isAnswerFieldFocusable(national)) return national;
             var otpDigit = form.querySelector('input.xbot-answer-otp-digit');
             if (isAnswerFieldFocusable(otpDigit)) return otpDigit;
+            var scaleSlider = form.querySelector('input.xbot-answer-scale-slider');
+            if (isAnswerFieldFocusable(scaleSlider)) return scaleSlider;
             var field = form.querySelector('input.xbot-answer-field');
             if (isAnswerFieldFocusable(field)) return field;
             var dateTrigger = form.querySelector('.xbot-answer-date-trigger');
@@ -4239,6 +4258,100 @@
                 width: 100%;
                 min-width: 0;
             }
+            .xbot-answer-scale {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                width: 100%;
+                min-width: 0;
+            }
+            .xbot-answer-scale-value {
+                align-self: center;
+                min-width: 2.4em;
+                padding: 4px 12px;
+                border-radius: 999px;
+                background: color-mix(in srgb, var(--xbot-theme) 16%, #ffffff);
+                color: var(--xbot-theme);
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                text-align: center;
+                line-height: 1.2;
+            }
+            .xbot-answer-scale-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                width: 100%;
+                min-width: 0;
+            }
+            .xbot-answer-scale-bound {
+                flex: 0 0 auto;
+                min-width: 1.25em;
+                font-size: 12px;
+                font-weight: 650;
+                color: color-mix(in srgb, var(--xbot-ink) 55%, transparent);
+                text-align: center;
+            }
+            .xbot-answer-scale-slider {
+                flex: 1 1 auto;
+                min-width: 0;
+                width: 100%;
+                height: 28px;
+                margin: 0;
+                appearance: none;
+                -webkit-appearance: none;
+                background: transparent;
+                cursor: pointer;
+            }
+            .xbot-answer-scale-slider:focus {
+                outline: none;
+            }
+            .xbot-answer-scale-slider:focus-visible::-webkit-slider-thumb {
+                box-shadow: 0 0 0 4px rgba(var(--xbot-theme-rgb), 0.22);
+            }
+            .xbot-answer-scale-slider:focus-visible::-moz-range-thumb {
+                box-shadow: 0 0 0 4px rgba(var(--xbot-theme-rgb), 0.22);
+            }
+            .xbot-answer-scale-slider::-webkit-slider-runnable-track {
+                height: 8px;
+                border-radius: 999px;
+                background: color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+            }
+            .xbot-answer-scale-slider::-moz-range-track {
+                height: 8px;
+                border-radius: 999px;
+                background: color-mix(in srgb, var(--xbot-theme) 22%, var(--xbot-border));
+            }
+            .xbot-answer-scale-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 22px;
+                height: 22px;
+                margin-top: -7px;
+                border-radius: 50%;
+                border: 2px solid #ffffff;
+                background: var(--xbot-theme);
+                box-shadow: 0 1px 4px rgba(15, 23, 42, 0.22);
+                cursor: grab;
+            }
+            .xbot-answer-scale-slider::-moz-range-thumb {
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                border: 2px solid #ffffff;
+                background: var(--xbot-theme);
+                box-shadow: 0 1px 4px rgba(15, 23, 42, 0.22);
+                cursor: grab;
+            }
+            .xbot-answer-scale-slider:disabled {
+                opacity: 0.55;
+                cursor: default;
+            }
+            .xbot-answer-scale-actions {
+                display: flex;
+                justify-content: flex-end;
+            }
             .xbot-answer-otp-digits {
                 display: flex;
                 align-items: stretch;
@@ -5817,6 +5930,11 @@
                 return d.length >= 8 && d.length <= 15;
             }
             if (kind === 'number') return !isNaN(Number(text.replace(',', '.')));
+            if (kind === 'scale') {
+                var n = Number(String(text).replace(',', '.'));
+                if (!isFinite(n) || Math.round(n) !== n) return false;
+                return true;
+            }
             if (kind === 'url') {
                 try {
                     var u = text.indexOf('://') >= 0 ? text : ('https://' + text);
@@ -6067,7 +6185,85 @@
                 sendUserText('__back__');
             }
 
-            if (answerType === 'phone') {
+            if (answerType === 'scale') {
+                var scaleMin = Number(block.scale_min);
+                var scaleMax = Number(block.scale_max);
+                var scaleDefault = Number(block.scale_default);
+                if (!isFinite(scaleMin)) scaleMin = 0;
+                if (!isFinite(scaleMax)) scaleMax = 10;
+                if (scaleMax < scaleMin) {
+                    var swapScale = scaleMin;
+                    scaleMin = scaleMax;
+                    scaleMax = swapScale;
+                }
+                if (!isFinite(scaleDefault)) {
+                    scaleDefault = scaleMin + Math.floor((scaleMax - scaleMin) / 2);
+                }
+                scaleDefault = Math.max(scaleMin, Math.min(scaleMax, Math.round(scaleDefault)));
+
+                var scaleWrap = document.createElement('div');
+                scaleWrap.className = 'xbot-answer-scale';
+                scaleWrap.setAttribute('role', 'group');
+                scaleWrap.setAttribute('aria-label', placeholder || 'Escala');
+
+                var scaleValue = document.createElement('div');
+                scaleValue.className = 'xbot-answer-scale-value';
+                scaleValue.textContent = String(scaleDefault);
+
+                var scaleRow = document.createElement('div');
+                scaleRow.className = 'xbot-answer-scale-row';
+
+                var scaleMinLbl = document.createElement('span');
+                scaleMinLbl.className = 'xbot-answer-scale-bound';
+                scaleMinLbl.textContent = String(scaleMin);
+
+                var range = document.createElement('input');
+                range.type = 'range';
+                range.className = 'xbot-answer-scale-slider';
+                range.min = String(scaleMin);
+                range.max = String(scaleMax);
+                range.step = '1';
+                range.value = String(scaleDefault);
+                range.setAttribute('aria-valuemin', String(scaleMin));
+                range.setAttribute('aria-valuemax', String(scaleMax));
+                range.setAttribute('aria-valuenow', String(scaleDefault));
+                range.setAttribute('aria-label', 'Nota de ' + scaleMin + ' a ' + scaleMax);
+
+                var scaleMaxLbl = document.createElement('span');
+                scaleMaxLbl.className = 'xbot-answer-scale-bound';
+                scaleMaxLbl.textContent = String(scaleMax);
+
+                function syncScaleUi() {
+                    var v = String(range.value);
+                    scaleValue.textContent = v;
+                    range.setAttribute('aria-valuenow', v);
+                }
+                range.addEventListener('input', syncScaleUi);
+                range.addEventListener('change', syncScaleUi);
+
+                scaleRow.appendChild(scaleMinLbl);
+                scaleRow.appendChild(range);
+                scaleRow.appendChild(scaleMaxLbl);
+
+                var scaleActions = document.createElement('div');
+                scaleActions.className = 'xbot-answer-scale-actions';
+                var sendScale = document.createElement('button');
+                sendScale.type = 'submit';
+                sendScale.className = 'xbot-answer-send';
+                sendScale.setAttribute('aria-label', 'Enviar');
+                sendScale.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
+                scaleActions.appendChild(sendScale);
+
+                scaleWrap.appendChild(scaleValue);
+                scaleWrap.appendChild(scaleRow);
+                scaleWrap.appendChild(scaleActions);
+                form.appendChild(scaleWrap);
+                form.appendChild(err);
+                form.addEventListener('submit', function (ev) {
+                    ev.preventDefault();
+                    submitValue(range.value);
+                });
+            } else if (answerType === 'phone') {
                 var row = document.createElement('div');
                 row.className = 'xbot-answer-phone-row';
                 var countryWrap = document.createElement('div');
