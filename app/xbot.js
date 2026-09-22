@@ -1341,7 +1341,8 @@
                     messageId: item && item.id ? item.id : null,
                     presentationOpening: source === 'opening' || (
                         source !== 'history' && source !== 'hydrate' && isPresentationOpeningMeta(meta)
-                    )
+                    ),
+                    tapToUnmute: source !== 'history' && source !== 'hydrate' && isTapToUnmuteMeta(meta)
                 });
             } else {
                 appendMessage(body, 'bot', {
@@ -1491,6 +1492,14 @@
         function isPresentationOpeningMeta(meta) {
             return !!(meta && typeof meta === 'object' && (
                 meta.presentation_opening === true || meta.source === 'agent_presentation'
+            ));
+        }
+
+        function isTapToUnmuteMeta(meta) {
+            return !!(meta && typeof meta === 'object' && (
+                meta.tap_to_unmute === true ||
+                meta.straight_media === true ||
+                meta.source === 'straight_media'
             ));
         }
 
@@ -1647,7 +1656,8 @@
             }
         }
 
-        function mountPresentationVideo(url) {
+        function mountPresentationVideo(url, opts) {
+            var lockComposer = !(opts && opts.lockComposer === false);
             var wrap = document.createElement('div');
             wrap.className = 'xbot-presentation-video';
             wrap.setAttribute('role', 'button');
@@ -1708,19 +1718,19 @@
             vid.addEventListener('ended', function () {
                 if (finished) return;
                 finished = true;
-                releasePresentationComposerLock();
+                if (lockComposer) releasePresentationComposerLock();
             });
             vid.addEventListener('error', function () {
                 if (finished) return;
                 finished = true;
-                releasePresentationComposerLock();
+                if (lockComposer) releasePresentationComposerLock();
             });
             vid.addEventListener('loadeddata', tryPlay);
             vid.addEventListener('canplay', tryPlay);
 
             wrap.appendChild(vid);
             wrap.appendChild(unmute);
-            acquirePresentationComposerLock();
+            if (lockComposer) acquirePresentationComposerLock();
             tryPlay();
             requestAnimationFrame(tryPlay);
             setTimeout(tryPlay, 250);
@@ -1815,12 +1825,24 @@
                 }
                 return;
             } else if (ct === 'video') {
-                // Abertura recém-persistida: player cinematográfico (TAP TO UNMUTE).
+                // Abertura / Straight media: player cinematográfico (TAP TO UNMUTE).
                 // Reload da mesma sessão hidrata como histórico — não reproduz de novo.
-                var usePresentationPlayer = !visitorHasSpoken && !!(opts && opts.presentationOpening);
+                var usePresentationPlayer = (
+                    (!visitorHasSpoken && !!(opts && opts.presentationOpening)) ||
+                    !!(opts && opts.tapToUnmute)
+                );
                 if (usePresentationPlayer) {
                     appendMessage('', 'bot', Object.assign({}, opts, {
-                        domNode: wrapMediaWithDownload(mountPresentationVideo(url), url, downloadName, 'video', messageId, mediaWrapOpts),
+                        domNode: wrapMediaWithDownload(
+                            mountPresentationVideo(url, {
+                                lockComposer: !(opts && opts.tapToUnmute)
+                            }),
+                            url,
+                            downloadName,
+                            'video',
+                            messageId,
+                            mediaWrapOpts
+                        ),
                         animateTyping: false
                     }));
                 } else {
