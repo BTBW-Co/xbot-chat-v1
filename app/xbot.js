@@ -189,45 +189,82 @@
     /** Mesmo beep do sino em app.xbotone.com (Web Audio). */
     var xbotNotifyAudioCtx = null;
     var xbotNotifyAudioUnlockInstalled = false;
+    function ensureXbotNotifyAudioCtx() {
+        if (typeof window === 'undefined') return null;
+        var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return null;
+        try {
+            xbotNotifyAudioCtx = xbotNotifyAudioCtx || new AudioContextClass();
+        } catch (e) {
+            return null;
+        }
+        return xbotNotifyAudioCtx;
+    }
+    /** Desbloqueia Web Audio (iOS/Safari exige gesto; resume é async). */
+    function unlockXbotNotifyAudio() {
+        var ctx = ensureXbotNotifyAudioCtx();
+        if (!ctx) return;
+        try {
+            if (ctx.state === 'suspended') {
+                ctx.resume().catch(function () {});
+            }
+            // Tick silencioso: ajuda o Safari a marcar o contexto como “usado” após o gesto.
+            if (ctx.state === 'running' || ctx.state === 'suspended') {
+                var buffer = ctx.createBuffer(1, 1, 22050);
+                var source = ctx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(ctx.destination);
+                source.start(0);
+            }
+        } catch (e) { /* áudio bloqueado */ }
+    }
     function installXbotNotifyAudioUnlock() {
         if (xbotNotifyAudioUnlockInstalled || typeof window === 'undefined') return;
-        var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) return;
+        if (!(window.AudioContext || window.webkitAudioContext)) return;
         xbotNotifyAudioUnlockInstalled = true;
-        var unlock = function () {
-            try {
-                xbotNotifyAudioCtx = xbotNotifyAudioCtx || new AudioContextClass();
-                if (xbotNotifyAudioCtx.state === 'suspended') {
-                    xbotNotifyAudioCtx.resume().catch(function () {});
-                }
-            } catch (e) { /* áudio bloqueado */ }
-        };
-        window.addEventListener('pointerdown', unlock, { once: true, passive: true });
-        window.addEventListener('keydown', unlock, { once: true });
+        // capture: true — gestos no vídeo (stopPropagation no bubble) ainda desbloqueiam.
+        var opts = { capture: true, passive: true };
+        window.addEventListener('pointerdown', unlockXbotNotifyAudio, opts);
+        window.addEventListener('touchstart', unlockXbotNotifyAudio, opts);
+        window.addEventListener('keydown', unlockXbotNotifyAudio, { capture: true });
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') unlockXbotNotifyAudio();
+            });
+        }
+    }
+    function emitXbotNotifyBeep(context) {
+        var now = context.currentTime;
+        var gain = context.createGain();
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.16, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+        gain.connect(context.destination);
+        ;[880, 1174.66].forEach(function (frequency, index) {
+            var oscillator = context.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, now + index * 0.12);
+            oscillator.connect(gain);
+            oscillator.start(now + index * 0.12);
+            oscillator.stop(now + 0.28 + index * 0.12);
+        });
     }
     function playAppNotificationSound() {
         if (typeof window === 'undefined') return;
-        var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) return;
+        installXbotNotifyAudioUnlock();
         try {
-            installXbotNotifyAudioUnlock();
-            xbotNotifyAudioCtx = xbotNotifyAudioCtx || new AudioContextClass();
-            var context = xbotNotifyAudioCtx;
-            if (context.state === 'suspended') context.resume().catch(function () {});
-            var now = context.currentTime;
-            var gain = context.createGain();
-            gain.gain.setValueAtTime(0.0001, now);
-            gain.gain.exponentialRampToValueAtTime(0.16, now + 0.015);
-            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
-            gain.connect(context.destination);
-            ;[880, 1174.66].forEach(function (frequency, index) {
-                var oscillator = context.createOscillator();
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(frequency, now + index * 0.12);
-                oscillator.connect(gain);
-                oscillator.start(now + index * 0.12);
-                oscillator.stop(now + 0.28 + index * 0.12);
-            });
+            var context = ensureXbotNotifyAudioCtx();
+            if (!context) return;
+            var play = function () {
+                if (context.state !== 'running') return;
+                emitXbotNotifyBeep(context);
+            };
+            // iOS: oscillators agendados com contexto suspended não tocam — espera o resume.
+            if (context.state === 'suspended') {
+                context.resume().then(play).catch(function () {});
+                return;
+            }
+            play();
         } catch (e) { /* ignore */ }
     }
 
@@ -634,6 +671,7 @@
         var closureNoticeRendered = false;
         var presentationLockCount = 0;
         var choiceComposerLockCount = 0;
+        var sleepComposerLocked = false;
         var visitorHasSpoken = false;
 
         function isSessionClosurePayload(item, body) {
@@ -666,8 +704,10 @@
             visitorHasSpoken = false;
             presentationLockCount = 0;
             choiceComposerLockCount = 0;
+            sleepComposerLocked = false;
             setPresentationComposerLocked(false);
             setChoiceComposerLocked(false);
+            setSleepComposerLocked(false);
         }
 
         function pauseRealtimeTransportAfterClosure() {
@@ -815,6 +855,9 @@
         }
 
         function updateInactivityBarUI(status) {
+            if (status && typeof status.composer_locked === 'boolean') {
+                applyComposerLockedFlag(status.composer_locked);
+            }
             if (!inactivityBar) return;
             if (!status || !status.inactivity_enabled) {
                 inactivityBar.hidden = true;
@@ -1556,6 +1599,10 @@
             return presentationLockCount > 0;
         }
 
+        function isSleepComposerLocked() {
+            return !!sleepComposerLocked;
+        }
+
         function setPresentationComposerLocked(locked) {
             var compose = document.querySelector('.xbot-compose');
             var inputEl = document.getElementById('xbot-input');
@@ -1566,16 +1613,17 @@
                 if (locked) compose.classList.add('is-presentation-locked');
                 else compose.classList.remove('is-presentation-locked');
             }
+            var forceLock = !!locked || isChoiceComposerLocked() || isSleepComposerLocked();
             var nodes = [inputEl, sendEl, uploadEl, audioEl];
             for (var i = 0; i < nodes.length; i++) {
                 var el = nodes[i];
                 if (!el) continue;
-                el.disabled = !!locked;
-                if (locked) el.setAttribute('aria-disabled', 'true');
+                el.disabled = forceLock;
+                if (el.disabled) el.setAttribute('aria-disabled', 'true');
                 else el.removeAttribute('aria-disabled');
             }
-            if (inputEl) inputEl.readOnly = !!locked;
-            if (!locked) {
+            if (inputEl) inputEl.readOnly = forceLock;
+            if (!forceLock) {
                 try {
                     document.dispatchEvent(new CustomEvent('xbot:compose-unlocked'));
                 } catch (e) { /* ignore */ }
@@ -1610,14 +1658,14 @@
             for (var i = 0; i < nodes.length; i++) {
                 var el = nodes[i];
                 if (!el) continue;
-                // Não sobrescrever lock de apresentação.
-                if (!locked && isPresentationComposerLocked()) continue;
-                el.disabled = !!locked || isPresentationComposerLocked();
+                // Não sobrescrever lock de apresentação / sleep.
+                if (!locked && (isPresentationComposerLocked() || isSleepComposerLocked())) continue;
+                el.disabled = !!locked || isPresentationComposerLocked() || isSleepComposerLocked();
                 if (el.disabled) el.setAttribute('aria-disabled', 'true');
                 else el.removeAttribute('aria-disabled');
             }
             if (inputEl) {
-                inputEl.readOnly = !!locked || isPresentationComposerLocked();
+                inputEl.readOnly = !!locked || isPresentationComposerLocked() || isSleepComposerLocked();
                 if (locked) {
                     inputEl.setAttribute('data-prev-placeholder', inputEl.getAttribute('placeholder') || '');
                     var pendingFile = messages && messages.querySelector
@@ -1629,11 +1677,56 @@
                     if (pendingFile) inputEl.placeholder = 'Envie um arquivo acima…';
                     else if (pendingAnswer) inputEl.placeholder = 'Responda no campo acima…';
                     else inputEl.placeholder = 'Escolha uma opção acima…';
-                } else if (inputEl.getAttribute('data-prev-placeholder') != null) {
+                } else if (!isSleepComposerLocked() && inputEl.getAttribute('data-prev-placeholder') != null) {
                     inputEl.placeholder = inputEl.getAttribute('data-prev-placeholder') || 'Ou envie uma mensagem…';
                     inputEl.removeAttribute('data-prev-placeholder');
                 }
             }
+        }
+
+        function setSleepComposerLocked(locked) {
+            var next = !!locked;
+            sleepComposerLocked = next;
+            var compose = document.querySelector('.xbot-compose');
+            var inputEl = document.getElementById('xbot-input');
+            var sendEl = document.getElementById('xbot-send');
+            var uploadEl = document.getElementById('xbot-upload');
+            var audioEl = document.getElementById('xbot-audio');
+            if (compose) {
+                if (next) compose.classList.add('is-sleep-locked');
+                else compose.classList.remove('is-sleep-locked');
+            }
+            var forceLock = next || isPresentationComposerLocked() || isChoiceComposerLocked();
+            var nodes = [inputEl, sendEl, uploadEl, audioEl];
+            for (var i = 0; i < nodes.length; i++) {
+                var el = nodes[i];
+                if (!el) continue;
+                el.disabled = forceLock;
+                if (el.disabled) el.setAttribute('aria-disabled', 'true');
+                else el.removeAttribute('aria-disabled');
+            }
+            if (inputEl) {
+                inputEl.readOnly = forceLock;
+                if (next) {
+                    if (inputEl.getAttribute('data-prev-placeholder') == null) {
+                        inputEl.setAttribute('data-prev-placeholder', inputEl.getAttribute('placeholder') || '');
+                    }
+                    inputEl.placeholder = 'Aguarde…';
+                } else if (!isChoiceComposerLocked() && inputEl.getAttribute('data-prev-placeholder') != null) {
+                    inputEl.placeholder = inputEl.getAttribute('data-prev-placeholder') || 'Ou envie uma mensagem…';
+                    inputEl.removeAttribute('data-prev-placeholder');
+                }
+            }
+            if (!forceLock) {
+                try {
+                    document.dispatchEvent(new CustomEvent('xbot:compose-unlocked'));
+                } catch (e) { /* ignore */ }
+            }
+        }
+
+        function applyComposerLockedFlag(flag) {
+            if (typeof flag !== 'boolean') return;
+            setSleepComposerLocked(flag);
         }
 
         function acquireChoiceComposerLock() {
@@ -1754,6 +1847,26 @@
             }
         }
 
+        /**
+         * Escala "TAP TO UNMUTE" para caber na faixa útil do player (~80% / 10% cada lado).
+         * CSS (cqi/vw) falha em bolhas estreitas no mobile — medimos scrollWidth de fato.
+         */
+        function fitPresentationUnmuteLabel(wrap, label) {
+            if (!wrap || !label) return;
+            var frameW = wrap.clientWidth || 0;
+            if (frameW < 8) return;
+            // Caixa do rótulo já tem inset 10%; usa a largura real dela quando disponível.
+            var maxW = label.clientWidth > 0 ? label.clientWidth : frameW * 0.8;
+            if (maxW < 8) maxW = frameW * 0.8;
+            var size = Math.min(18, Math.max(9, frameW * 0.048));
+            label.style.setProperty('font-size', size + 'px', 'important');
+            var guard = 48;
+            while (label.scrollWidth > maxW && size > 8 && guard--) {
+                size -= 0.5;
+                label.style.setProperty('font-size', size + 'px', 'important');
+            }
+        }
+
         function mountPresentationVideo(url, opts) {
             var lockComposer = !(opts && opts.lockComposer === false);
             var onEnded = opts && typeof opts.onEnded === 'function' ? opts.onEnded : null;
@@ -1803,6 +1916,8 @@
             }
             function restartFromStart(withSound) {
                 if (withSound) {
+                    // Gesto do TAP TO UNMUTE: desbloqueia o beep de mensagens seguintes (iOS).
+                    unlockXbotNotifyAudio();
                     vid.muted = false;
                     wrap.classList.add('is-unmuted');
                     wrap.setAttribute('aria-label', 'Reproduzir do início');
@@ -1853,13 +1968,35 @@
             vid.addEventListener('loadeddata', tryPlay);
             vid.addEventListener('canplay', tryPlay);
 
+            function scheduleFitUnmute() {
+                fitPresentationUnmuteLabel(wrap, unmute);
+                requestAnimationFrame(function () {
+                    fitPresentationUnmuteLabel(wrap, unmute);
+                });
+            }
+            vid.addEventListener('loadedmetadata', scheduleFitUnmute);
+            vid.addEventListener('loadeddata', scheduleFitUnmute);
+            if (typeof ResizeObserver !== 'undefined') {
+                try {
+                    var unmuteRo = new ResizeObserver(function () {
+                        fitPresentationUnmuteLabel(wrap, unmute);
+                    });
+                    unmuteRo.observe(wrap);
+                } catch (eRo) { /* ignore */ }
+            } else if (typeof window !== 'undefined') {
+                window.addEventListener('resize', scheduleFitUnmute);
+            }
+
             wrap.appendChild(vid);
             wrap.appendChild(unmute);
             if (lockComposer) acquirePresentationComposerLock();
             tryPlay();
             requestAnimationFrame(tryPlay);
+            scheduleFitUnmute();
             setTimeout(tryPlay, 250);
+            setTimeout(scheduleFitUnmute, 250);
             setTimeout(tryPlay, 1000);
+            setTimeout(scheduleFitUnmute, 1000);
             return wrap;
         }
 
@@ -2128,6 +2265,11 @@
                                             }
                                         }
                                     } catch (e) { /* ignore */ }
+                                } else if (frame.event === 'composer_lock' && frame.data) {
+                                    try {
+                                        var lockPayload = JSON.parse(frame.data);
+                                        applyComposerLockedFlag(!!lockPayload.composer_locked);
+                                    } catch (e) { /* ignore */ }
                                 } else if (frame.event === 'message' && frame.data) {
                                     try {
                                         var payload = JSON.parse(frame.data);
@@ -2187,6 +2329,7 @@
                     widgetLog('sessão anterior encerrada — conversa nova');
                     return;
                 }
+                applyComposerLockedFlag(data.composer_locked);
                 sessionEndedNoticeShown = false;
                 var list = data.messages || [];
                 widgetLog('histórico carregado', {
@@ -2308,6 +2451,7 @@
                 if (data.visitor_id && vid !== data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
+                applyComposerLockedFlag(data.composer_locked);
                 var list = data.messages || [];
                 if (list.length) widgetLog('poll', { novas: list.length });
                 for (var i = 0; i < list.length; i++) {
@@ -4862,7 +5006,7 @@
             }
             .xbot-presentation-unmute {
                 position: absolute;
-                /* 10% de margem de cada lado da janela do player. */
+                /* 10% de margem de cada lado; font-size final é ajustado em JS (fitPresentationUnmuteLabel). */
                 inset: 0 10%;
                 z-index: 2;
                 display: flex;
@@ -4870,16 +5014,15 @@
                 justify-content: center;
                 box-sizing: border-box;
                 margin: 0;
-                padding: clamp(4px, 2.5cqi, 10px) 0;
-                /* Cabe em ~80% da largura do frame (TAP TO UNMUTE + tracking). */
-                font-size: clamp(10px, 5cqi, 18px) !important;
+                padding: 0;
+                font-size: 12px !important;
                 font-weight: 800;
-                letter-spacing: 0.05em;
+                letter-spacing: 0.04em;
                 line-height: 1.1;
                 text-align: center;
                 text-transform: uppercase;
                 white-space: nowrap;
-                overflow: hidden;
+                overflow: visible;
                 color: #fff;
                 text-shadow:
                     0 1px 0 rgba(0, 0, 0, 0.35),
@@ -4888,11 +5031,6 @@
                 background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.06) 55%, transparent 72%);
                 pointer-events: none;
                 animation: xbot-unmute-breathe 1.7s ease-in-out infinite;
-            }
-            @supports not (font-size: 1cqi) {
-                .xbot-presentation-unmute {
-                    font-size: clamp(10px, 3vw, 16px) !important;
-                }
             }
             @keyframes xbot-unmute-breathe {
                 0%, 100% { opacity: 0.28; }
@@ -4912,7 +5050,10 @@
             .xbot-compose.is-presentation-locked .xbot-icon-btn,
             .xbot-compose.is-choice-locked .xbot-input,
             .xbot-compose.is-choice-locked .xbot-send,
-            .xbot-compose.is-choice-locked .xbot-icon-btn {
+            .xbot-compose.is-choice-locked .xbot-icon-btn,
+            .xbot-compose.is-sleep-locked .xbot-input,
+            .xbot-compose.is-sleep-locked .xbot-send,
+            .xbot-compose.is-sleep-locked .xbot-icon-btn {
                 opacity: 0.4;
                 cursor: not-allowed;
                 pointer-events: none;
@@ -5446,6 +5587,8 @@
         /** Só gruda no fim se o visitante já estava perto do fim (ou force). */
         var messagesAutoScrollPinned = true;
         var suppressMessagesAutoScrollUntil = 0;
+        var messagesIgnoreScrollPinUntil = 0;
+        var messagesKeyboardOpen = false;
         var messagesStickBound = false;
         var messagesStickScrollRaf = 0;
 
@@ -5460,6 +5603,11 @@
             suppressMessagesAutoScrollUntil = Date.now() + forMs;
         }
 
+        /** Ignora scroll “fantasma” de teclado/visualViewport (não despincha o stick). */
+        function markMessagesProgrammaticScroll(ms) {
+            messagesIgnoreScrollPinUntil = Date.now() + (ms == null ? 480 : ms);
+        }
+
         function scrollMessagesToBottom(opts) {
             opts = opts || {};
             var el = document.getElementById('xbot-messages');
@@ -5469,6 +5617,7 @@
                 if (Date.now() < suppressMessagesAutoScrollUntil) return;
                 if (!messagesAutoScrollPinned) return;
             }
+            markMessagesProgrammaticScroll(opts.ignoreMs != null ? opts.ignoreMs : 480);
             var prevBehavior = el.style.scrollBehavior;
             el.style.scrollBehavior = 'auto';
             el.scrollTop = el.scrollHeight;
@@ -5485,6 +5634,19 @@
             });
         }
 
+        /** Após abrir/fechar teclado: reflow demora; força o fim com retries curtos. */
+        function stickMessagesAfterKeyboardChange() {
+            messagesAutoScrollPinned = true;
+            markMessagesProgrammaticScroll(900);
+            scrollMessagesToBottom({ force: true, ignoreMs: 900 });
+            scheduleScrollMessagesToBottom({ force: true, ignoreMs: 900 });
+            [50, 120, 280, 480].forEach(function (ms) {
+                setTimeout(function () {
+                    scrollMessagesToBottom({ force: true, ignoreMs: 900 });
+                }, ms);
+            });
+        }
+
         /** Mantém o fim visível enquanto o pin estiver ativo (mensagem crescendo / Answer / mídia). */
         function requestStickMessagesToBottom() {
             if (messagesStickScrollRaf) return;
@@ -5498,6 +5660,8 @@
             if (!el || messagesStickBound) return;
             messagesStickBound = true;
             el.addEventListener('scroll', function () {
+                // Resize de teclado/programático não conta como “usuário subiu”.
+                if (Date.now() < messagesIgnoreScrollPinUntil) return;
                 // Enquanto o visitante lê o histórico, não puxa para o fim.
                 messagesAutoScrollPinned = isMessagesNearBottom(el, 120);
             }, { passive: true });
@@ -5830,6 +5994,14 @@
 
         function applyMobileKeyboardLayout() {
             if (!isMobileLayout() || !chatbox.classList.contains('is-open')) {
+                if (messagesKeyboardOpen) {
+                    messagesKeyboardOpen = false;
+                    clearMobilePanelStyles();
+                    if (messagesAutoScrollPinned || isMessagesNearBottom(messages, 160)) {
+                        stickMessagesAfterKeyboardChange();
+                    }
+                    return;
+                }
                 clearMobilePanelStyles();
                 return;
             }
@@ -5840,17 +6012,33 @@
             if (vv && inputFocused) {
                 keyboardLikely = vv.height < window.innerHeight * 0.92;
             }
+            // Layout de teclado ativo: foco no composer (iOS abre o teclado depois do focus).
+            var nextKeyboardOpen = !!(inputFocused || keyboardLikely);
+            var shouldStick =
+                messagesAutoScrollPinned || isMessagesNearBottom(messages, 160);
+            var keyboardChanged = nextKeyboardOpen !== messagesKeyboardOpen;
 
-            if (!inputFocused && !keyboardLikely) {
+            if (!nextKeyboardOpen) {
                 clearMobilePanelStyles();
+                messagesKeyboardOpen = false;
+                if (keyboardChanged && shouldStick) {
+                    stickMessagesAfterKeyboardChange();
+                }
                 return;
             }
 
             if (!vv) {
                 chatbox.classList.add('xbot-keyboard-open');
                 launcher.classList.add('xbot-launcher--hidden');
+                messagesKeyboardOpen = true;
+                if (keyboardChanged && shouldStick) {
+                    stickMessagesAfterKeyboardChange();
+                }
                 return;
             }
+
+            // Evita que o reflow do visualViewport despinche o stick.
+            if (shouldStick) markMessagesProgrammaticScroll(900);
 
             chatbox.classList.add('xbot-keyboard-open');
             var top = Math.max(0, vv.offsetTop);
@@ -5866,8 +6054,12 @@
             chatbox.style.setProperty('max-height', height + 'px', 'important');
             chatbox.style.setProperty('border-radius', '0', 'important');
             launcher.classList.add('xbot-launcher--hidden');
-            if (isMessagesNearBottom(messages, 140)) {
-                scheduleScrollMessagesToBottom();
+            messagesKeyboardOpen = true;
+
+            // Abriu/fechou teclado OU reflow contínuo com pin: mantém a última mensagem visível.
+            if (shouldStick) {
+                if (keyboardChanged) stickMessagesAfterKeyboardChange();
+                else scheduleScrollMessagesToBottom({ force: true, ignoreMs: 900 });
             }
         }
 
@@ -7673,7 +7865,13 @@
             if (opts.scroll !== false) {
                 // Envio do visitante reativa o stick; bot só segue se ainda estiver no fim.
                 if (from === 'user') scrollMessagesToBottom({ force: true });
-                else scheduleScrollMessagesToBottom();
+                else if (messagesKeyboardOpen && messagesAutoScrollPinned) {
+                    // Teclado aberto: reflow do visualViewport; força o fim se ainda estiver pinned.
+                    scrollMessagesToBottom({ force: true, ignoreMs: 900 });
+                    scheduleScrollMessagesToBottom({ force: true, ignoreMs: 900 });
+                } else {
+                    scheduleScrollMessagesToBottom();
+                }
             }
 
             var countUnread = opts.countUnread !== false;
@@ -7731,7 +7929,7 @@
         async function sendUserText(text, opts) {
             const value = String(text || '').trim();
             if (!value) return;
-            if (isPresentationComposerLocked()) return;
+            if (isPresentationComposerLocked() || isSleepComposerLocked()) return;
             if (isChoiceComposerLocked()) releaseChoiceComposerLock();
 
             var actionPayload = null;
@@ -7775,7 +7973,10 @@
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
                 sendVisitorPresence({ chat_open: true, page_visible: true }, { force: true });
-                if (data.reply) {
+                applyComposerLockedFlag(data.composer_locked);
+                if (data.composer_locked) {
+                    finishWaitingForBot();
+                } else if (data.reply) {
                     var replyText = String(data.reply).trim();
                     if (replyText) ingestBotPayload(null, replyText, 'post');
                     else finishWaitingForBot();
@@ -7795,7 +7996,7 @@
         }
 
         async function handleSendMessage() {
-            if (isPresentationComposerLocked()) return;
+            if (isPresentationComposerLocked() || isSleepComposerLocked()) return;
             const text = input.value.trim();
             if (!text) return;
             await sendUserText(text);
