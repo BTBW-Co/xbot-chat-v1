@@ -1488,6 +1488,7 @@
                             choices: choices,
                             allow_free_text: block.allow_free_text !== false,
                             allow_back: block.allow_back === true,
+                            allow_return_menu: block.allow_return_menu === true,
                             free_text_placeholder: String(block.free_text_placeholder || '').trim()
                         });
                     }
@@ -1527,7 +1528,8 @@
                         scale_min: scaleMin,
                         scale_max: scaleMax,
                         scale_default: scaleDefault,
-                        allow_back: block.allow_back === true
+                        allow_back: block.allow_back === true,
+                        allow_return_menu: block.allow_return_menu === true
                     });
                 } else if (kind === 'file_input') {
                     var exts = [];
@@ -1541,7 +1543,8 @@
                         field_key: String(block.field_key || 'file').trim() || 'file',
                         allowed_extensions: exts,
                         input_placeholder: String(block.input_placeholder || '').trim(),
-                        allow_back: block.allow_back === true
+                        allow_back: block.allow_back === true,
+                        allow_return_menu: block.allow_return_menu === true
                     });
                 }
             }
@@ -4359,7 +4362,10 @@
             }
             .xbot-answer-back,
             .xbot-choice-back,
-            .xbot-file-back {
+            .xbot-file-back,
+            .xbot-answer-menu,
+            .xbot-choice-menu,
+            .xbot-file-menu {
                 appearance: none;
                 border: 0;
                 background: transparent;
@@ -4376,18 +4382,26 @@
                 text-align: left;
             }
             .xbot-answer-back,
-            .xbot-file-back {
+            .xbot-file-back,
+            .xbot-answer-menu,
+            .xbot-file-menu {
                 padding: 4px 2px;
                 width: auto;
             }
             .xbot-answer-back:hover:not(:disabled),
             .xbot-choice-back:hover:not(:disabled),
-            .xbot-file-back:hover:not(:disabled) {
+            .xbot-file-back:hover:not(:disabled),
+            .xbot-answer-menu:hover:not(:disabled),
+            .xbot-choice-menu:hover:not(:disabled),
+            .xbot-file-menu:hover:not(:disabled) {
                 color: color-mix(in srgb, var(--xbot-theme) 78%, #0f172a);
             }
             .xbot-answer-back:disabled,
             .xbot-choice-back:disabled,
-            .xbot-file-back:disabled {
+            .xbot-file-back:disabled,
+            .xbot-answer-menu:disabled,
+            .xbot-choice-menu:disabled,
+            .xbot-file-menu:disabled {
                 opacity: 0.45;
                 cursor: default;
             }
@@ -6435,6 +6449,14 @@
                 sendUserText('__back__');
             }
 
+            function submitMenu() {
+                if (sessionEpisodeEnded) return;
+                err.hidden = true;
+                lockForm();
+                releaseChoiceComposerLock();
+                sendUserText('__menu__');
+            }
+
             drop.addEventListener('click', function () {
                 if (drop.disabled || sessionEpisodeEnded) return;
                 hiddenInput.click();
@@ -6486,6 +6508,21 @@
                 }
                 form.appendChild(backBtn);
             }
+            if (block.allow_return_menu === true) {
+                var menuBtn = document.createElement('button');
+                menuBtn.type = 'button';
+                menuBtn.className = 'xbot-file-menu';
+                menuBtn.textContent = 'Menu';
+                if (!interactive || sessionEpisodeEnded) {
+                    menuBtn.disabled = true;
+                } else {
+                    menuBtn.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        submitMenu();
+                    });
+                }
+                form.appendChild(menuBtn);
+            }
 
             if (!interactive || sessionEpisodeEnded) {
                 lockForm();
@@ -6532,6 +6569,14 @@
                 lockForm();
                 releaseChoiceComposerLock();
                 sendUserText('__back__');
+            }
+
+            function submitMenu() {
+                if (sessionEpisodeEnded) return;
+                err.hidden = true;
+                lockForm();
+                releaseChoiceComposerLock();
+                sendUserText('__menu__');
             }
 
             if (answerType === 'scale') {
@@ -7174,6 +7219,21 @@
                 }
                 form.appendChild(backBtn);
             }
+            if (block.allow_return_menu === true) {
+                var menuBtnAns = document.createElement('button');
+                menuBtnAns.type = 'button';
+                menuBtnAns.className = 'xbot-answer-menu';
+                menuBtnAns.textContent = 'Menu';
+                if (!interactive || sessionEpisodeEnded) {
+                    menuBtnAns.disabled = true;
+                } else {
+                    menuBtnAns.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        submitMenu();
+                    });
+                }
+                form.appendChild(menuBtnAns);
+            }
 
             if (!interactive || sessionEpisodeEnded) {
                 lockForm();
@@ -7192,7 +7252,7 @@
             wrap.setAttribute('data-xbot', 'ui-blocks');
 
             function lockChoices(root) {
-                var buttons = root.querySelectorAll('.xbot-choice-item, .xbot-choice-free-send, .xbot-choice-back');
+                var buttons = root.querySelectorAll('.xbot-choice-item, .xbot-choice-free-send, .xbot-choice-back, .xbot-choice-menu');
                 for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
                 var inputs = root.querySelectorAll('.xbot-choice-free input');
                 for (var j = 0; j < inputs.length; j++) inputs[j].disabled = true;
@@ -7342,6 +7402,23 @@
                             });
                         }
                         body.appendChild(choiceBack);
+                    }
+                    if (block.allow_return_menu === true) {
+                        var choiceMenu = document.createElement('button');
+                        choiceMenu.type = 'button';
+                        choiceMenu.className = 'xbot-choice-menu';
+                        choiceMenu.textContent = 'Menu';
+                        if (!interactive || sessionEpisodeEnded) {
+                            choiceMenu.disabled = true;
+                        } else {
+                            choiceMenu.addEventListener('click', function () {
+                                if (sessionEpisodeEnded) return;
+                                lockChoices(list);
+                                if (lockComposer) releaseChoiceComposerLock();
+                                sendUserText('__menu__');
+                            });
+                        }
+                        body.appendChild(choiceMenu);
                     }
                     wrap.appendChild(list);
                     return;
