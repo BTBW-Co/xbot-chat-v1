@@ -44,17 +44,20 @@
 
     function applyXbotAssetDefaults(cfg) {
       cfg = cfg || {};
+      var hasBot = Object.prototype.hasOwnProperty.call(cfg, 'botAvatar');
+      var hasUser = Object.prototype.hasOwnProperty.call(cfg, 'userAvatar');
       var launcher = (cfg.launcherIcon || '').trim();
-      var bot = (cfg.botAvatar || '').trim();
-      var user = (cfg.userAvatar || '').trim();
+      var bot = hasBot ? String(cfg.botAvatar == null ? '' : cfg.botAvatar).trim() : '';
+      var user = hasUser ? String(cfg.userAvatar == null ? '' : cfg.userAvatar).trim() : '';
       var channelId = normalizeXbotChannelId(cfg.channelId);
       var workforceKey = xbotWorkforceIconKey(channelId);
       var workforceUrl = xbotWorkforceAssetUrl(workforceKey);
       return Object.assign({}, cfg, {
         channelId: channelId || cfg.channelId,
         launcherIcon: launcher || workforceUrl,
-        botAvatar: bot || workforceUrl,
-        userAvatar: user || xbotDefaultAssetUrl('user-avatar.svg'),
+        // String vazia explícita = None (sem fallback). Chave ausente = default workforce/visitante.
+        botAvatar: hasBot ? bot : workforceUrl,
+        userAvatar: hasUser ? user : xbotDefaultAssetUrl('user-avatar.svg'),
       });
     }
     
@@ -85,8 +88,8 @@
           window.__xbotConfig = applyXbotAssetDefaults(
             Object.assign({}, cfg, {
               themeColor: data.theme_color || cfg.themeColor,
-              botAvatar: data.bot_avatar_url || cfg.botAvatar,
-              userAvatar: data.user_avatar_url || cfg.userAvatar,
+              botAvatar: data.bot_avatar_url != null ? data.bot_avatar_url : cfg.botAvatar,
+              userAvatar: data.user_avatar_url != null ? data.user_avatar_url : cfg.userAvatar,
               botName: data.bot_name || cfg.botName,
               welcomeMessage:
                 (data.welcome_message != null && String(data.welcome_message).trim())
@@ -1072,6 +1075,11 @@
         function shouldShowBotAvatar() {
             var last = lastMessageRow();
             return !(last && last.classList.contains('bot'));
+        }
+
+        function shouldShowUserAvatar() {
+            var last = lastMessageRow();
+            return !(last && last.classList.contains('user'));
         }
 
         function _randRange(min, max) {
@@ -3641,6 +3649,9 @@
             .xbot-message-row.user { align-self: flex-end; max-width: 85%; }
             .xbot-message-row.bot.xbot-message-row--no-avatar {
                 padding-left: 36px;
+            }
+            .xbot-message-row.user.xbot-message-row--no-avatar {
+                padding-right: 36px;
             }
             .xbot-msg-avatar {
                 width: 28px;
@@ -8132,6 +8143,17 @@
             col.appendChild(msg);
             col.appendChild(timeEl);
             row.appendChild(col);
+            if (from === 'user' && userAvatar) {
+                if (shouldShowUserAvatar()) {
+                    const uav = document.createElement('img');
+                    uav.className = 'xbot-msg-avatar';
+                    uav.src = userAvatar;
+                    uav.alt = '';
+                    row.appendChild(uav);
+                } else {
+                    row.classList.add('xbot-message-row--no-avatar');
+                }
+            }
             messages.appendChild(row);
             syncEmptyState();
             if (opts.scroll !== false) {
