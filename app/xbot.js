@@ -5116,6 +5116,367 @@
                 white-space: nowrap;
                 color: var(--xbot-muted);
             }
+            /* Vidro claro/escuro: mesmo visual do menu de opções em todos os blocos. */
+            .xbot-ui--glass-light .xbot-answer-input,
+            .xbot-ui--glass-light .xbot-file-input,
+            .xbot-ui--glass-light .xbot-recap,
+            .xbot-ui--glass-light .xbot-step-progress,
+            .xbot-ui--glass-light .xbot-link-card,
+            .xbot-ui--glass-light .xbot-catalog-card,
+            .xbot-ui--glass-light .xbot-locate-card,
+            .xbot-ui--glass-light .xbot-text [data-xbot-card="catalog"],
+            .xbot-ui--glass-light .xbot-text [data-xbot-card="locate"] {
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                background: rgba(255, 255, 255, 0.55);
+                backdrop-filter: blur(18px) saturate(1.15);
+                -webkit-backdrop-filter: blur(18px) saturate(1.15);
+                box-shadow:
+                    0 1px 0 rgba(255, 255, 255, 0.55) inset,
+                    0 12px 32px rgba(0, 0, 0, 0.14);
+                color: #1a1a1a;
+            }
+            .xbot-ui--glass-dark .xbot-answer-input,
+            .xbot-ui--glass-dark .xbot-file-input,
+            .xbot-ui--glass-dark .xbot-recap,
+            .xbot-ui--glass-dark .xbot-step-progress,
+            .xbot-ui--glass-dark .xbot-link-card,
+            .xbot-ui--glass-dark .xbot-catalog-card,
+            .xbot-ui--glass-dark .xbot-locate-card,
+            .xbot-ui--glass-dark .xbot-text [data-xbot-card="catalog"],
+            .xbot-ui--glass-dark .xbot-text [data-xbot-card="locate"] {
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                background: rgba(18, 18, 18, 0.48);
+                backdrop-filter: blur(18px) saturate(1.1);
+                -webkit-backdrop-filter: blur(18px) saturate(1.1);
+                box-shadow:
+                    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+                    0 12px 32px rgba(0, 0, 0, 0.32);
+                color: #f4f4f4;
+            }
+            .xbot-ui--glass-light .xbot-answer-field,
+            .xbot-ui--glass-light .xbot-answer-area,
+            .xbot-ui--glass-light .xbot-answer-country-btn,
+            .xbot-ui--glass-light .xbot-answer-otp-digit,
+            .xbot-ui--glass-light .xbot-answer-date-trigger,
+            .xbot-ui--glass-light .xbot-choice-free input {
+                border-color: rgba(0, 0, 0, 0.1);
+                background: rgba(255, 255, 255, 0.72);
+                color: #1a1a1a;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-dark .xbot-answer-field,
+            .xbot-ui--glass-dark .xbot-answer-area,
+            .xbot-ui--glass-dark .xbot-answer-country-btn,
+            .xbot-ui--glass-dark .xbot-answer-otp-digit,
+            .xbot-ui--glass-dark .xbot-answer-date-trigger,
+            .xbot-ui--glass-dark .xbot-choice-free input {
+                border-color: rgba(255, 255, 255, 0.16);
+                background: rgba(255, 255, 255, 0.08);
+                color: #f4f4f4;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-light .xbot-answer-field:focus,
+            .xbot-ui--glass-light .xbot-answer-area:focus,
+            .xbot-ui--glass-light .xbot-answer-country-btn:hover,
+            .xbot-ui--glass-light .xbot-answer-country-btn:focus,
+            .xbot-ui--glass-light .xbot-answer-otp-digit:focus,
+            .xbot-ui--glass-light .xbot-answer-date-trigger:hover,
+            .xbot-ui--glass-light .xbot-answer-date-trigger:focus {
+                border-color: rgba(0, 0, 0, 0.45);
+                box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+            }
+            .xbot-ui--glass-dark .xbot-answer-field:focus,
+            .xbot-ui--glass-dark .xbot-answer-area:focus,
+            .xbot-ui--glass-dark .xbot-answer-country-btn:hover,
+            .xbot-ui--glass-dark .xbot-answer-country-btn:focus,
+            .xbot-ui--glass-dark .xbot-answer-otp-digit:focus,
+            .xbot-ui--glass-dark .xbot-answer-date-trigger:hover,
+            .xbot-ui--glass-dark .xbot-answer-date-trigger:focus {
+                border-color: rgba(255, 255, 255, 0.55);
+                box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+            }
+            .xbot-ui--glass-light .xbot-answer-send,
+            .xbot-ui--glass-light .xbot-choice-free-send {
+                background: #141414;
+                color: #ffffff;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-dark .xbot-answer-send,
+            .xbot-ui--glass-dark .xbot-choice-free-send {
+                background: #f5f5f5;
+                color: #111111;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-light .xbot-answer-send:hover:not(:disabled),
+            .xbot-ui--glass-light .xbot-choice-free-send:hover:not(:disabled) {
+                box-shadow: none;
+                background: #000000;
+            }
+            .xbot-ui--glass-dark .xbot-answer-send:hover:not(:disabled),
+            .xbot-ui--glass-dark .xbot-choice-free-send:hover:not(:disabled) {
+                box-shadow: none;
+                background: #ffffff;
+            }
+            .xbot-ui--glass-light .xbot-answer-back,
+            .xbot-ui--glass-light .xbot-answer-menu,
+            .xbot-ui--glass-light .xbot-file-back,
+            .xbot-ui--glass-light .xbot-file-menu,
+            .xbot-ui--glass-light .xbot-choice-back,
+            .xbot-ui--glass-light .xbot-choice-menu,
+            .xbot-ui--glass-light .xbot-recap-title,
+            .xbot-ui--glass-light .xbot-recap-item dd,
+            .xbot-ui--glass-light .xbot-file-dropzone-title,
+            .xbot-ui--glass-light .xbot-catalog-title,
+            .xbot-ui--glass-light .xbot-catalog-price,
+            .xbot-ui--glass-light .xbot-link-card,
+            .xbot-ui--glass-light .xbot-step-progress {
+                color: #1a1a1a;
+            }
+            .xbot-ui--glass-dark .xbot-answer-back,
+            .xbot-ui--glass-dark .xbot-answer-menu,
+            .xbot-ui--glass-dark .xbot-file-back,
+            .xbot-ui--glass-dark .xbot-file-menu,
+            .xbot-ui--glass-dark .xbot-choice-back,
+            .xbot-ui--glass-dark .xbot-choice-menu,
+            .xbot-ui--glass-dark .xbot-recap-title,
+            .xbot-ui--glass-dark .xbot-recap-item dd,
+            .xbot-ui--glass-dark .xbot-file-dropzone-title,
+            .xbot-ui--glass-dark .xbot-catalog-title,
+            .xbot-ui--glass-dark .xbot-catalog-price,
+            .xbot-ui--glass-dark .xbot-link-card,
+            .xbot-ui--glass-dark .xbot-step-progress {
+                color: #f4f4f4;
+            }
+            .xbot-ui--glass-light .xbot-answer-back:hover:not(:disabled),
+            .xbot-ui--glass-light .xbot-answer-menu:hover:not(:disabled),
+            .xbot-ui--glass-light .xbot-file-back:hover:not(:disabled),
+            .xbot-ui--glass-light .xbot-file-menu:hover:not(:disabled),
+            .xbot-ui--glass-light .xbot-choice-back:hover:not(:disabled),
+            .xbot-ui--glass-light .xbot-choice-menu:hover:not(:disabled) {
+                color: #000000;
+            }
+            .xbot-ui--glass-dark .xbot-answer-back:hover:not(:disabled),
+            .xbot-ui--glass-dark .xbot-answer-menu:hover:not(:disabled),
+            .xbot-ui--glass-dark .xbot-file-back:hover:not(:disabled),
+            .xbot-ui--glass-dark .xbot-file-menu:hover:not(:disabled),
+            .xbot-ui--glass-dark .xbot-choice-back:hover:not(:disabled),
+            .xbot-ui--glass-dark .xbot-choice-menu:hover:not(:disabled) {
+                color: #ffffff;
+            }
+            .xbot-ui--glass-light .xbot-recap-item dt,
+            .xbot-ui--glass-light .xbot-file-dropzone-hint,
+            .xbot-ui--glass-light .xbot-catalog-desc,
+            .xbot-ui--glass-light .xbot-step-progress-label,
+            .xbot-ui--glass-light .xbot-answer-scale-bound {
+                color: #5c5c5c;
+            }
+            .xbot-ui--glass-dark .xbot-recap-item dt,
+            .xbot-ui--glass-dark .xbot-file-dropzone-hint,
+            .xbot-ui--glass-dark .xbot-catalog-desc,
+            .xbot-ui--glass-dark .xbot-step-progress-label,
+            .xbot-ui--glass-dark .xbot-answer-scale-bound {
+                color: #bdbdbd;
+            }
+            .xbot-ui--glass-light .xbot-file-dropzone-icon {
+                color: #141414;
+                background: transparent;
+            }
+            .xbot-ui--glass-dark .xbot-file-dropzone-icon {
+                color: #f5f5f5;
+                background: transparent;
+            }
+            .xbot-ui--glass-light .xbot-step-progress-count,
+            .xbot-ui--glass-light .xbot-answer-scale-value {
+                color: #141414;
+                background: rgba(0, 0, 0, 0.06);
+            }
+            .xbot-ui--glass-dark .xbot-step-progress-count,
+            .xbot-ui--glass-dark .xbot-answer-scale-value {
+                color: #f5f5f5;
+                background: rgba(255, 255, 255, 0.08);
+            }
+            .xbot-ui--glass-light .xbot-file-dropzone {
+                border-color: rgba(0, 0, 0, 0.22);
+                background: rgba(255, 255, 255, 0.35);
+                color: #2a2a2a;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-dark .xbot-file-dropzone {
+                border-color: rgba(255, 255, 255, 0.22);
+                background: rgba(255, 255, 255, 0.06);
+                color: #f0f0f0;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-light .xbot-file-dropzone:hover:not(:disabled),
+            .xbot-ui--glass-light .xbot-file-dropzone:focus-visible,
+            .xbot-ui--glass-light .xbot-file-dropzone.is-dragover {
+                border-color: rgba(0, 0, 0, 0.45);
+                background: rgba(255, 255, 255, 0.55);
+                box-shadow: none;
+            }
+            .xbot-ui--glass-dark .xbot-file-dropzone:hover:not(:disabled),
+            .xbot-ui--glass-dark .xbot-file-dropzone:focus-visible,
+            .xbot-ui--glass-dark .xbot-file-dropzone.is-dragover {
+                border-color: rgba(255, 255, 255, 0.45);
+                background: rgba(255, 255, 255, 0.1);
+                box-shadow: none;
+            }
+            .xbot-ui--glass-light .xbot-answer-country-panel,
+            .xbot-ui--glass-light .xbot-answer-date-panel,
+            .xbot-ui--glass-light .xbot-answer-country-search,
+            .xbot-ui--glass-light .xbot-answer-country-list,
+            .xbot-ui--glass-light .xbot-answer-country-option {
+                background: rgba(255, 255, 255, 0.92);
+                border-color: rgba(0, 0, 0, 0.08);
+                color: #1a1a1a;
+            }
+            .xbot-ui--glass-dark .xbot-answer-country-panel,
+            .xbot-ui--glass-dark .xbot-answer-date-panel,
+            .xbot-ui--glass-dark .xbot-answer-country-search,
+            .xbot-ui--glass-dark .xbot-answer-country-list,
+            .xbot-ui--glass-dark .xbot-answer-country-option {
+                background: rgba(22, 22, 22, 0.94);
+                border-color: rgba(255, 255, 255, 0.12);
+                color: #f4f4f4;
+            }
+            .xbot-ui--glass-light .xbot-answer-country-option:hover,
+            .xbot-ui--glass-light .xbot-answer-country-option.is-selected,
+            .xbot-ui--glass-light .xbot-answer-date-day:hover:not(.is-empty):not(.is-selected),
+            .xbot-ui--glass-light .xbot-answer-date-month:hover,
+            .xbot-ui--glass-light .xbot-answer-date-month:focus-visible,
+            .xbot-ui--glass-light .xbot-answer-date-nav:hover {
+                background: rgba(0, 0, 0, 0.06);
+                color: #1a1a1a;
+            }
+            .xbot-ui--glass-dark .xbot-answer-country-option:hover,
+            .xbot-ui--glass-dark .xbot-answer-country-option.is-selected,
+            .xbot-ui--glass-dark .xbot-answer-date-day:hover:not(.is-empty):not(.is-selected),
+            .xbot-ui--glass-dark .xbot-answer-date-month:hover,
+            .xbot-ui--glass-dark .xbot-answer-date-month:focus-visible,
+            .xbot-ui--glass-dark .xbot-answer-date-nav:hover {
+                background: rgba(255, 255, 255, 0.1);
+                color: #f4f4f4;
+            }
+            .xbot-ui--glass-light .xbot-answer-date-day,
+            .xbot-ui--glass-light .xbot-answer-date-month,
+            .xbot-ui--glass-light .xbot-answer-date-nav {
+                color: #1a1a1a;
+                background: transparent;
+            }
+            .xbot-ui--glass-dark .xbot-answer-date-day,
+            .xbot-ui--glass-dark .xbot-answer-date-month,
+            .xbot-ui--glass-dark .xbot-answer-date-nav {
+                color: #f4f4f4;
+                background: transparent;
+            }
+            .xbot-ui--glass-light .xbot-answer-date-day.is-today {
+                box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.45);
+                color: #141414;
+            }
+            .xbot-ui--glass-dark .xbot-answer-date-day.is-today {
+                box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.55);
+                color: #f5f5f5;
+            }
+            .xbot-ui--glass-light .xbot-answer-date-day.is-selected {
+                background: #141414;
+                color: #ffffff;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-dark .xbot-answer-date-day.is-selected {
+                background: #f5f5f5;
+                color: #111111;
+                box-shadow: none;
+            }
+            .xbot-ui--glass-light .xbot-answer-scale-slider {
+                --xbot-scale-track: rgba(0, 0, 0, 0.12);
+            }
+            .xbot-ui--glass-dark .xbot-answer-scale-slider {
+                --xbot-scale-track: rgba(255, 255, 255, 0.16);
+            }
+            .xbot-ui--glass-light .xbot-answer-scale-slider::-webkit-slider-runnable-track {
+                background: linear-gradient(
+                    to right,
+                    #141414 0%,
+                    #141414 var(--xbot-scale-pct),
+                    var(--xbot-scale-track) var(--xbot-scale-pct),
+                    var(--xbot-scale-track) 100%
+                );
+            }
+            .xbot-ui--glass-dark .xbot-answer-scale-slider::-webkit-slider-runnable-track {
+                background: linear-gradient(
+                    to right,
+                    #f5f5f5 0%,
+                    #f5f5f5 var(--xbot-scale-pct),
+                    var(--xbot-scale-track) var(--xbot-scale-pct),
+                    var(--xbot-scale-track) 100%
+                );
+            }
+            .xbot-ui--glass-light .xbot-answer-scale-slider::-moz-range-progress {
+                background: #141414;
+            }
+            .xbot-ui--glass-dark .xbot-answer-scale-slider::-moz-range-progress {
+                background: #f5f5f5;
+            }
+            .xbot-ui--glass-light .xbot-answer-scale-slider::-webkit-slider-thumb,
+            .xbot-ui--glass-light .xbot-answer-scale-slider::-moz-range-thumb {
+                background: #141414;
+                border-color: #ffffff;
+            }
+            .xbot-ui--glass-dark .xbot-answer-scale-slider::-webkit-slider-thumb,
+            .xbot-ui--glass-dark .xbot-answer-scale-slider::-moz-range-thumb {
+                background: #f5f5f5;
+                border-color: #111111;
+            }
+            .xbot-ui--glass-light .xbot-reply-action {
+                border-color: rgba(0, 0, 0, 0.12);
+                background: rgba(255, 255, 255, 0.55);
+                color: #1a1a1a;
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+            }
+            .xbot-ui--glass-dark .xbot-reply-action {
+                border-color: rgba(255, 255, 255, 0.16);
+                background: rgba(18, 18, 18, 0.48);
+                color: #f4f4f4;
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+            }
+            .xbot-ui--glass-light .xbot-reply-action:hover {
+                background: rgba(0, 0, 0, 0.06);
+                border-color: rgba(0, 0, 0, 0.2);
+            }
+            .xbot-ui--glass-dark .xbot-reply-action:hover {
+                background: rgba(255, 255, 255, 0.1);
+                border-color: rgba(255, 255, 255, 0.28);
+            }
+            .xbot-ui--glass-light .xbot-catalog-card:hover,
+            .xbot-ui--glass-light .xbot-locate-card:hover,
+            .xbot-ui--glass-light .xbot-text [data-xbot-card="catalog"]:hover,
+            .xbot-ui--glass-light .xbot-text [data-xbot-card="locate"]:hover,
+            .xbot-ui--glass-light .xbot-link-card:hover {
+                border-color: rgba(0, 0, 0, 0.28);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            }
+            .xbot-ui--glass-dark .xbot-catalog-card:hover,
+            .xbot-ui--glass-dark .xbot-locate-card:hover,
+            .xbot-ui--glass-dark .xbot-text [data-xbot-card="catalog"]:hover,
+            .xbot-ui--glass-dark .xbot-text [data-xbot-card="locate"]:hover,
+            .xbot-ui--glass-dark .xbot-link-card:hover {
+                border-color: rgba(255, 255, 255, 0.28);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+            }
+            .xbot-ui--glass-light .xbot-catalog-more,
+            .xbot-ui--glass-light .xbot-text [data-xbot-catalog-more] {
+                border-color: rgba(0, 0, 0, 0.16);
+                background: rgba(255, 255, 255, 0.45);
+                color: #1a1a1a;
+            }
+            .xbot-ui--glass-dark .xbot-catalog-more,
+            .xbot-ui--glass-dark .xbot-text [data-xbot-catalog-more] {
+                border-color: rgba(255, 255, 255, 0.18);
+                background: rgba(18, 18, 18, 0.4);
+                color: #f4f4f4;
+            }
             .xbot-message video {
                 max-width: 100%;
                 border-radius: var(--xbot-radius-md);
@@ -5655,7 +6016,14 @@
         launcher.appendChild(notification);
 
         const chatbox = document.createElement('div');
-        chatbox.className = 'xbot-chatbox xbot-root';
+        chatbox.className = 'xbot-chatbox xbot-root' + (
+            resolvedChoiceStyle === 'glass_light'
+                ? ' xbot-ui--glass-light'
+                : resolvedChoiceStyle === 'glass_dark'
+                    ? ' xbot-ui--glass-dark'
+                    : ''
+        );
+        chatbox.setAttribute('data-choice-style', resolvedChoiceStyle);
         chatbox.style.display = 'none';
         chatbox.innerHTML =
             '<div class="xbot-header">' +
