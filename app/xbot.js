@@ -1082,6 +1082,19 @@
             return !(last && last.classList.contains('user'));
         }
 
+        /** Avatar circular (wrapper + img) alinhado ao topo da 1ª mensagem. */
+        function buildMsgAvatarEl(src) {
+            var wrap = document.createElement('span');
+            wrap.className = 'xbot-msg-avatar-wrap';
+            var av = document.createElement('img');
+            av.className = 'xbot-msg-avatar';
+            av.src = src;
+            av.alt = '';
+            av.decoding = 'async';
+            wrap.appendChild(av);
+            return wrap;
+        }
+
         function _randRange(min, max) {
             return min + Math.random() * (max - min);
         }
@@ -2063,11 +2076,7 @@
                 row.className = 'xbot-message-row bot';
                 if (botAvatar) {
                     if (shouldShowBotAvatar()) {
-                        var av = document.createElement('img');
-                        av.className = 'xbot-msg-avatar';
-                        av.src = botAvatar;
-                        av.alt = '';
-                        row.appendChild(av);
+                        row.appendChild(buildMsgAvatarEl(botAvatar));
                     } else {
                         row.classList.add('xbot-message-row--no-avatar');
                     }
@@ -3640,7 +3649,7 @@
 
             .xbot-message-row {
                 display: flex;
-                align-items: flex-end;
+                align-items: flex-start;
                 gap: 8px;
                 max-width: 92%;
             }
@@ -3653,13 +3662,24 @@
             .xbot-message-row.user.xbot-message-row--no-avatar {
                 padding-right: 36px;
             }
-            .xbot-msg-avatar {
+            .xbot-msg-avatar-wrap {
+                display: inline-flex;
                 width: 28px;
                 height: 28px;
                 border-radius: 50%;
-                object-fit: cover;
+                overflow: hidden;
                 flex-shrink: 0;
                 background: var(--xbot-border);
+                /* Alinha com a 1ª linha / topo da bolha (não com o timestamp). */
+                margin-top: 2px;
+            }
+            .xbot-msg-avatar {
+                display: block;
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                object-fit: cover;
+                object-position: center;
             }
             .xbot-message-col {
                 display: flex;
@@ -8055,11 +8075,7 @@
             if (linkCard) row.classList.add('xbot-message-row--link');
             if (from === 'bot' && botAvatar) {
                 if (shouldShowBotAvatar()) {
-                    const av = document.createElement('img');
-                    av.className = 'xbot-msg-avatar';
-                    av.src = botAvatar;
-                    av.alt = '';
-                    row.appendChild(av);
+                    row.appendChild(buildMsgAvatarEl(botAvatar));
                 } else {
                     row.classList.add('xbot-message-row--no-avatar');
                 }
@@ -8145,11 +8161,7 @@
             row.appendChild(col);
             if (from === 'user' && userAvatar) {
                 if (shouldShowUserAvatar()) {
-                    const uav = document.createElement('img');
-                    uav.className = 'xbot-msg-avatar';
-                    uav.src = userAvatar;
-                    uav.alt = '';
-                    row.appendChild(uav);
+                    row.appendChild(buildMsgAvatarEl(userAvatar));
                 } else {
                     row.classList.add('xbot-message-row--no-avatar');
                 }
