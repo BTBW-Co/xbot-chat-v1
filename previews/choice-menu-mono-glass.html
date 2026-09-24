@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Preview · XChat choice menu (mono glass)</title>
+  <style>
+    :root {
+      --ink: #111111;
+      --ink-soft: #2a2a2a;
+      --muted: #5c5c5c;
+      --line: rgba(0, 0, 0, 0.12);
+      --glass: rgba(255, 255, 255, 0.55);
+      --glass-strong: rgba(255, 255, 255, 0.72);
+      --hover: rgba(0, 0, 0, 0.05);
+      --badge: #141414;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(160deg, rgba(20,20,20,0.35), rgba(20,20,20,0.15)),
+        url("https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=1200&q=80")
+          center/cover no-repeat fixed;
+      display: grid;
+      place-items: center;
+      padding: 32px 16px;
+    }
+    .frame {
+      width: min(380px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .label {
+      color: rgba(255,255,255,0.85);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 600;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.35);
+    }
+    /* Proposta: vidro P&B */
+    .xbot-choice-list {
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      background: var(--glass);
+      backdrop-filter: blur(18px) saturate(1.15);
+      -webkit-backdrop-filter: blur(18px) saturate(1.15);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.55) inset,
+        0 12px 32px rgba(0,0,0,0.18);
+      overflow: hidden;
+      color: var(--ink);
+    }
+    .xbot-choice-list-body {
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+      gap: 2px;
+    }
+    .xbot-choice-item {
+      appearance: none;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      width: 100%;
+      margin: 0;
+      padding: 12px 12px;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      transition: background 0.15s ease, transform 0.12s ease;
+    }
+    .xbot-choice-item:hover {
+      background: var(--hover);
+    }
+    .xbot-choice-item:active {
+      transform: scale(0.992);
+      background: rgba(0,0,0,0.08);
+    }
+    .xbot-choice-index {
+      flex: 0 0 auto;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--badge);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .xbot-choice-label {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--ink-soft);
+      letter-spacing: -0.01em;
+    }
+    .meta {
+      font-size: 11px;
+      color: rgba(255,255,255,0.75);
+      padding-left: 4px;
+    }
+    .compare {
+      margin-top: 28px;
+      display: grid;
+      gap: 16px;
+    }
+    /* Atual (tema azul) para lado a lado */
+    .legacy {
+      border-radius: 16px;
+      border: 1px solid #9ec5f5;
+      background: #d7e9fc;
+      overflow: hidden;
+    }
+    .legacy .xbot-choice-index {
+      background: #2f6fdb;
+      border: 0;
+    }
+    .legacy .xbot-choice-item:hover {
+      background: rgba(47, 111, 219, 0.12);
+    }
+    .toggles {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .toggles button {
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(0,0,0,0.35);
+      color: #fff;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .toggles button[aria-pressed="true"] {
+      background: #fff;
+      color: #111;
+    }
+    .dark-glass {
+      --ink: #f4f4f4;
+      --ink-soft: #f0f0f0;
+      --muted: #bdbdbd;
+      --glass: rgba(18, 18, 18, 0.48);
+      --glass-strong: rgba(18, 18, 18, 0.62);
+      --hover: rgba(255, 255, 255, 0.08);
+      --badge: #f5f5f5;
+    }
+    .dark-glass .xbot-choice-list {
+      border-color: rgba(255,255,255,0.14);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.08) inset,
+        0 12px 32px rgba(0,0,0,0.35);
+    }
+    .dark-glass .xbot-choice-index {
+      color: #111;
+      border-color: rgba(0,0,0,0.08);
+    }
+  </style>
+</head>
+<body>
+  <div class="frame" id="app">
+    <div class="toggles">
+      <button type="button" id="btnLight" aria-pressed="true">Vidro claro</button>
+      <button type="button" id="btnDark" aria-pressed="false">Vidro escuro</button>
+      <button type="button" id="btnLegacy" aria-pressed="false">Atual (azul)</button>
+    </div>
+    <div class="label" id="caption">Proposta · translúcido P&amp;B</div>
+    <div class="xbot-choice-list" id="card">
+      <div class="xbot-choice-list-body">
+        <button type="button" class="xbot-choice-item"><span class="xbot-choice-index">1</span><span class="xbot-choice-label">Quero conhecer as soluções</span></button>
+        <button type="button" class="xbot-choice-item"><span class="xbot-choice-index">2</span><span class="xbot-choice-label">Quero enviar meu currículo</span></button>
+        <button type="button" class="xbot-choice-item"><span class="xbot-choice-index">3</span><span class="xbot-choice-label">Já tenho clareza da minha necessidade</span></button>
+        <button type="button" class="xbot-choice-item"><span class="xbot-choice-index">4</span><span class="xbot-choice-label">Situação do meu processo seletivo</span></button>
+        <button type="button" class="xbot-choice-item"><span class="xbot-choice-index">5</span><span class="xbot-choice-label">Institucional Fesa</span></button>
+      </div>
+    </div>
+    <div class="meta">12:49 · preview local (não é o widget em produção)</div>
+  </div>
+  <script>
+    const app = document.getElementById('app');
+    const card = document.getElementById('card');
+    const caption = document.getElementById('caption');
+    const btnLight = document.getElementById('btnLight');
+    const btnDark = document.getElementById('btnDark');
+    const btnLegacy = document.getElementById('btnLegacy');
+
+    function setMode(mode) {
+      app.classList.toggle('dark-glass', mode === 'dark');
+      card.classList.toggle('legacy', mode === 'legacy');
+      btnLight.setAttribute('aria-pressed', mode === 'light' ? 'true' : 'false');
+      btnDark.setAttribute('aria-pressed', mode === 'dark' ? 'true' : 'false');
+      btnLegacy.setAttribute('aria-pressed', mode === 'legacy' ? 'true' : 'false');
+      caption.textContent =
+        mode === 'legacy' ? 'Atual · azul sólido' :
+        mode === 'dark' ? 'Proposta · vidro escuro' :
+        'Proposta · vidro claro';
+    }
+    btnLight.onclick = () => setMode('light');
+    btnDark.onclick = () => setMode('dark');
+    btnLegacy.onclick = () => setMode('legacy');
+  </script>
+</body>
+</html>

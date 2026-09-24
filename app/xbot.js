@@ -102,6 +102,12 @@
                 data.typing_speed === 'medium' || data.typing_speed === 'slow' || data.typing_speed === 'fast'
                   ? data.typing_speed
                   : (cfg.typingSpeed || 'fast'),
+              choiceStyle:
+                data.choice_style === 'glass_light' || data.choice_style === 'glass_dark'
+                  ? data.choice_style
+                  : (cfg.choiceStyle === 'glass_light' || cfg.choiceStyle === 'glass_dark'
+                    ? cfg.choiceStyle
+                    : 'classic'),
               botReplyEnabled:
                 typeof data.bot_reply_enabled === 'boolean'
                   ? data.bot_reply_enabled
@@ -294,9 +300,18 @@
             offsetBottom = 20,
             offsetSide = 20,
             typingSpeed = 'fast',
+            choiceStyle = 'classic',
             browserNotify = false,
         } = config;
         var browserNotifyEnabled = !!browserNotify;
+        var resolvedChoiceStyle =
+            choiceStyle === 'glass_light' || choiceStyle === 'glass_dark' ? choiceStyle : 'classic';
+        var choiceListStyleClass =
+            resolvedChoiceStyle === 'glass_light'
+                ? 'xbot-choice-list--glass-light'
+                : resolvedChoiceStyle === 'glass_dark'
+                    ? 'xbot-choice-list--glass-dark'
+                    : '';
 
         function buildAuthHeaders(extra) {
             const h = Object.assign({}, extra || {});
@@ -4269,6 +4284,26 @@
                 overflow: hidden;
                 box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(var(--xbot-theme-rgb), 0.12);
             }
+            .xbot-choice-list--glass-light {
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                background: rgba(255, 255, 255, 0.55);
+                backdrop-filter: blur(18px) saturate(1.15);
+                -webkit-backdrop-filter: blur(18px) saturate(1.15);
+                box-shadow:
+                    0 1px 0 rgba(255, 255, 255, 0.55) inset,
+                    0 12px 32px rgba(0, 0, 0, 0.14);
+                color: #1a1a1a;
+            }
+            .xbot-choice-list--glass-dark {
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                background: rgba(18, 18, 18, 0.48);
+                backdrop-filter: blur(18px) saturate(1.1);
+                -webkit-backdrop-filter: blur(18px) saturate(1.1);
+                box-shadow:
+                    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+                    0 12px 32px rgba(0, 0, 0, 0.32);
+                color: #f4f4f4;
+            }
             .xbot-choice-list-title {
                 margin: 0;
                 padding: 12px 14px 10px;
@@ -4277,6 +4312,16 @@
                 font-size: 14px;
                 font-weight: 650;
                 color: var(--xbot-ink);
+            }
+            .xbot-choice-list--glass-light .xbot-choice-list-title {
+                border-bottom-color: rgba(0, 0, 0, 0.08);
+                background: rgba(255, 255, 255, 0.35);
+                color: #1a1a1a;
+            }
+            .xbot-choice-list--glass-dark .xbot-choice-list-title {
+                border-bottom-color: rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.04);
+                color: #f4f4f4;
             }
             .xbot-choice-list-body {
                 display: flex;
@@ -4306,6 +4351,14 @@
                 background: color-mix(in srgb, var(--xbot-theme) 18%, #ffffff);
                 box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xbot-theme) 28%, transparent);
             }
+            .xbot-choice-list--glass-light .xbot-choice-item:hover:not(:disabled) {
+                background: rgba(0, 0, 0, 0.05);
+                box-shadow: none;
+            }
+            .xbot-choice-list--glass-dark .xbot-choice-item:hover:not(:disabled) {
+                background: rgba(255, 255, 255, 0.08);
+                box-shadow: none;
+            }
             .xbot-choice-item:disabled {
                 cursor: default;
                 opacity: 0.62;
@@ -4324,6 +4377,18 @@
                 background: var(--xbot-theme);
                 box-shadow: 0 1px 3px rgba(var(--xbot-theme-rgb), 0.35);
             }
+            .xbot-choice-list--glass-light .xbot-choice-index {
+                color: #ffffff;
+                background: #141414;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                box-shadow: none;
+            }
+            .xbot-choice-list--glass-dark .xbot-choice-index {
+                color: #111111;
+                background: #f5f5f5;
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                box-shadow: none;
+            }
             .xbot-choice-copy {
                 min-width: 0;
                 display: flex;
@@ -4336,10 +4401,32 @@
                 font-weight: 650;
                 color: var(--xbot-ink);
             }
+            .xbot-choice-list--glass-light .xbot-choice-label {
+                color: #2a2a2a;
+                letter-spacing: -0.01em;
+            }
+            .xbot-choice-list--glass-dark .xbot-choice-label {
+                color: #f0f0f0;
+                letter-spacing: -0.01em;
+            }
             .xbot-choice-desc {
                 font-size: 12px;
                 line-height: 1.4;
                 color: var(--xbot-muted);
+            }
+            .xbot-choice-list--glass-light .xbot-choice-desc {
+                color: #5c5c5c;
+            }
+            .xbot-choice-list--glass-dark .xbot-choice-desc {
+                color: #bdbdbd;
+            }
+            .xbot-choice-list--glass-light .xbot-choice-back,
+            .xbot-choice-list--glass-light .xbot-choice-menu {
+                color: #1a1a1a;
+            }
+            .xbot-choice-list--glass-dark .xbot-choice-back,
+            .xbot-choice-list--glass-dark .xbot-choice-menu {
+                color: #f0f0f0;
             }
             .xbot-choice-free {
                 display: flex;
@@ -7308,8 +7395,9 @@
                 }
                 if (block.kind === 'choice_list') {
                     var list = document.createElement('div');
-                    list.className = 'xbot-choice-list';
+                    list.className = 'xbot-choice-list' + (choiceListStyleClass ? ' ' + choiceListStyleClass : '');
                     list.setAttribute('data-xbot', 'choice-list');
+                    list.setAttribute('data-choice-style', resolvedChoiceStyle);
                     list.setAttribute('role', 'group');
                     list.setAttribute('aria-label', block.title || 'Opções');
                     var lockComposer = block.allow_free_text === false;
