@@ -1467,7 +1467,11 @@
                     if (fields.length) {
                         out.push({ kind: 'recap', title: String(block.title || '').trim(), fields: fields });
                     }
-                } else if (kind === 'choice_list' && Array.isArray(block.choices) && block.choices.length >= 2) {
+                } else if (
+                    kind === 'choice_list' &&
+                    Array.isArray(block.choices) &&
+                    (block.choices.length >= 2 || block.allow_return_menu === true || block.allow_back === true)
+                ) {
                     var choices = [];
                     for (var c = 0; c < block.choices.length; c++) {
                         var ch = block.choices[c];
@@ -1481,7 +1485,7 @@
                             value: String(ch.value || cl).trim() || cl
                         });
                     }
-                    if (choices.length >= 2) {
+                    if (choices.length >= 2 || block.allow_return_menu === true || block.allow_back === true) {
                         out.push({
                             kind: 'choice_list',
                             title: String(block.title || '').trim(),
