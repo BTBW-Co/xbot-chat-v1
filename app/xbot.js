@@ -4113,6 +4113,21 @@
                 font-weight: 600;
                 color: #2563eb;
             }
+            .xbot-locate-address {
+                margin-top: auto;
+                padding-top: 8px;
+                font-size: 11px;
+                font-weight: 600;
+                color: #0f766e;
+                line-height: 1.35;
+            }
+            .xbot-locate-grid,
+            .xbot-text [data-xbot="locate-grid"] {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                margin: 10px 0;
+            }
             .xbot-catalog-card:hover,
             .xbot-text [data-xbot-card="catalog"]:hover {
                 border-color: rgba(var(--xbot-theme-rgb), 0.55);
@@ -7465,6 +7480,7 @@
             if (!host || !Array.isArray(actions) || !actions.length) return;
             // Grid de catálogo já oferece as opções nos cards.
             if (host.querySelector && host.querySelector('[data-xbot="catalog-grid"]')) return;
+            if (host.querySelector && host.querySelector('[data-xbot="locate-grid"]')) return;
             if (host.querySelector && host.querySelector('[data-xbot="choice-list"]')) return;
             if (blocksHaveChoiceList(opts && opts.blocks)) return;
             var interactive = !opts || opts.interactive !== false;
@@ -7521,15 +7537,23 @@
 
         function enhanceCatalogGrid(root, opts) {
             if (!root || !root.querySelectorAll) return;
-            var grid = root.querySelector('.xbot-catalog-grid, [data-xbot="catalog-grid"]');
-            var cards = root.querySelectorAll('.xbot-catalog-card, [data-xbot-card="catalog"]');
+            var grid = root.querySelector(
+                '.xbot-catalog-grid, [data-xbot="catalog-grid"], .xbot-locate-grid, [data-xbot="locate-grid"]'
+            );
+            var cards = root.querySelectorAll(
+                '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
+            );
             if (!cards.length) return;
             var interactive = !opts || opts.interactive !== false;
             var animateTyping = !!(opts && opts.animateTyping) && interactive && !sessionEpisodeEnded;
             var typingLocked = false;
 
-            if (grid && !grid.classList.contains('xbot-catalog-grid')) {
-                grid.classList.add('xbot-catalog-grid');
+            if (grid) {
+                if (grid.getAttribute('data-xbot') === 'locate-grid' || grid.classList.contains('xbot-locate-grid')) {
+                    if (!grid.classList.contains('xbot-locate-grid')) grid.classList.add('xbot-locate-grid');
+                } else if (!grid.classList.contains('xbot-catalog-grid')) {
+                    grid.classList.add('xbot-catalog-grid');
+                }
             }
 
             for (var c = 0; c < cards.length; c++) {
@@ -7738,7 +7762,9 @@
                     return;
                 }
                 var card = ev.target.closest
-                    ? ev.target.closest('.xbot-catalog-card, [data-xbot-card="catalog"]')
+                    ? ev.target.closest(
+                        '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
+                    )
                     : null;
                 if (card && root.contains(card)) {
                     ev.preventDefault();
@@ -7758,7 +7784,9 @@
                     return;
                 }
                 var card = ev.target.closest
-                    ? ev.target.closest('.xbot-catalog-card, [data-xbot-card="catalog"]')
+                    ? ev.target.closest(
+                        '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
+                    )
                     : null;
                 if (card && root.contains(card)) {
                     ev.preventDefault();
@@ -7915,7 +7943,10 @@
             if (from === 'user') visitorHasSpoken = true;
             const row = document.createElement('div');
             row.className = `xbot-message-row ${from}`;
-            var hasCatalogGrid = from === 'bot' && String(text || '').indexOf('data-xbot="catalog-grid"') !== -1;
+            var hasCatalogGrid = from === 'bot' && (
+                String(text || '').indexOf('data-xbot="catalog-grid"') !== -1
+                || String(text || '').indexOf('data-xbot="locate-grid"') !== -1
+            );
             var linkCard = from === 'bot' ? (opts.linkCard || parseLinkOnlyMessage(text)) : null;
             if (hasCatalogGrid) row.classList.add('xbot-message-row--catalog');
             if (linkCard) row.classList.add('xbot-message-row--link');
