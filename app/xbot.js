@@ -4170,13 +4170,79 @@
                 font-weight: 600;
                 color: #0f766e;
                 line-height: 1.35;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 4px;
             }
+            .xbot-locate-sep {
+                color: var(--xbot-muted);
+            }
+            .xbot-locate-extra {
+                color: var(--xbot-muted);
+            }
+            .xbot-wms-code {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            }
+            .xbot-wms-seg {
+                padding: 1px 4px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                line-height: 1.3;
+                background: #e5e7eb;
+                color: #1f2937;
+            }
+            .xbot-wms-seg--a { background: #1f2937; color: #fff; }
+            .xbot-wms-seg--c { background: #2563eb; color: #fff; }
+            .xbot-wms-seg--p { background: #dc2626; color: #fff; }
+            .xbot-wms-seg--n { background: #b45309; color: #fff; }
             .xbot-locate-grid,
             .xbot-text [data-xbot="locate-grid"] {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
                 gap: 10px;
                 margin: 10px 0;
+            }
+            .xbot-locate-result {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .xbot-locate-result-heading {
+                margin: 0;
+            }
+            .xbot-locate-result-item {
+                border-left: 3px solid rgba(var(--xbot-theme-rgb), 0.7);
+                background: rgba(var(--xbot-theme-rgb), 0.06);
+                border-radius: 6px;
+                padding: 6px 10px;
+            }
+            .xbot-locate-result-unit {
+                font-weight: 700;
+                font-size: 13px;
+                color: var(--xbot-ink);
+            }
+            .xbot-locate-result-path {
+                font-size: 13px;
+                color: var(--xbot-ink);
+                margin-top: 2px;
+            }
+            .xbot-locate-result-meta {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-top: 4px;
+                font-size: 11px;
+                color: var(--xbot-muted);
+            }
+            .xbot-locate-result-code {
+                display: inline-flex;
+                align-items: center;
             }
             .xbot-catalog-card:hover,
             .xbot-text [data-xbot-card="catalog"]:hover {
@@ -8488,6 +8554,7 @@
             var shouldType = from === 'bot'
                 && !!opts.animateTyping
                 && !hasCatalogGrid
+                && String(text || '').indexOf('data-xbot="locate-result"') === -1
                 && !prefersReducedMotion()
                 && !sessionEpisodeEnded;
             msg.innerHTML = `
