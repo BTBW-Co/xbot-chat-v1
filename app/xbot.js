@@ -1,4 +1,6 @@
 (function () {
+    if (window.__xbotWidgetBooted) return;
+    window.__xbotWidgetBooted = true;
 
     var XBOT_WIDGET_VERSION = '__XBOT_WIDGET_VERSION__';
     window.__XBOT_WIDGET_VERSION = XBOT_WIDGET_VERSION;
@@ -287,6 +289,9 @@
     }
   
     waitForLibs(() => {
+        if (document.querySelector('.xbot-launcher') || document.getElementById('xbot-hosted-frame')) {
+            return;
+        }
         const config = applyXbotAssetDefaults(window.__xbotConfig || {});
         const {
             botName = 'XBot',
