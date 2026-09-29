@@ -2552,7 +2552,6 @@
 
         var XBOT_ICONS = {
             close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-            collapse: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.75 3.75V10.25M13.75 10.25H20.25M13.75 10.25L20.25 3.75M10.25 20.25V13.75M10.25 13.75H3.75M10.25 13.75L3.75 20.25"/></svg>',
             send: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.468 6.058C.265 4.988 1.02 3 2.63 3H21.28c1.343 0 2.185 1.45 1.52 2.617l-9.146 16.038c-.789 1.383-2.864 1.08-3.225-.47l-2.062-8.853 6.608-3.677a.75.75 0 0 0-.729-1.31L7.276 11.22z"/></svg>',
             attach: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
             copy: '<svg class="xbot-copy-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
@@ -3549,21 +3548,6 @@
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
-            }
-            .xbot-header-status {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                font-size: 12px;
-                color: var(--xbot-muted);
-                margin-top: 2px;
-            }
-            .xbot-status-dot {
-                width: 7px;
-                height: 7px;
-                border-radius: 50%;
-                background: var(--xbot-success);
-                box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.28);
             }
             .xbot-header-minimize {
                 width: 40px;
@@ -6101,10 +6085,9 @@
             (botAvatar ? '<img src="' + botAvatar + '" alt="" />' : '') +
             '<div class="xbot-header-text">' +
             '<span class="xbot-header-name"></span>' +
-            '<span class="xbot-header-status"><span class="xbot-status-dot"></span>Online agora</span>' +
             '</div>' +
-            '<button type="button" class="xbot-header-minimize" aria-label="Recolher">' +
-            XBOT_ICONS.collapse +
+            '<button type="button" class="xbot-header-minimize" aria-label="Fechar">' +
+            XBOT_ICONS.close +
             '</button></div>' +
             '<div class="xbot-inactivity-bar" id="xbot-inactivity-bar" hidden role="status" aria-live="polite">' +
             '<div class="xbot-inactivity-text">' +
