@@ -449,6 +449,11 @@
                 if (tz) out.tz = String(tz).slice(0, 80);
             } catch (e) { /* ignore */ }
             try {
+                var cfg = window.__xbotConfig || {};
+                var display = String(cfg.locale || '').trim().toLowerCase().split('-')[0];
+                if (display === 'pt' || display === 'en' || display === 'es' || display === 'zh') {
+                    out.display_lang = display;
+                }
                 if (typeof navigator !== 'undefined' && navigator.language) {
                     out.lang = String(navigator.language).slice(0, 80);
                 }
@@ -1052,10 +1057,12 @@
             if (pendingDownloadStatus) {
                 if (lang === 'pt') return ['Baixando', 'Baixando vídeo', 'Quase lá'];
                 if (lang === 'es') return ['Descargando', 'Descargando vídeo', 'Casi listo'];
+                if (lang === 'zh') return ['正在下载', '正在下载视频', '马上好'];
                 return ['Downloading', 'Downloading video', 'Almost there'];
             }
             if (lang === 'pt') return ['Explorando', 'Refletindo', 'Pensando', 'Editando', 'Planejando'];
             if (lang === 'es') return ['Explorando', 'Reflexionando', 'Pensando', 'Editando', 'Planificando'];
+            if (lang === 'zh') return ['探索中', '思考中', '整理中', '编辑中', '规划中'];
             return ['Exploring', 'Thought', 'Thinking', 'Editing', 'Planning'];
         }
 
@@ -1242,15 +1249,38 @@
         function xbotUiLang() {
             var raw = '';
             try {
-                raw = String(
-                    (typeof navigator !== 'undefined' && (navigator.language || navigator.userLanguage)) || ''
-                ).toLowerCase();
+                var cfg = window.__xbotConfig || {};
+                raw = String(cfg.locale || cfg.lang || '').toLowerCase();
+                if (!raw) {
+                    raw = String(
+                        (typeof navigator !== 'undefined' && (navigator.language || navigator.userLanguage)) || ''
+                    ).toLowerCase();
+                }
             } catch (e) {
                 raw = '';
             }
             if (raw.indexOf('pt') === 0) return 'pt';
             if (raw.indexOf('es') === 0) return 'es';
+            if (raw.indexOf('zh') === 0) return 'zh';
             return 'en';
+        }
+
+        function xbotChrome(key) {
+            var lang = xbotUiLang();
+            var table = {
+                attach: { pt: 'Anexar arquivo', en: 'Attach file', es: 'Adjuntar archivo', zh: '添加文件' },
+                record: { pt: 'Gravar áudio', en: 'Record audio', es: 'Grabar audio', zh: '录音' },
+                stop: { pt: 'Parar gravação', en: 'Stop recording', es: 'Detener grabación', zh: '停止录音' },
+                send: { pt: 'Enviar', en: 'Send', es: 'Enviar', zh: '发送' },
+                placeholder: {
+                    pt: 'Ou envie uma mensagem…',
+                    en: 'Or send a message…',
+                    es: 'O envía un mensaje…',
+                    zh: '或发送一条消息…',
+                },
+            };
+            var row = table[key] || {};
+            return row[lang] || row.en || row.pt || '';
         }
 
         function stopThinkingStatusCycle(el) {
@@ -6104,14 +6134,14 @@
             '<div class="xbot-compose">' +
             '<div class="xbot-compose-inner">' +
             '<div class="xbot-compose-tools">' +
-            '<button type="button" class="xbot-icon-btn" id="xbot-upload" aria-label="Anexar arquivo">' +
+            '<button type="button" class="xbot-icon-btn" id="xbot-upload" aria-label="' + xbotChrome('attach') + '">' +
             XBOT_ICONS.attach +
             '</button>' +
-            '<button type="button" class="xbot-icon-btn" id="xbot-audio" aria-label="Gravar áudio">' +
+            '<button type="button" class="xbot-icon-btn" id="xbot-audio" aria-label="' + xbotChrome('record') + '">' +
             XBOT_ICONS.mic +
             '</button></div>' +
-            '<textarea class="xbot-input" id="xbot-input" placeholder="Ou envie uma mensagem…" rows="1"></textarea>' +
-            '<button type="button" class="xbot-send" id="xbot-send" aria-label="Enviar" tabindex="-1">' +
+            '<textarea class="xbot-input" id="xbot-input" placeholder="' + xbotChrome('placeholder') + '" rows="1"></textarea>' +
+            '<button type="button" class="xbot-send" id="xbot-send" aria-label="' + xbotChrome('send') + '" tabindex="-1">' +
             XBOT_ICONS.send +
             '</button></div></div>' +
             '<div class="xbot-footer">' +
@@ -8843,7 +8873,7 @@
         function setAudioBtnIdle() {
             audioBtn.classList.remove('is-recording', 'is-uploading');
             audioBtn.innerHTML = XBOT_ICONS.mic;
-            audioBtn.setAttribute('aria-label', 'Gravar áudio');
+            audioBtn.setAttribute('aria-label', xbotChrome('record'));
             audioBtn.disabled = isPresentationComposerLocked();
         }
 
@@ -8851,7 +8881,7 @@
             audioBtn.classList.remove('is-uploading');
             audioBtn.classList.add('is-recording');
             audioBtn.innerHTML = XBOT_ICONS.stop;
-            audioBtn.setAttribute('aria-label', 'Parar gravação');
+            audioBtn.setAttribute('aria-label', xbotChrome('stop'));
             audioBtn.disabled = false;
         }
 
