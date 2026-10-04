@@ -8742,19 +8742,22 @@
             var items = Array.isArray(reactions) ? reactions.filter(function (r) {
                 return r && String(r.emoji || '').trim();
             }) : [];
+            var canReact = from !== 'user';
             items.forEach(function (r) {
-                var pill = document.createElement('button');
-                pill.type = 'button';
+                var pill = document.createElement(canReact ? 'button' : 'span');
+                if (canReact) pill.type = 'button';
                 pill.className = 'xbot-reaction-pill';
                 pill.textContent = r.emoji;
-                pill.addEventListener('click', function () {
-                    if (!mid) return;
-                    var mine = String(r.from || '') === String(getVisitorId() || '');
-                    sendWidgetReaction(mid, mine ? '' : r.emoji, row, from);
-                });
+                if (canReact) {
+                    pill.addEventListener('click', function () {
+                        if (!mid) return;
+                        var mine = String(r.from || '') === String(getVisitorId() || '');
+                        sendWidgetReaction(mid, mine ? '' : r.emoji, row, from);
+                    });
+                }
                 bar.appendChild(pill);
             });
-            if (!mid) {
+            if (!canReact || !mid) {
                 if (!items.length) bar.remove();
                 return;
             }
