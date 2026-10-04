@@ -342,6 +342,11 @@
             if (!apiBaseUrl || !apiBaseUrl.trim()) return '/api/xbot/message';
             return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/message';
         }
+        function getReactionUrl() {
+            if (!apiBaseUrl || !apiBaseUrl.trim()) return '/api/xbot/reaction';
+            return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/reaction';
+        }
+        var XBOT_REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
         function getUploadUrl() {
             if (!apiBaseUrl || !apiBaseUrl.trim()) return '/api/xbot/upload';
             return apiBaseUrl.replace(/\/$/, '') + '/v1/xchat/upload';
@@ -1458,6 +1463,7 @@
                     interactive: source !== 'history' && source !== 'opening',
                     animateTyping: false,
                     messageId: item && item.id ? item.id : null,
+                    reactions: meta.reactions || [],
                     presentationOpening: source === 'opening' || (
                         source !== 'history' && source !== 'hydrate' && isPresentationOpeningMeta(meta)
                     ),
@@ -1471,7 +1477,9 @@
                     blocks: blocks,
                     interactive: source !== 'history' && source !== 'opening',
                     animateTyping: animateTyping,
-                    linkCard: linkOnly || null
+                    linkCard: linkOnly || null,
+                    messageId: item && item.id ? item.id : null,
+                    reactions: meta.reactions || []
                 });
             }
             rememberBotMessage(item, dedupKey);
@@ -2352,6 +2360,11 @@
                                         var payload = JSON.parse(frame.data);
                                         ingestBotPayload(payload, payload.content, 'sse');
                                     } catch (e) { /* ignore */ }
+                                } else if (frame.event === 'reaction' && frame.data) {
+                                    try {
+                                        var reactionPayload = JSON.parse(frame.data);
+                                        applyRemoteReaction(reactionPayload);
+                                    } catch (e) { /* ignore */ }
                                 } else if (frame.event === 'timeout') {
                                     widgetLog('SSE timeout — reconectando');
                                     throw new Error('sse_timeout');
@@ -2447,7 +2460,9 @@
                                     guessMediaFilename(histMedia, 'audio.webm'),
                                     'audio',
                                     histMsgId
-                                )
+                                ),
+                                messageId: histMsgId,
+                                reactions: histMeta.reactions || []
                             });
                         } else if (histMedia && histCt === 'video') {
                             appendMessage('', 'user', {
@@ -2457,7 +2472,9 @@
                                     guessMediaFilename(histMedia, 'video-downloaded-by-xbot.mp4'),
                                     'video',
                                     histMsgId
-                                )
+                                ),
+                                messageId: histMsgId,
+                                reactions: histMeta.reactions || []
                             });
                         } else if (histMedia && histCt === 'image') {
                             var userImgBlock = document.createElement('div');
@@ -2473,9 +2490,16 @@
                                 userCap.textContent = body;
                                 userImgBlock.appendChild(userCap);
                             }
-                            appendMessage('', 'user', { domNode: userImgBlock });
+                            appendMessage('', 'user', {
+                                domNode: userImgBlock,
+                                messageId: histMsgId,
+                                reactions: histMeta.reactions || []
+                            });
                         } else {
-                            appendMessage(body, 'user');
+                            appendMessage(body, 'user', {
+                                messageId: histMsgId,
+                                reactions: histMeta.reactions || []
+                            });
                         }
                     } else {
                         ingestBotPayload(item, body, animateOpening ? 'opening' : 'history');
@@ -3680,6 +3704,52 @@
             }
             .xbot-message-row.user.xbot-message-row--no-avatar {
                 padding-right: 36px;
+            }
+            .xbot-reaction-bar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 4px;
+                margin-top: 4px;
+            }
+            .xbot-message-row.user .xbot-reaction-bar { justify-content: flex-end; }
+            .xbot-reaction-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                border: 0;
+                border-radius: 999px;
+                background: #fff;
+                box-shadow: 0 1px 3px rgba(0,0,0,.12);
+                padding: 1px 6px;
+                font-size: 14px;
+                line-height: 1.2;
+                cursor: pointer;
+            }
+            .xbot-reaction-picker {
+                display: none;
+                gap: 2px;
+                padding: 2px;
+                border-radius: 999px;
+                background: #fff;
+                box-shadow: 0 1px 4px rgba(0,0,0,.16);
+            }
+            .xbot-reaction-picker.is-open { display: inline-flex; }
+            .xbot-reaction-picker button,
+            .xbot-reaction-add {
+                border: 0;
+                background: transparent;
+                cursor: pointer;
+                font-size: 16px;
+                line-height: 1;
+                padding: 2px 4px;
+                border-radius: 999px;
+            }
+            .xbot-reaction-add {
+                font-size: 13px;
+                color: #64748b;
+                border: 1px solid #e2e8f0;
+                background: #fff;
             }
             .xbot-msg-avatar-wrap {
                 display: inline-flex;
@@ -8620,6 +8690,7 @@
                 }
             }
             messages.appendChild(row);
+            mountMessageReactions(row, opts.messageId, opts.reactions, from);
             syncEmptyState();
             if (opts.scroll !== false) {
                 // Envio do visitante reativa o stick; bot só segue se ainda estiver no fim.
@@ -8642,6 +8713,98 @@
             }
             if (from === 'bot' && countUnread) {
                 notifyBrowserIncoming(opts.domNode ? 'Áudio' : text);
+            }
+            return row;
+        }
+
+        function applyRemoteReaction(payload) {
+            if (!payload || !payload.message_id) return;
+            var row = messages.querySelector('[data-xbot-message-id="' + String(payload.message_id) + '"]');
+            if (!row) return;
+            var from = row.classList.contains('user') ? 'user' : 'bot';
+            mountMessageReactions(row, payload.message_id, payload.reactions || [], from);
+        }
+
+        function mountMessageReactions(row, messageId, reactions, from) {
+            if (!row) return;
+            var mid = messageId ? String(messageId) : '';
+            if (mid) row.setAttribute('data-xbot-message-id', mid);
+            var host = row.querySelector(':scope > .xbot-message-col') || row;
+            var bar = host.querySelector(':scope > .xbot-reaction-bar');
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.className = 'xbot-reaction-bar';
+                var timeEl = host.querySelector(':scope > .xbot-time');
+                if (timeEl) host.insertBefore(bar, timeEl);
+                else host.appendChild(bar);
+            }
+            bar.innerHTML = '';
+            var items = Array.isArray(reactions) ? reactions.filter(function (r) {
+                return r && String(r.emoji || '').trim();
+            }) : [];
+            items.forEach(function (r) {
+                var pill = document.createElement('button');
+                pill.type = 'button';
+                pill.className = 'xbot-reaction-pill';
+                pill.textContent = r.emoji;
+                pill.addEventListener('click', function () {
+                    if (!mid) return;
+                    var mine = String(r.from || '') === String(getVisitorId() || '');
+                    sendWidgetReaction(mid, mine ? '' : r.emoji, row, from);
+                });
+                bar.appendChild(pill);
+            });
+            if (!mid) {
+                if (!items.length) bar.remove();
+                return;
+            }
+            var add = document.createElement('button');
+            add.type = 'button';
+            add.className = 'xbot-reaction-add';
+            add.textContent = '☺';
+            add.setAttribute('aria-label', 'Reagir');
+            var picker = document.createElement('div');
+            picker.className = 'xbot-reaction-picker';
+            XBOT_REACTION_EMOJIS.forEach(function (emoji) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = emoji;
+                btn.addEventListener('click', function () {
+                    picker.classList.remove('is-open');
+                    var current = items.find(function (r) {
+                        return String(r.from || '') === String(getVisitorId() || '');
+                    });
+                    sendWidgetReaction(mid, current && current.emoji === emoji ? '' : emoji, row, from);
+                });
+                picker.appendChild(btn);
+            });
+            add.addEventListener('click', function () {
+                picker.classList.toggle('is-open');
+            });
+            bar.appendChild(add);
+            bar.appendChild(picker);
+        }
+
+        async function sendWidgetReaction(messageId, emoji, row, from) {
+            try {
+                var visitorId = getVisitorId();
+                var msgBody = {
+                    visitor_id: visitorId,
+                    message_id: messageId,
+                    emoji: emoji || ''
+                };
+                if (channelId) msgBody.channel_id = channelId;
+                var response = await fetch(getReactionUrl(), {
+                    method: 'POST',
+                    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(msgBody)
+                });
+                var data = await response.json().catch(function () { return {}; });
+                if (response.ok && data && Array.isArray(data.reactions)) {
+                    mountMessageReactions(row, messageId, data.reactions, from);
+                }
+            } catch (err) {
+                widgetLog('reação falhou', err);
             }
         }
 
@@ -8707,7 +8870,7 @@
 
             resumeRealtimeAfterUserSend();
             beginNewEpisodeFromUserMessage();
-            appendMessage(value, 'user');
+            var userRow = appendMessage(value, 'user');
             beginWaitingForBot();
             if (input) {
                 input.value = '';
@@ -8730,6 +8893,9 @@
                 const data = await response.json();
                 if (data.visitor_id && visitorId !== data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
+                }
+                if (data.message_id && userRow) {
+                    mountMessageReactions(userRow, data.message_id, [], 'user');
                 }
                 sendVisitorPresence({ chat_open: true, page_visible: true }, { force: true });
                 applyComposerLockedFlag(data.composer_locked);
