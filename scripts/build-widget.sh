@@ -22,12 +22,18 @@ npx --yes terser "$TMP_SRC" -c -m -o "$OUT_FILE"
 rm -f "$TMP_SRC"
 cp "$OUT_FILE" "$LATEST"
 
+SHA="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+VERSION_JSON="{\"service\":\"chat\",\"version\":\"${VERSION}\",\"sha\":\"${SHA}\"}"
+printf '%s\n' "$VERSION_JSON" > "versions/${VERSION}/version.json"
+cp "versions/${VERSION}/version.json" versions/latest/version.json
+
 echo "Built ${OUT_FILE} and ${LATEST} (v${VERSION})"
 
 if [[ -d "$(dirname "$SITE_DEST")" ]] || mkdir -p "$(dirname "$SITE_DEST")" 2>/dev/null; then
   if [[ -d "$ROOT/../xbot-site-v1" ]]; then
     mkdir -p "$(dirname "$SITE_DEST")"
     cp "$OUT_FILE" "$SITE_DEST"
+    cp "versions/latest/version.json" "$(dirname "$SITE_DEST")/version.json"
     echo "Synced site CDN: ${SITE_DEST}"
   fi
 fi
