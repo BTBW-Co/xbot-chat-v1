@@ -4200,6 +4200,10 @@
                 width: 5px;
                 height: 5px;
             }
+            .xbot-catalog-media {
+                position: relative;
+                flex-shrink: 0;
+            }
             .xbot-catalog-img,
             .xbot-text [data-xbot="catalog-grid"] img {
                 width: 100%;
@@ -4245,12 +4249,44 @@
                 color: var(--xbot-muted);
                 line-height: 1.35;
             }
+            .xbot-catalog-media > .xbot-catalog-select,
+            .xbot-catalog-media > .xbot-catalog-qty {
+                position: absolute;
+                top: 6px;
+                right: 6px;
+                z-index: 1;
+            }
             .xbot-catalog-select {
-                margin-top: auto;
-                padding-top: 8px;
-                font-size: 11px;
-                font-weight: 600;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 28px;
+                margin: 0;
+                padding: 0;
+                border-radius: 999px;
+                background: #fff;
                 color: #2563eb;
+                font-size: 18px;
+                font-weight: 700;
+                line-height: 1;
+                box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+            }
+            .xbot-catalog-media > .xbot-catalog-qty {
+                margin: 0;
+                padding: 2px;
+                gap: 2px;
+                justify-content: flex-end;
+                background: #fff;
+                border-radius: 999px;
+                box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+            }
+            .xbot-catalog-media > .xbot-catalog-qty button {
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: 999px;
+                font-size: 18px;
             }
             .xbot-catalog-search {
                 box-sizing: border-box;
