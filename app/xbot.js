@@ -5201,7 +5201,7 @@
             .xbot-answer-country {
                 position: relative;
                 flex: 0 0 auto;
-                width: 72px;
+                width: 96px;
             }
             .xbot-answer-country-btn {
                 appearance: none;
@@ -5211,13 +5211,22 @@
                 border: 1px solid color-mix(in srgb, var(--xbot-theme) 18%, var(--xbot-border));
                 border-radius: 12px;
                 background: #ffffff;
-                padding: 8px 6px;
+                padding: 8px 8px;
                 font: inherit;
                 font-size: 13px;
                 font-weight: 650;
                 color: var(--xbot-ink);
                 cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
                 transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            }
+            .xbot-answer-country-flag {
+                font-size: 15px;
+                line-height: 1;
+                flex: 0 0 auto;
             }
             .xbot-answer-country-btn:hover,
             .xbot-answer-country-btn:focus {
@@ -5264,7 +5273,9 @@
             }
             .xbot-answer-country-option {
                 appearance: none;
-                display: block;
+                display: flex;
+                align-items: center;
+                gap: 8px;
                 width: 100%;
                 border: 0;
                 background: #ffffff;
@@ -7163,7 +7174,49 @@
         }
 
         function phoneCountries() {
-            return Array.isArray(window.__XBOT_PHONE_COUNTRIES) ? window.__XBOT_PHONE_COUNTRIES : [{ code: '55', name: 'Brasil' }];
+            return Array.isArray(window.__XBOT_PHONE_COUNTRIES) ? window.__XBOT_PHONE_COUNTRIES : [{ code: '55', iso: 'BR', name: 'Brasil' }];
+        }
+
+        function countryFlagEmoji(iso) {
+            var code = String(iso || '').trim().toUpperCase();
+            if (!/^[A-Z]{2}$/.test(code)) return '';
+            return String.fromCodePoint(0x1F1E6 + code.charCodeAt(0) - 65, 0x1F1E6 + code.charCodeAt(1) - 65);
+        }
+
+        function isoForDial(code, preferredIso) {
+            var list = phoneCountries();
+            var wanted = String(preferredIso || '').trim().toUpperCase();
+            var i;
+            if (wanted) {
+                for (i = 0; i < list.length; i++) {
+                    if (list[i] && list[i].code === code && list[i].iso === wanted) return wanted;
+                }
+            }
+            var fallback = code === '1' ? 'US' : (code === '7' ? 'RU' : '');
+            if (fallback) {
+                for (i = 0; i < list.length; i++) {
+                    if (list[i] && list[i].iso === fallback) return fallback;
+                }
+            }
+            for (i = 0; i < list.length; i++) {
+                if (list[i] && list[i].code === code && list[i].iso) return list[i].iso;
+            }
+            return '';
+        }
+
+        function fillCountryFlagLabel(el, dialCode, iso) {
+            el.textContent = '';
+            var flag = countryFlagEmoji(iso);
+            if (flag) {
+                var flagEl = document.createElement('span');
+                flagEl.className = 'xbot-answer-country-flag';
+                flagEl.setAttribute('aria-hidden', 'true');
+                flagEl.textContent = flag;
+                el.appendChild(flagEl);
+            }
+            var textEl = document.createElement('span');
+            textEl.textContent = '+' + dialCode;
+            el.appendChild(textEl);
         }
 
         function digitsOnlyPhone(value) {
@@ -7560,7 +7613,8 @@
                 countryBtn.type = 'button';
                 countryBtn.className = 'xbot-answer-country-btn';
                 var countryCode = digitsOnlyPhone(block.default_country_code) || '55';
-                countryBtn.textContent = '+' + countryCode;
+                var countryIso = isoForDial(countryCode);
+                fillCountryFlagLabel(countryBtn, countryCode, countryIso);
                 var countryPanel = document.createElement('div');
                 countryPanel.className = 'xbot-answer-country-panel';
                 countryPanel.hidden = true;
@@ -7585,12 +7639,24 @@
                         var li = document.createElement('li');
                         var opt = document.createElement('button');
                         opt.type = 'button';
-                        opt.className = 'xbot-answer-country-option' + (c.code === countryCode ? ' is-selected' : '');
-                        opt.textContent = label;
+                        var selected = (c.iso && c.iso === countryIso) || (!c.iso && c.code === countryCode);
+                        opt.className = 'xbot-answer-country-option' + (selected ? ' is-selected' : '');
                         opt.setAttribute('data-code', c.code);
+                        opt.setAttribute('data-iso', c.iso || '');
+                        if (c.iso) {
+                            var flagEl = document.createElement('span');
+                            flagEl.className = 'xbot-answer-country-flag';
+                            flagEl.setAttribute('aria-hidden', 'true');
+                            flagEl.textContent = countryFlagEmoji(c.iso);
+                            opt.appendChild(flagEl);
+                        }
+                        var nameEl = document.createElement('span');
+                        nameEl.textContent = label;
+                        opt.appendChild(nameEl);
                         opt.addEventListener('click', function (ev) {
                             countryCode = digitsOnlyPhone(ev.currentTarget.getAttribute('data-code')) || '55';
-                            countryBtn.textContent = '+' + countryCode;
+                            countryIso = ev.currentTarget.getAttribute('data-iso') || isoForDial(countryCode);
+                            fillCountryFlagLabel(countryBtn, countryCode, countryIso);
                             countryPanel.hidden = true;
                             countrySearch.value = '';
                             renderCountries('');
