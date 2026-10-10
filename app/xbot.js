@@ -4409,6 +4409,40 @@
                 border: 1px solid var(--xbot-border);
                 color: var(--xbot-ink);
             }
+            .xbot-order-receipt {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                min-width: 0;
+            }
+            .xbot-order-receipt-title {
+                margin: 0;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            .xbot-order-receipt ul {
+                margin: 0;
+                padding: 0;
+                list-style: none;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .xbot-order-receipt li {
+                margin: 0;
+                font-size: 14px;
+                line-height: 1.35;
+            }
+            .xbot-order-receipt-total {
+                margin: 0;
+                font-size: 15px;
+                font-weight: 700;
+            }
+            .xbot-order-receipt-note {
+                margin: 0;
+                font-size: 13px;
+                color: var(--xbot-muted);
+            }
             .xbot-locate-address {
                 margin-top: auto;
                 padding-top: 8px;
@@ -8702,7 +8736,7 @@
                 }
                 function orderText() {
                     var picked = lines();
-                    var parts = ['Pedido do cardápio:'];
+                    var parts = ['Pedido do cardápio:', ''];
                     var total = 0;
                     var priced = true;
                     for (var i = 0; i < picked.length; i++) {
@@ -8712,9 +8746,15 @@
                         if (picked[i].price == null) priced = false;
                         else total += picked[i].price * picked[i].qty;
                     }
-                    if (priced && picked.length) parts.push('Total: ' + formatBRL(total));
+                    if (priced && picked.length) {
+                        parts.push('');
+                        parts.push('Total: ' + formatBRL(total));
+                    }
                     var obs = String(noteInput.value || '').trim();
-                    if (obs) parts.push('Observação: ' + obs);
+                    if (obs) {
+                        parts.push('');
+                        parts.push('Observação: ' + obs);
+                    }
                     return parts.join('\n');
                 }
                 function lockBasket() {
@@ -9003,6 +9043,48 @@
             tick();
         }
 
+        function catalogOrderReceiptHtml(text) {
+            var raw = String(text || '').replace(/\r/g, '').trim();
+            if (!/^Pedido do cardápio:?/i.test(raw)) return '';
+            var items = [];
+            var total = '';
+            var note = '';
+            raw.split('\n').forEach(function (line) {
+                var row = String(line || '').trim();
+                if (!row || /^Pedido do cardápio:?$/i.test(row)) return;
+                if (/^Observa[cç][aã]o:/i.test(row)) {
+                    note = row.replace(/^Observa[cç][aã]o:\s*/i, '').trim();
+                    return;
+                }
+                var glued = row.match(/^(.*?)(?:\s+Total:\s*(R\$\s*[\d.,]+))\s*$/i);
+                if (glued && glued[1] && !/^Total:/i.test(row)) {
+                    items.push(glued[1].replace(/^[-•*]\s*/, '').trim());
+                    total = glued[2].trim();
+                    return;
+                }
+                if (/^Total:/i.test(row)) {
+                    total = row.replace(/^Total:\s*/i, '').trim();
+                    return;
+                }
+                items.push(row.replace(/^[-•*]\s*/, '').trim());
+            });
+            if (!items.length) return '';
+            function esc(value) {
+                return String(value || '').replace(/[&<>]/g, function (ch) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch];
+                });
+            }
+            var html = '<div class="xbot-order-receipt"><p class="xbot-order-receipt-title">Pedido</p><ul>';
+            items.forEach(function (item) {
+                html += '<li>' + esc(item) + '</li>';
+            });
+            html += '</ul>';
+            if (total) html += '<p class="xbot-order-receipt-total">Total ' + esc(total) + '</p>';
+            if (note) html += '<p class="xbot-order-receipt-note">Obs.: ' + esc(note) + '</p>';
+            html += '</div>';
+            return html;
+        }
+
         function appendMessage(text, from, opts) {
             if (from === undefined) from = 'user';
             opts = opts || {};
@@ -9044,8 +9126,10 @@
                 }
             } else {
             var unsafeHTML;
-            var treatAsHtml = !!opts.rawHtml
+            var orderReceipt = from === 'user' ? catalogOrderReceiptHtml(text) : '';
+            var treatAsHtml = !!orderReceipt || !!opts.rawHtml
                 || (from === 'bot' && /<\s*(?:p|div|ul|ol|table|strong|img)\b/i.test(String(text || '')));
+            if (orderReceipt) text = orderReceipt;
             if (treatAsHtml) {
                 unsafeHTML = text;
             } else {
