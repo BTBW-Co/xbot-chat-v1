@@ -4346,8 +4346,8 @@
                 color: var(--xbot-ink);
             }
             .xbot-catalog-close,
-            .xbot-catalog-note-send,
-            .xbot-catalog-note-back {
+            .xbot-catalog-modal-close,
+            .xbot-catalog-reopen {
                 min-height: 44px;
                 padding: 0 14px;
                 border-radius: 12px;
@@ -4356,58 +4356,94 @@
                 cursor: pointer;
                 -webkit-tap-highlight-color: transparent;
             }
-            .xbot-catalog-close,
-            .xbot-catalog-note-send {
+            .xbot-catalog-close {
                 border: 0;
                 background: var(--xbot-theme, #2563eb);
                 color: #fff;
             }
-            .xbot-catalog-close:disabled,
-            .xbot-catalog-note-send:disabled {
+            .xbot-catalog-close:disabled {
                 opacity: 0.45;
                 cursor: default;
             }
-            .xbot-catalog-note {
-                display: none;
-                flex-direction: column;
-                gap: 10px;
-                margin-top: 8px;
-            }
-            .xbot-catalog-is-note .xbot-catalog-search,
-            .xbot-catalog-is-note .xbot-catalog-grid,
-            .xbot-catalog-is-note [data-xbot="catalog-grid"],
-            .xbot-catalog-is-note .xbot-catalog-more,
-            .xbot-catalog-is-note [data-xbot-catalog-more],
-            .xbot-catalog-is-note .xbot-catalog-dock,
-            .xbot-catalog-is-note .xbot-catalog-empty-search {
+            .xbot-catalog-collapsed .xbot-catalog-grid,
+            .xbot-catalog-collapsed [data-xbot="catalog-grid"],
+            .xbot-catalog-collapsed .xbot-catalog-more,
+            .xbot-catalog-collapsed [data-xbot-catalog-more],
+            .xbot-catalog-collapsed .xbot-catalog-footnote {
                 display: none !important;
             }
-            .xbot-catalog-is-note .xbot-catalog-note {
-                display: flex;
-            }
-            .xbot-catalog-note p {
-                margin: 0;
-                font-size: 15px;
-                font-weight: 600;
-                color: var(--xbot-ink);
-            }
-            .xbot-catalog-note textarea {
-                width: 100%;
-                min-height: 88px;
-                box-sizing: border-box;
-                font: inherit;
-                font-size: 16px;
-                padding: 12px;
-                border-radius: 12px;
+            .xbot-catalog-reopen {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                margin-top: 8px;
                 border: 1px solid var(--xbot-border);
                 background: var(--xbot-surface, #fff);
                 color: var(--xbot-ink);
-                resize: vertical;
             }
-            .xbot-catalog-note-back {
-                background: transparent;
-                border: 1px solid var(--xbot-border);
+            .xbot-catalog-reopen[hidden] { display: none !important; }
+            .xbot-chatbox.xbot-catalog-open .xbot-compose,
+            .xbot-chatbox.xbot-catalog-open .xbot-footer {
+                display: none !important;
+            }
+            .xbot-catalog-modal {
+                position: absolute;
+                inset: 0;
+                z-index: 6;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                background: var(--xbot-surface, #fff);
+            }
+            .xbot-catalog-modal[hidden] { display: none !important; }
+            .xbot-catalog-modal-bar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                flex-shrink: 0;
+                padding: 12px 14px;
+                padding-top: calc(12px + env(safe-area-inset-top, 0px));
+                border-bottom: 1px solid var(--xbot-border);
+            }
+            .xbot-catalog-modal-bar strong {
+                font-size: 16px;
                 color: var(--xbot-ink);
+            }
+            .xbot-catalog-modal-close {
+                border: 1px solid var(--xbot-border);
+                background: var(--xbot-surface, #fff);
+                color: var(--xbot-ink);
+            }
+            .xbot-catalog-modal-scroll {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                padding: 8px 14px 12px;
+            }
+            .xbot-catalog-modal-scroll .xbot-catalog-search {
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                margin-top: 0;
+            }
+            .xbot-catalog-modal-dock {
+                flex-shrink: 0;
+                padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+                border-top: 1px solid var(--xbot-border);
+                background: var(--xbot-surface, #fff);
+            }
+            .xbot-catalog-modal-dock .xbot-catalog-dock {
+                position: static;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                box-shadow: none;
+                background: transparent;
+            }
+            .xbot-catalog-modal-dock .xbot-catalog-close {
+                min-width: 9.5rem;
             }
             .xbot-order-receipt {
                 display: flex;
@@ -6477,6 +6513,7 @@
 
         function scrollMessagesToBottom(opts) {
             opts = opts || {};
+            if (chatbox && chatbox.classList.contains('xbot-catalog-open') && !opts.force) return;
             var el = document.getElementById('xbot-messages');
             if (!el) return;
             if (opts.force) messagesAutoScrollPinned = true;
@@ -8437,6 +8474,11 @@
                 moreBtn.textContent = 'Ver mais produtos (+' + left + ')';
             }
             function scrollCatalog() {
+                var scroller = root._xbotModalScroll;
+                if (scroller) {
+                    scroller.scrollTop = scroller.scrollHeight;
+                    return;
+                }
                 if (typeof scrollMessagesToBottom === 'function') scrollMessagesToBottom();
             }
             function setTypingLock(on) {
@@ -8560,6 +8602,13 @@
                 (grid.getAttribute('data-xbot') === 'locate-grid' || grid.classList.contains('xbot-locate-grid'))
             );
             var basketMode = interactive && !isLocateGrid;
+            if (!isLocateGrid && !interactive) {
+                root.classList.add('xbot-catalog-collapsed');
+                if (footerEl) footerEl.classList.add('xbot-catalog-footnote');
+                var collapsedRow = root.closest('.xbot-message-row');
+                if (collapsedRow) collapsedRow.classList.remove('xbot-message-row--catalog');
+                return;
+            }
 
             function disableAll() {
                 for (var j = 0; j < cards.length; j++) {
@@ -8658,18 +8707,6 @@
                 else root.appendChild(dock);
                 if (footerEl) footerEl.style.display = 'none';
 
-                var note = document.createElement('div');
-                note.className = 'xbot-catalog-note';
-                note.innerHTML =
-                    '<p>Alguma observação?</p>' +
-                    '<textarea maxlength="400" placeholder="Ex.: sem cebola, ponto da carne" aria-label="Observação do pedido"></textarea>' +
-                    '<button type="button" class="xbot-catalog-note-send">Enviar pedido</button>' +
-                    '<button type="button" class="xbot-catalog-note-back">Voltar ao cardápio</button>';
-                root.appendChild(note);
-                var noteInput = note.querySelector('textarea');
-                var sendBtn = note.querySelector('.xbot-catalog-note-send');
-                var backBtn = note.querySelector('.xbot-catalog-note-back');
-
                 function setQty(card, next) {
                     next = Math.max(0, Math.min(99, next));
                     card.setAttribute('data-xbot-qty', String(next));
@@ -8723,17 +8760,6 @@
                     emptySearch.classList.toggle('is-on', !!query && visible === 0);
                     if (moreBtn) moreBtn.style.display = query ? 'none' : '';
                 }
-                function showMenu() {
-                    root.classList.remove('xbot-catalog-is-note');
-                    applySearch();
-                }
-                function showNote() {
-                    if (!lines().length || sessionEpisodeEnded) return;
-                    emptySearch.classList.remove('is-on');
-                    root.classList.add('xbot-catalog-is-note');
-                    noteInput.focus();
-                    scrollCatalog();
-                }
                 function orderText() {
                     var picked = lines();
                     var parts = ['Pedido do cardápio:', ''];
@@ -8750,19 +8776,11 @@
                         parts.push('');
                         parts.push('Total: ' + formatBRL(total));
                     }
-                    var obs = String(noteInput.value || '').trim();
-                    if (obs) {
-                        parts.push('');
-                        parts.push('Observação: ' + obs);
-                    }
                     return parts.join('\n');
                 }
                 function lockBasket() {
                     search.disabled = true;
                     closeBtn.disabled = true;
-                    sendBtn.disabled = true;
-                    backBtn.disabled = true;
-                    noteInput.disabled = true;
                     for (var i = 0; i < cards.length; i++) {
                         var buttons = cards[i].querySelectorAll('.xbot-catalog-qty button');
                         for (var b = 0; b < buttons.length; b++) buttons[b].disabled = true;
@@ -8806,25 +8824,85 @@
                 search.addEventListener('keydown', function (ev) {
                     if (ev.key === 'Enter') ev.preventDefault();
                 });
+                function dismissCatalog(sent) {
+                    var modal = root._xbotModal;
+                    if (modal) modal.hidden = true;
+                    if (chatbox) chatbox.classList.remove('xbot-catalog-open');
+                    var reopen = root.querySelector('.xbot-catalog-reopen');
+                    if (reopen) reopen.hidden = !!sent;
+                }
+                function openCatalogModal() {
+                    if (!chatbox) return;
+                    if (typeof chatbox._xbotDismissCatalog === 'function') {
+                        chatbox._xbotDismissCatalog(true);
+                    }
+                    var modal = document.createElement('div');
+                    modal.className = 'xbot-catalog-modal';
+                    modal.setAttribute('role', 'dialog');
+                    modal.setAttribute('aria-modal', 'true');
+                    modal.setAttribute('aria-label', 'Cardápio');
+                    var bar = document.createElement('div');
+                    bar.className = 'xbot-catalog-modal-bar';
+                    bar.innerHTML = '<strong>Cardápio</strong>';
+                    var dismiss = document.createElement('button');
+                    dismiss.type = 'button';
+                    dismiss.className = 'xbot-catalog-modal-close';
+                    dismiss.textContent = 'Voltar';
+                    dismiss.setAttribute('aria-label', 'Voltar à conversa');
+                    bar.appendChild(dismiss);
+                    var scroller = document.createElement('div');
+                    scroller.className = 'xbot-catalog-modal-scroll';
+                    var moving = Array.prototype.slice.call(root.childNodes);
+                    for (var n = 0; n < moving.length; n++) {
+                        if (moving[n] === introEl) continue;
+                        scroller.appendChild(moving[n]);
+                    }
+                    var dockHost = document.createElement('div');
+                    dockHost.className = 'xbot-catalog-modal-dock';
+                    dockHost.appendChild(dock);
+                    modal.appendChild(bar);
+                    modal.appendChild(scroller);
+                    modal.appendChild(dockHost);
+                    chatbox.appendChild(modal);
+                    root._xbotModal = modal;
+                    root._xbotModalScroll = scroller;
+                    chatbox.classList.add('xbot-catalog-open');
+                    chatbox._xbotDismissCatalog = dismissCatalog;
+                    var threadRow = root.closest('.xbot-message-row');
+                    if (threadRow) threadRow.classList.remove('xbot-message-row--catalog');
+                    var reopen = document.createElement('button');
+                    reopen.type = 'button';
+                    reopen.className = 'xbot-catalog-reopen';
+                    reopen.textContent = 'Ver cardápio';
+                    reopen.hidden = true;
+                    root.appendChild(reopen);
+                    reopen.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        if (sessionEpisodeEnded || root._xbotCatalogSent) return;
+                        modal.hidden = false;
+                        reopen.hidden = true;
+                        chatbox.classList.add('xbot-catalog-open');
+                        chatbox._xbotDismissCatalog = dismissCatalog;
+                    });
+                    dismiss.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        dismissCatalog(false);
+                    });
+                }
                 closeBtn.addEventListener('click', function (ev) {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    showNote();
-                });
-                backBtn.addEventListener('click', function (ev) {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    showMenu();
-                });
-                sendBtn.addEventListener('click', function (ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
                     if (!lines().length || sessionEpisodeEnded) return;
                     var text = orderText();
+                    root._xbotCatalogSent = true;
                     lockBasket();
+                    dismissCatalog(true);
                     sendUserText(text);
                 });
                 renderDock();
+                openCatalogModal();
 
                 root._xbotRevealBasket = function () {
                     search.classList.remove('xbot-catalog-ui--pending');
@@ -8834,15 +8912,16 @@
 
             if (basketMode) mountCatalogBasket();
 
-            root.addEventListener('click', function (ev) {
+            var catalogSurface = root._xbotModalScroll || root;
+            catalogSurface.addEventListener('click', function (ev) {
                 if (!interactive || sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
-                if (ev.target.closest && ev.target.closest('.xbot-catalog-qty, .xbot-catalog-search, .xbot-catalog-dock, .xbot-catalog-note')) {
+                if (ev.target.closest && ev.target.closest('.xbot-catalog-qty, .xbot-catalog-search, .xbot-catalog-dock, .xbot-catalog-modal-bar, .xbot-catalog-reopen')) {
                     return;
                 }
                 var more = ev.target.closest
                     ? ev.target.closest('.xbot-catalog-more, [data-xbot-catalog-more]')
                     : null;
-                if (more && root.contains(more)) {
+                if (more && catalogSurface.contains(more)) {
                     ev.preventDefault();
                     ev.stopPropagation();
                     revealMore();
@@ -8853,7 +8932,7 @@
                         '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
                     )
                     : null;
-                if (!card || !root.contains(card)) return;
+                if (!card || !catalogSurface.contains(card)) return;
                 if (basketMode) {
                     if (card.classList.contains('xbot-catalog-card--pending')) return;
                     if (
@@ -8871,16 +8950,16 @@
                 ev.stopPropagation();
                 selectCard(card);
             });
-            root.addEventListener('keydown', function (ev) {
+            catalogSurface.addEventListener('keydown', function (ev) {
                 if (!interactive || sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
                 if (ev.key !== 'Enter' && ev.key !== ' ') return;
-                if (ev.target.closest && ev.target.closest('.xbot-catalog-qty, .xbot-catalog-search, .xbot-catalog-note, textarea, input')) {
+                if (ev.target.closest && ev.target.closest('.xbot-catalog-qty, .xbot-catalog-search, textarea, input')) {
                     return;
                 }
                 var more = ev.target.closest
                     ? ev.target.closest('.xbot-catalog-more, [data-xbot-catalog-more]')
                     : null;
-                if (more && root.contains(more)) {
+                if (more && catalogSurface.contains(more)) {
                     ev.preventDefault();
                     revealMore();
                     return;
@@ -8891,7 +8970,7 @@
                         '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
                     )
                     : null;
-                if (card && root.contains(card)) {
+                if (card && catalogSurface.contains(card)) {
                     ev.preventDefault();
                     selectCard(card);
                 }
