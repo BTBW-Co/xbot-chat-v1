@@ -3697,7 +3697,33 @@
                 max-width: 92%;
             }
             .xbot-message-row.bot { align-self: flex-start; max-width: 92%; }
-            .xbot-message-row.bot.xbot-message-row--catalog { max-width: 100%; width: 100%; }
+            .xbot-message-row.bot.xbot-message-row--catalog {
+                max-width: 100%;
+                width: 100%;
+                align-self: stretch;
+            }
+            .xbot-message-row.bot.xbot-message-row--catalog .xbot-message-col {
+                flex: 1 1 auto;
+                width: 100%;
+                max-width: 100%;
+                align-items: stretch;
+            }
+            .xbot-message-row.bot.xbot-message-row--catalog .xbot-message,
+            .xbot-message-row.bot.xbot-message-row--catalog .xbot-message-content,
+            .xbot-message-row.bot.xbot-message-row--catalog .xbot-text {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .xbot-message-row--catalog .xbot-message {
+                overflow: visible;
+                padding: 10px;
+            }
+            .xbot-message-row--catalog .xbot-text {
+                container-type: inline-size;
+                container-name: xbotcatalog;
+            }
             .xbot-message-row.user { align-self: flex-end; max-width: 85%; }
             .xbot-message-row.bot.xbot-message-row--no-avatar {
                 padding-left: 36px;
@@ -4132,13 +4158,15 @@
             .xbot-text li { margin-bottom: 0.25em; }
             .xbot-text strong { font-weight: 600; }
             .xbot-catalog-grid,
-            .xbot-text [data-xbot="catalog-grid"] {
+            .xbot-text [data-xbot="catalog-grid"],
+            .xbot-locate-grid,
+            .xbot-text [data-xbot="locate-grid"] {
                 display: grid !important;
-                grid-template-columns: 1fr 1fr !important;
-                gap: 10px;
+                grid-template-columns: repeat(auto-fit, minmax(min(100%, 13.5rem), 1fr)) !important;
+                gap: 8px;
                 width: 100%;
                 min-width: 0;
-                margin: 10px 0;
+                margin: 8px 0;
             }
             .xbot-catalog-card,
             .xbot-text [data-xbot-card="catalog"] {
@@ -4205,9 +4233,11 @@
                 flex-shrink: 0;
             }
             .xbot-catalog-img,
-            .xbot-text [data-xbot="catalog-grid"] img {
+            .xbot-text [data-xbot="catalog-grid"] img,
+            .xbot-text [data-xbot="locate-grid"] img {
                 width: 100%;
-                height: 110px;
+                height: auto;
+                aspect-ratio: 4 / 3;
                 object-fit: cover;
                 display: block;
                 margin: 0;
@@ -4217,7 +4247,8 @@
             }
             .xbot-catalog-photo-fallback {
                 width: 100%;
-                height: 110px;
+                aspect-ratio: 4 / 3;
+                height: auto;
                 flex-shrink: 0;
                 background: #e2e8f0;
                 display: flex;
@@ -4237,6 +4268,10 @@
                 font-size: 13px;
                 line-height: 1.3;
                 color: var(--xbot-ink);
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
             }
             .xbot-catalog-price {
                 margin-top: 4px;
@@ -4245,9 +4280,50 @@
             }
             .xbot-catalog-desc {
                 margin-top: 4px;
-                font-size: 11px;
+                font-size: 12px;
                 color: var(--xbot-muted);
                 line-height: 1.35;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            @container xbotcatalog (max-width: 27rem) {
+                .xbot-catalog-grid,
+                .xbot-text [data-xbot="catalog-grid"],
+                .xbot-locate-grid,
+                .xbot-text [data-xbot="locate-grid"] {
+                    grid-template-columns: minmax(0, 1fr) !important;
+                }
+                .xbot-catalog-card,
+                .xbot-text [data-xbot-card="catalog"],
+                .xbot-locate-card,
+                .xbot-text [data-xbot-card="locate"] {
+                    flex-direction: row;
+                    align-items: stretch;
+                }
+                .xbot-catalog-media,
+                .xbot-catalog-card > .xbot-catalog-img,
+                .xbot-catalog-card > .xbot-catalog-photo-fallback,
+                .xbot-locate-card > .xbot-catalog-img,
+                .xbot-locate-card > .xbot-catalog-photo-fallback {
+                    width: 84px;
+                    flex: 0 0 84px;
+                    align-self: stretch;
+                    min-height: 84px;
+                    aspect-ratio: auto;
+                    height: auto;
+                    object-fit: cover;
+                }
+                .xbot-catalog-media .xbot-catalog-img,
+                .xbot-catalog-media .xbot-catalog-photo-fallback {
+                    width: 100%;
+                    height: 100%;
+                    min-height: 84px;
+                    aspect-ratio: auto;
+                    object-fit: cover;
+                }
+                .xbot-catalog-body { min-width: 0; }
             }
             .xbot-catalog-media > .xbot-catalog-select,
             .xbot-catalog-media > .xbot-catalog-qty {
@@ -4556,9 +4632,8 @@
             .xbot-locate-grid,
             .xbot-text [data-xbot="locate-grid"] {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 10px;
-                margin: 10px 0;
+                gap: 8px;
+                margin: 8px 0;
             }
             .xbot-locate-result {
                 display: flex;
@@ -4606,12 +4681,14 @@
                 border-color: rgba(var(--xbot-theme-rgb), 0.7);
                 box-shadow: 0 0 0 2px rgba(var(--xbot-theme-rgb), 0.28);
             }
-            .xbot-catalog-card.is-selected,
             .xbot-catalog-card.is-disabled,
-            .xbot-text [data-xbot-card="catalog"].is-selected,
-            .xbot-text [data-xbot-card="catalog"].is-disabled {
-                opacity: 0.72;
+            .xbot-text [data-xbot-card="catalog"].is-disabled,
+            .xbot-text [data-xbot-card="locate"].is-disabled {
                 pointer-events: none;
+            }
+            .xbot-catalog-grid:has(.is-selected) .xbot-catalog-card.is-disabled:not(.is-selected),
+            .xbot-locate-grid:has(.is-selected) .xbot-catalog-card.is-disabled:not(.is-selected) {
+                opacity: 0.55;
             }
             .xbot-catalog-more,
             .xbot-text [data-xbot-catalog-more] {
@@ -8633,7 +8710,6 @@
                     }
                     idx = Math.min(text.length, idx + step);
                     el.textContent = text.slice(0, idx);
-                    scrollCatalog();
                     if (idx >= text.length) {
                         el.classList.remove('xbot-catalog-typecursor');
                         if (done) done();
@@ -8653,7 +8729,6 @@
                 void card.offsetWidth;
                 card.classList.add('xbot-catalog-card--reveal');
                 if (!card.hasAttribute('tabindex') && interactive) card.setAttribute('tabindex', '0');
-                scrollCatalog();
             }
             function revealCardsSequentially(queue, onDone) {
                 var list = Array.prototype.slice.call(queue || []);
@@ -8679,7 +8754,7 @@
                 next();
             }
             function revealMore() {
-                if (!interactive || sessionEpisodeEnded || typingLocked) return;
+                if (typingLocked) return;
                 var pageSize = parseInt(
                     (moreBtn && (moreBtn.getAttribute('data-xbot-page-size') || moreBtn.getAttribute('data-page-size'))) || '8',
                     10
@@ -8690,27 +8765,14 @@
                     updateMoreButton();
                     return;
                 }
-                setTypingLock(true);
-                if (moreBtn) moreBtn.classList.add('xbot-catalog-ui--pending');
-                revealCardsSequentially(hidden, function () {
-                    if (moreBtn) moreBtn.classList.remove('xbot-catalog-ui--pending');
-                    updateMoreButton();
-                    setTypingLock(false);
-                    scrollCatalog();
-                });
+                for (var r = 0; r < hidden.length; r++) revealCard(hidden[r]);
+                updateMoreButton();
             }
             var isLocateGrid = !!(
                 grid &&
                 (grid.getAttribute('data-xbot') === 'locate-grid' || grid.classList.contains('xbot-locate-grid'))
             );
             var basketMode = interactive && !isLocateGrid;
-            if (!isLocateGrid && !interactive) {
-                root.classList.add('xbot-catalog-collapsed');
-                if (footerEl) footerEl.classList.add('xbot-catalog-footnote');
-                var collapsedRow = root.closest('.xbot-message-row');
-                if (collapsedRow) collapsedRow.classList.remove('xbot-message-row--catalog');
-                return;
-            }
 
             function disableAll() {
                 for (var j = 0; j < cards.length; j++) {
@@ -8787,7 +8849,6 @@
                 search.setAttribute('aria-label', 'Buscar no cardápio');
                 search.autocomplete = 'off';
                 search.enterKeyHint = 'search';
-                if (animateTyping) search.classList.add('xbot-catalog-ui--pending');
                 if (grid && grid.parentNode) grid.parentNode.insertBefore(search, grid);
                 else root.insertBefore(search, root.firstChild);
 
@@ -8798,7 +8859,6 @@
 
                 var dock = document.createElement('div');
                 dock.className = 'xbot-catalog-dock';
-                if (animateTyping) dock.classList.add('xbot-catalog-ui--pending');
                 dock.innerHTML =
                     '<div class="xbot-catalog-dock-meta"><strong data-dock-count>Nenhum item</strong><span data-dock-total></span></div>' +
                     '<button type="button" class="xbot-catalog-close" disabled>Fechar pedido</button>';
@@ -8854,7 +8914,7 @@
                     var visible = 0;
                     for (var i = 0; i < cards.length; i++) {
                         var card = cards[i];
-                        var match = !query || fold(cardLabel(card)).indexOf(query) !== -1;
+                        var match = !query || fold(card.textContent).indexOf(query) !== -1;
                         card.classList.toggle('xbot-catalog-card--nomatch', !!query && !match);
                         card.classList.toggle('xbot-catalog-card--search-hit', !!query && match);
                         if (match) visible += 1;
@@ -8898,17 +8958,15 @@
                         card.setAttribute('role', 'group');
                         card.removeAttribute('tabindex');
                         var selectEl = card.querySelector('.xbot-catalog-select');
+                        if (selectEl && selectEl.parentNode) selectEl.parentNode.removeChild(selectEl);
                         var qty = document.createElement('div');
                         qty.className = 'xbot-catalog-qty';
                         qty.innerHTML =
                             '<button type="button" data-qty="minus" aria-label="Diminuir">−</button>' +
                             '<span data-qty-value>0</span>' +
                             '<button type="button" data-qty="plus" aria-label="Aumentar">+</button>';
-                        if (selectEl && selectEl.parentNode) selectEl.parentNode.replaceChild(qty, selectEl);
-                        else {
-                            var body = card.querySelector('.xbot-catalog-body') || card;
-                            body.appendChild(qty);
-                        }
+                        var body = card.querySelector('.xbot-catalog-body') || card;
+                        body.appendChild(qty);
                         card.setAttribute('data-xbot-qty', '0');
                         card._xbotBump = function (delta) { setQty(card, qtyOf(card) + delta); };
                         qty.addEventListener('click', function (ev) {
@@ -8926,73 +8984,6 @@
                 search.addEventListener('keydown', function (ev) {
                     if (ev.key === 'Enter') ev.preventDefault();
                 });
-                function dismissCatalog(sent) {
-                    var modal = root._xbotModal;
-                    if (modal) modal.hidden = true;
-                    if (chatbox) chatbox.classList.remove('xbot-catalog-open');
-                    var reopen = root.querySelector('.xbot-catalog-reopen');
-                    if (reopen) reopen.hidden = !!sent;
-                }
-                function openCatalogModal() {
-                    if (!chatbox) return;
-                    if (typeof chatbox._xbotDismissCatalog === 'function') {
-                        chatbox._xbotDismissCatalog(true);
-                    }
-                    var modal = document.createElement('div');
-                    modal.className = 'xbot-catalog-modal';
-                    modal.setAttribute('role', 'dialog');
-                    modal.setAttribute('aria-modal', 'true');
-                    modal.setAttribute('aria-label', 'Cardápio');
-                    var bar = document.createElement('div');
-                    bar.className = 'xbot-catalog-modal-bar';
-                    bar.innerHTML = '<strong>Cardápio</strong>';
-                    var dismiss = document.createElement('button');
-                    dismiss.type = 'button';
-                    dismiss.className = 'xbot-catalog-modal-close';
-                    dismiss.textContent = 'Voltar';
-                    dismiss.setAttribute('aria-label', 'Voltar à conversa');
-                    bar.appendChild(dismiss);
-                    var scroller = document.createElement('div');
-                    scroller.className = 'xbot-catalog-modal-scroll';
-                    var moving = Array.prototype.slice.call(root.childNodes);
-                    for (var n = 0; n < moving.length; n++) {
-                        if (moving[n] === introEl) continue;
-                        scroller.appendChild(moving[n]);
-                    }
-                    var dockHost = document.createElement('div');
-                    dockHost.className = 'xbot-catalog-modal-dock';
-                    dockHost.appendChild(dock);
-                    modal.appendChild(bar);
-                    modal.appendChild(scroller);
-                    modal.appendChild(dockHost);
-                    chatbox.appendChild(modal);
-                    root._xbotModal = modal;
-                    root._xbotModalScroll = scroller;
-                    chatbox.classList.add('xbot-catalog-open');
-                    chatbox._xbotDismissCatalog = dismissCatalog;
-                    var threadRow = root.closest('.xbot-message-row');
-                    if (threadRow) threadRow.classList.remove('xbot-message-row--catalog');
-                    var reopen = document.createElement('button');
-                    reopen.type = 'button';
-                    reopen.className = 'xbot-catalog-reopen';
-                    reopen.textContent = 'Ver cardápio';
-                    reopen.hidden = true;
-                    root.appendChild(reopen);
-                    reopen.addEventListener('click', function (ev) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        if (sessionEpisodeEnded || root._xbotCatalogSent) return;
-                        modal.hidden = false;
-                        reopen.hidden = true;
-                        chatbox.classList.add('xbot-catalog-open');
-                        chatbox._xbotDismissCatalog = dismissCatalog;
-                    });
-                    dismiss.addEventListener('click', function (ev) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        dismissCatalog(false);
-                    });
-                }
                 closeBtn.addEventListener('click', function (ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
@@ -9000,11 +8991,9 @@
                     var text = orderText();
                     root._xbotCatalogSent = true;
                     lockBasket();
-                    dismissCatalog(true);
                     sendUserText(text);
                 });
                 renderDock();
-                openCatalogModal();
 
                 root._xbotRevealBasket = function () {
                     search.classList.remove('xbot-catalog-ui--pending');
@@ -9016,7 +9005,7 @@
 
             var catalogSurface = root._xbotModalScroll || root;
             catalogSurface.addEventListener('click', function (ev) {
-                if (!interactive || sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
+                if (sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
                 if (ev.target.closest && ev.target.closest('.xbot-catalog-qty, .xbot-catalog-search, .xbot-catalog-dock, .xbot-catalog-modal-bar, .xbot-catalog-reopen')) {
                     return;
                 }
@@ -9034,7 +9023,7 @@
                         '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
                     )
                     : null;
-                if (!card || !catalogSurface.contains(card)) return;
+                if (!card || !catalogSurface.contains(card) || !interactive) return;
                 if (basketMode) {
                     if (card.classList.contains('xbot-catalog-card--pending')) return;
                     if (
@@ -9053,7 +9042,7 @@
                 selectCard(card);
             });
             catalogSurface.addEventListener('keydown', function (ev) {
-                if (!interactive || sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
+                if (sessionEpisodeEnded || typingLocked || !ev || !ev.target) return;
                 if (ev.key !== 'Enter' && ev.key !== ' ') return;
                 if (ev.target.closest && ev.target.closest('.xbot-catalog-qty, .xbot-catalog-search, textarea, input')) {
                     return;
@@ -9066,7 +9055,7 @@
                     revealMore();
                     return;
                 }
-                if (basketMode) return;
+                if (!interactive || basketMode) return;
                 var card = ev.target.closest
                     ? ev.target.closest(
                         '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
@@ -9097,38 +9086,17 @@
                 }
                 moreBtn.setAttribute('role', 'button');
                 if (!moreBtn.hasAttribute('tabindex')) moreBtn.setAttribute('tabindex', '0');
-                if (!interactive || sessionEpisodeEnded) {
+                if (sessionEpisodeEnded) {
                     moreBtn.classList.add('is-disabled');
                     moreBtn.setAttribute('aria-disabled', 'true');
                     moreBtn.removeAttribute('tabindex');
                 }
             }
 
-            if (!animateTyping) return;
-
-            var initialQueue = [];
-            for (var q = 0; q < cards.length; q++) {
-                if (cards[q].classList.contains('xbot-catalog-card--hidden')) continue;
-                cards[q].classList.add('xbot-catalog-card--pending');
-                cards[q].removeAttribute('tabindex');
-                initialQueue.push(cards[q]);
-            }
-            if (moreBtn) moreBtn.classList.add('xbot-catalog-ui--pending');
-            if (footerEl) footerEl.classList.add('xbot-catalog-ui--pending');
-
-            setTypingLock(true);
+            if (!animateTyping || prefersReducedMotion()) return;
             var introText = introEl ? String(introEl.textContent || '').trim() : '';
-            showLiveTyping('digitando');
-            typeText(introEl, introText || 'Encontrei estas opções no catálogo:', function () {
-                hideLiveTyping();
-                revealCardsSequentially(initialQueue, function () {
-                    if (moreBtn) moreBtn.classList.remove('xbot-catalog-ui--pending');
-                    if (footerEl) footerEl.classList.remove('xbot-catalog-ui--pending');
-                    if (typeof root._xbotRevealBasket === 'function') root._xbotRevealBasket();
-                    setTypingLock(false);
-                    scrollCatalog();
-                });
-            });
+            if (!introEl || !introText) return;
+            typeText(introEl, introText, function () {});
         }
 
         function prefersReducedMotion() {

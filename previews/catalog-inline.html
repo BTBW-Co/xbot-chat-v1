@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Preview · catálogo no xchat</title>
+  <style>
+    :root {
+      --xbot-surface: #fff;
+      --xbot-surface-alt: #f8fafc;
+      --xbot-border: #e2e8f0;
+      --xbot-ink: #0f172a;
+      --xbot-text: #1e293b;
+      --xbot-muted: #64748b;
+      --xbot-theme: #2563eb;
+      --xbot-theme-rgb: 37, 99, 235;
+      --xbot-font: "Segoe UI", system-ui, sans-serif;
+      --xbot-radius-lg: 16px;
+      --xbot-radius-xl: 22px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--xbot-font);
+      background: #e8edf5;
+      color: var(--xbot-ink);
+      padding: 28px 16px 48px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+    .lede {
+      margin: 0 0 22px;
+      color: #475569;
+      font-size: 14px;
+      max-width: 46rem;
+    }
+    .stage {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      align-items: flex-start;
+    }
+    .shot { display: flex; flex-direction: column; gap: 8px; }
+    .shot > span {
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+    .xbot-chatbox {
+      width: 380px;
+      height: 640px;
+      background: var(--xbot-surface);
+      border-radius: var(--xbot-radius-xl);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .xbot-chatbox.wide { width: 720px; height: 640px; }
+    .xbot-header {
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--xbot-border);
+      box-shadow: inset 0 -2px 0 rgba(var(--xbot-theme-rgb), 0.85);
+    }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #dbeafe; color: #1d4ed8;
+      display: grid; place-items: center; font-weight: 700;
+    }
+    .xbot-header-name { font-size: 14px; font-weight: 600; }
+    .xbot-header-sub { font-size: 12px; color: var(--xbot-muted); }
+    .xbot-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #fff;
+    }
+    .xbot-message-row { display: flex; gap: 8px; max-width: 92%; }
+    .xbot-message-row.user { align-self: flex-end; max-width: 85%; }
+    .xbot-message-row.bot.xbot-message-row--catalog {
+      max-width: 100%;
+      width: 100%;
+      align-self: stretch;
+    }
+    .xbot-message-row--catalog .xbot-message-col { flex: 1; width: 100%; }
+    .xbot-message {
+      padding: 10px 14px;
+      border-radius: var(--xbot-radius-lg);
+      font-size: 14px;
+      line-height: 1.45;
+      border: 1px solid var(--xbot-border);
+    }
+    .xbot-message.user {
+      background: rgba(var(--xbot-theme-rgb), 0.12);
+      border-color: rgba(var(--xbot-theme-rgb), 0.22);
+      border-bottom-right-radius: 4px;
+    }
+    .xbot-message.bot {
+      background: #fff;
+      border-bottom-left-radius: 4px;
+    }
+    .xbot-message-row--catalog .xbot-message { overflow: visible; padding: 10px; width: 100%; }
+    .xbot-text { container-type: inline-size; container-name: xbotcatalog; width: 100%; }
+    .xbot-text p { margin: 0 0 0.55em; }
+    .xbot-catalog-grid {
+      display: grid !important;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 13.5rem), 1fr)) !important;
+      gap: 8px;
+      width: 100%;
+      margin: 8px 0;
+    }
+    .xbot-catalog-card {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--xbot-border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--xbot-surface-alt);
+      min-width: 0;
+    }
+    .xbot-catalog-card--picked {
+      border-color: rgba(var(--xbot-theme-rgb), 0.7);
+      box-shadow: 0 0 0 2px rgba(var(--xbot-theme-rgb), 0.2);
+    }
+    .xbot-catalog-media { position: relative; flex-shrink: 0; }
+    .xbot-catalog-img, .xbot-catalog-photo-fallback {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      display: block;
+      background: #e2e8f0;
+    }
+    .xbot-catalog-photo-fallback {
+      display: flex; align-items: center; justify-content: center;
+      color: #94a3b8; font-size: 11px;
+    }
+    .xbot-catalog-body {
+      padding: 8px 10px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .xbot-catalog-title {
+      font-size: 13px; line-height: 1.3;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .xbot-catalog-price { margin-top: 4px; font-size: 13px; }
+    .xbot-catalog-desc {
+      margin-top: 4px; font-size: 12px; color: var(--xbot-muted); line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .xbot-catalog-qty {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: auto; padding-top: 8px; gap: 4px;
+    }
+    .xbot-catalog-qty button {
+      width: 36px; height: 36px; border-radius: 10px;
+      border: 1px solid var(--xbot-border); background: #fff;
+      font-size: 20px; line-height: 1; cursor: pointer;
+    }
+    .xbot-catalog-qty [data-qty-value] { font-weight: 700; font-size: 15px; min-width: 1.2em; text-align: center; }
+    .xbot-catalog-search {
+      box-sizing: border-box; width: 100%; min-height: 44px; margin: 8px 0 4px;
+      padding: 0 14px; border: 1px solid var(--xbot-border); border-radius: 12px;
+      font: inherit; font-size: 16px;
+    }
+    .xbot-catalog-dock {
+      position: sticky; bottom: 0; z-index: 2;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-top: 8px; padding: 10px; border-radius: 14px;
+      background: #fff; border: 1px solid var(--xbot-border);
+      box-shadow: 0 -6px 16px rgba(15, 23, 42, 0.06);
+    }
+    .xbot-catalog-dock-meta { display: flex; flex-direction: column; font-size: 12px; color: var(--xbot-muted); }
+    .xbot-catalog-dock-meta strong { font-size: 15px; color: var(--xbot-ink); }
+    .xbot-catalog-close {
+      min-height: 44px; padding: 0 14px; border: 0; border-radius: 12px;
+      background: var(--xbot-theme); color: #fff; font-weight: 700; font-size: 14px;
+    }
+    .xbot-compose {
+      display: flex; gap: 8px; padding: 10px 12px 14px; border-top: 1px solid var(--xbot-border);
+    }
+    .xbot-compose input {
+      flex: 1; min-height: 40px; border-radius: 12px; border: 1px solid var(--xbot-border);
+      padding: 0 12px; font: inherit;
+    }
+    .xbot-compose button {
+      border: 0; border-radius: 12px; background: var(--xbot-theme); color: #fff;
+      padding: 0 14px; font-weight: 700;
+    }
+    @container xbotcatalog (max-width: 27rem) {
+      .xbot-catalog-grid { grid-template-columns: minmax(0, 1fr) !important; }
+      .xbot-catalog-card { flex-direction: row; align-items: stretch; }
+      .xbot-catalog-media { width: 84px; flex: 0 0 84px; align-self: stretch; min-height: 84px; }
+      .xbot-catalog-media .xbot-catalog-img,
+      .xbot-catalog-media .xbot-catalog-photo-fallback {
+        width: 100%; height: 100%; min-height: 84px; aspect-ratio: auto; object-fit: cover;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Catálogo dentro da conversa</h1>
+  <p class="lede">A grade usa a largura da conversa: lista no painel do xchat e mais colunas quando o chat é largo. O campo de mensagem continua visível.</p>
+  <div class="stage">
+    <div class="shot">
+      <span>XChat · 380px</span>
+      <section class="xbot-chatbox" id="narrow"></section>
+    </div>
+    <div class="shot">
+      <span>Conversa larga · 720px</span>
+      <section class="xbot-chatbox wide" id="wide"></section>
+    </div>
+  </div>
+  <template id="thread">
+    <header class="xbot-header">
+      <div class="avatar">B</div>
+      <div>
+        <div class="xbot-header-name">Boteco da Praça</div>
+        <div class="xbot-header-sub">online</div>
+      </div>
+    </header>
+    <div class="xbot-messages">
+      <div class="xbot-message-row user">
+        <div class="xbot-message user">Quero ver o cardápio</div>
+      </div>
+      <div class="xbot-message-row bot xbot-message-row--catalog">
+        <div class="xbot-message-col">
+          <div class="xbot-message bot">
+            <div class="xbot-text">
+              <p>Encontrei estas opções no catálogo:</p>
+              <input class="xbot-catalog-search" type="search" placeholder="Buscar no cardápio" aria-label="Buscar no cardápio" />
+              <div class="xbot-catalog-grid" data-xbot="catalog-grid">
+                <article class="xbot-catalog-card xbot-catalog-card--picked" data-xbot-card="catalog">
+                  <div class="xbot-catalog-media"><img class="xbot-catalog-img" alt="Picanha" src="https://images.unsplash.com/photo-1558030006-450675393462?auto=format&fit=crop&w=480&q=60" /></div>
+                  <div class="xbot-catalog-body">
+                    <div class="xbot-catalog-title"><strong>Picanha na brasa</strong></div>
+                    <div class="xbot-catalog-price"><strong>R$ 89,00</strong></div>
+                    <div class="xbot-catalog-desc">Grelhada no ponto, com farofa e vinagrete.</div>
+                    <div class="xbot-catalog-qty"><button type="button" aria-label="Diminuir">−</button><span data-qty-value>1</span><button type="button" aria-label="Aumentar">+</button></div>
+                  </div>
+                </article>
+                <article class="xbot-catalog-card" data-xbot-card="catalog">
+                  <div class="xbot-catalog-media"><img class="xbot-catalog-img" alt="Moqueca" src="https://images.unsplash.com/photo-1535399831218-d5bd36d1a6b3?auto=format&fit=crop&w=480&q=60" /></div>
+                  <div class="xbot-catalog-body">
+                    <div class="xbot-catalog-title"><strong>Moqueca de camarão</strong></div>
+                    <div class="xbot-catalog-price"><strong>R$ 72,00</strong></div>
+                    <div class="xbot-catalog-desc">Leite de coco, azeite de dendê e arroz.</div>
+                    <div class="xbot-catalog-qty"><button type="button">−</button><span data-qty-value>0</span><button type="button">+</button></div>
+                  </div>
+                </article>
+                <article class="xbot-catalog-card" data-xbot-card="catalog">
+                  <div class="xbot-catalog-media"><div class="xbot-catalog-photo-fallback">Sem foto</div></div>
+                  <div class="xbot-catalog-body">
+                    <div class="xbot-catalog-title"><strong>Caipirinha de limão</strong></div>
+                    <div class="xbot-catalog-price"><strong>R$ 18,00</strong></div>
+                    <div class="xbot-catalog-desc">Limão, cachaça e gelo.</div>
+                    <div class="xbot-catalog-qty"><button type="button">−</button><span data-qty-value>0</span><button type="button">+</button></div>
+                  </div>
+                </article>
+                <article class="xbot-catalog-card" data-xbot-card="catalog">
+                  <div class="xbot-catalog-media"><img class="xbot-catalog-img" alt="Pudim" src="https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=480&q=60" /></div>
+                  <div class="xbot-catalog-body">
+                    <div class="xbot-catalog-title"><strong>Pudim de leite</strong></div>
+                    <div class="xbot-catalog-price"><strong>R$ 16,00</strong></div>
+                    <div class="xbot-catalog-desc">Calda de caramelo, fatia individual.</div>
+                    <div class="xbot-catalog-qty"><button type="button">−</button><span data-qty-value>0</span><button type="button">+</button></div>
+                  </div>
+                </article>
+              </div>
+              <div class="xbot-catalog-dock">
+                <div class="xbot-catalog-dock-meta"><strong>1 item</strong><span>R$ 89,00</span></div>
+                <button type="button" class="xbot-catalog-close">Fechar pedido</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <form class="xbot-compose" onsubmit="return false">
+      <input placeholder="Escreva uma mensagem" aria-label="Mensagem" />
+      <button type="button">Enviar</button>
+    </form>
+  </template>
+  <script>
+    var tpl = document.getElementById('thread');
+    document.getElementById('narrow').appendChild(tpl.content.cloneNode(true));
+    document.getElementById('wide').appendChild(tpl.content.cloneNode(true));
+  </script>
+</body>
+</html>
