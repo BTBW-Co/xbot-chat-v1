@@ -4298,28 +4298,41 @@
                 width: 5px;
                 height: 5px;
             }
+            /* O frame é o .xbot-catalog-media. Foto e "Sem foto" preenchem
+               o mesmo retângulo; a proporção intrínseca da imagem não altera a caixa. */
             .xbot-catalog-media {
                 position: relative;
                 flex-shrink: 0;
-            }
-            .xbot-catalog-img,
-            .xbot-text [data-xbot="catalog-grid"] img,
-            .xbot-text [data-xbot="locate-grid"] img {
                 width: 100%;
-                height: auto;
                 aspect-ratio: 4 / 3;
-                object-fit: cover;
-                display: block;
+                overflow: hidden;
+                background: #e2e8f0;
+            }
+            .xbot-catalog-media > .xbot-catalog-img,
+            .xbot-catalog-media > img,
+            .xbot-message .xbot-catalog-media > img,
+            .xbot-text [data-xbot="catalog-grid"] .xbot-catalog-media > img,
+            .xbot-text [data-xbot="locate-grid"] .xbot-catalog-media > img {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                max-width: none;
                 margin: 0;
+                aspect-ratio: auto;
+                object-fit: cover;
+                object-position: center;
+                display: block;
                 border-radius: 0;
                 background: #e2e8f0;
-                flex-shrink: 0;
             }
-            .xbot-catalog-photo-fallback {
+            .xbot-catalog-media > .xbot-catalog-photo-fallback {
+                position: absolute;
+                inset: 0;
                 width: 100%;
-                aspect-ratio: 4 / 3;
-                height: auto;
-                flex-shrink: 0;
+                height: 100%;
+                margin: 0;
+                aspect-ratio: auto;
                 background: #e2e8f0;
                 display: flex;
                 align-items: center;
@@ -4393,8 +4406,7 @@
             .xbot-catalog-basket [data-xbot="catalog-grid"] {
                 gap: 6px;
             }
-            .xbot-catalog-basket .xbot-catalog-img,
-            .xbot-catalog-basket .xbot-catalog-photo-fallback {
+            .xbot-catalog-basket .xbot-catalog-media {
                 aspect-ratio: 1 / 1;
             }
             .xbot-catalog-basket .xbot-catalog-media {
@@ -4475,23 +4487,33 @@
                 cursor: pointer;
                 box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
             }
-            .xbot-catalog-detail-photo img {
+            .xbot-catalog-detail-photo {
+                position: relative;
                 width: 100%;
-                max-height: min(46vh, 360px);
                 aspect-ratio: 4 / 3;
-                object-fit: contain;
-                display: block;
+                max-height: min(46vh, 360px);
+                overflow: hidden;
+                background: #e2e8f0;
+            }
+            .xbot-catalog-detail-photo img,
+            .xbot-catalog-detail-fallback {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                max-height: none;
                 margin: 0;
-                background: #0f172a;
+                aspect-ratio: auto;
+                object-fit: cover;
+                object-position: center;
+                display: block;
+                border-radius: 0;
+                background: #e2e8f0;
             }
             .xbot-catalog-detail-fallback {
-                width: 100%;
-                aspect-ratio: 4 / 3;
-                max-height: min(46vh, 360px);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: #e2e8f0;
                 color: #64748b;
                 font-size: 14px;
             }
@@ -4994,6 +5016,11 @@
                 flex-direction: column;
                 gap: 2px;
                 min-width: 0;
+            }
+            .xbot-recap-note dd {
+                font-size: 12px;
+                line-height: 1.45;
+                color: var(--xbot-muted);
             }
             .xbot-recap-item dt {
                 font-size: 11px;
@@ -6826,6 +6853,8 @@
         var messagesKeyboardOpen = false;
         var messagesStickBound = false;
         var messagesStickScrollRaf = 0;
+        /** Mensagem do bot mais alta que a tela: mantém o início visível. */
+        var stickToMessageStartRow = null;
 
         function isMessagesNearBottom(el, thresholdPx) {
             if (!el) return true;
@@ -6843,14 +6872,67 @@
             messagesIgnoreScrollPinUntil = Date.now() + (ms == null ? 480 : ms);
         }
 
+        function latestBotMessageRow(el) {
+            if (!el || !el.querySelector) return null;
+            var rows = el.querySelectorAll(':scope > .xbot-message-row.bot');
+            return rows.length ? rows[rows.length - 1] : null;
+        }
+
+        function rowTallerThanViewport(row, el) {
+            if (!row || !el) return false;
+            return row.offsetHeight > el.clientHeight - 12;
+        }
+
+        /** Alinha o topo da bolha com o topo da conversa. */
+        function scrollRowToStart(row, opts) {
+            opts = opts || {};
+            var el = document.getElementById('xbot-messages');
+            if (!el || !row || !row.getBoundingClientRect) return;
+            var delta = row.getBoundingClientRect().top - el.getBoundingClientRect().top;
+            var next = el.scrollTop + delta - 6;
+            if (next < 0) next = 0;
+            var max = Math.max(0, el.scrollHeight - el.clientHeight);
+            if (next > max) next = max;
+            if (Math.abs(el.scrollTop - next) < 2) return;
+            markMessagesProgrammaticScroll(opts.ignoreMs != null ? opts.ignoreMs : 520);
+            var prevBehavior = el.style.scrollBehavior;
+            el.style.scrollBehavior = 'auto';
+            el.scrollTop = next;
+            el.style.scrollBehavior = prevBehavior;
+        }
+
         function scrollMessagesToBottom(opts) {
             opts = opts || {};
             if (chatbox && chatbox.classList.contains('xbot-catalog-open') && !opts.force) return;
             var el = document.getElementById('xbot-messages');
             if (!el) return;
-            if (opts.force) messagesAutoScrollPinned = true;
-            if (!opts.force) {
+            if (opts.force) {
+                stickToMessageStartRow = null;
+                messagesAutoScrollPinned = true;
+            } else {
                 if (Date.now() < suppressMessagesAutoScrollUntil) return;
+                var overflow = latestBotMessageRow(el);
+                var anchored = stickToMessageStartRow && stickToMessageStartRow.isConnected
+                    ? stickToMessageStartRow
+                    : null;
+                if (anchored && !rowTallerThanViewport(anchored, el)) {
+                    stickToMessageStartRow = null;
+                    anchored = null;
+                }
+                var target = null;
+                if (
+                    overflow &&
+                    rowTallerThanViewport(overflow, el) &&
+                    (messagesAutoScrollPinned || anchored === overflow)
+                ) {
+                    target = overflow;
+                }
+                if (target) {
+                    stickToMessageStartRow = target;
+                    messagesAutoScrollPinned = false;
+                    scrollRowToStart(target, { ignoreMs: opts.ignoreMs });
+                    return;
+                }
                 if (!messagesAutoScrollPinned) return;
             }
             markMessagesProgrammaticScroll(opts.ignoreMs != null ? opts.ignoreMs : 480);
@@ -6898,6 +6980,7 @@
             el.addEventListener('scroll', function () {
                 // Resize de teclado/programático não conta como “usuário subiu”.
                 if (Date.now() < messagesIgnoreScrollPinUntil) return;
+                stickToMessageStartRow = null;
                 // Enquanto o visitante lê o histórico, não puxa para o fim.
                 messagesAutoScrollPinned = isMessagesNearBottom(el, 120);
             }, { passive: true });
@@ -8548,7 +8631,9 @@
                     dl.className = 'xbot-recap-list';
                     (block.fields || []).forEach(function (field) {
                         var item = document.createElement('div');
-                        item.className = 'xbot-recap-item';
+                        item.className = field && field.label === 'Segurança'
+                            ? 'xbot-recap-item xbot-recap-note'
+                            : 'xbot-recap-item';
                         var dt = document.createElement('dt');
                         dt.textContent = field.label;
                         var dd = document.createElement('dd');
@@ -8826,6 +8911,17 @@
                 }
                 if (cards[c].getAttribute('data-xbot-catalog-hidden') === '1') {
                     cards[c].classList.add('xbot-catalog-card--hidden');
+                }
+                if (!cards[c].querySelector(':scope > .xbot-catalog-media')) {
+                    var loose = cards[c].querySelector(
+                        ':scope > .xbot-catalog-img, :scope > .xbot-catalog-photo-fallback, :scope > img'
+                    );
+                    if (loose) {
+                        var frame = document.createElement('div');
+                        frame.className = 'xbot-catalog-media';
+                        loose.parentNode.insertBefore(frame, loose);
+                        frame.appendChild(loose);
+                    }
                 }
             }
 
@@ -9502,8 +9598,8 @@
             function finish() {
                 textEl.classList.remove('xbot-typecursor');
                 textEl.innerHTML = html;
-                // Blocos (Answer, opções, etc.) entram no onDone e aumentam a altura —
-                // scroll depois para a mensagem aparecer por inteiro.
+                // Blocos (Answer, opções, etc.) entram no onDone e aumentam a altura.
+                // Mensagem maior que a tela fica alinhada no início; as curtas, no fim.
                 if (onDone) onDone();
                 scheduleScrollMessagesToBottom();
             }
