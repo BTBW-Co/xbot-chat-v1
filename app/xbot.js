@@ -6320,10 +6320,14 @@
                 cursor: not-allowed;
                 pointer-events: none;
             }
-            .xbot-send:disabled:hover,
             .xbot-icon-btn:disabled:hover {
                 background: transparent;
                 color: inherit;
+            }
+            .xbot-send:disabled:hover {
+                color: #fff;
+                background: var(--xbot-theme);
+                filter: none;
             }
             .xbot-time {
                 font-size: 10px;
@@ -6609,17 +6613,34 @@
                 flex-shrink: 0;
                 border: none;
                 border-radius: 50%;
-                background: transparent;
-                color: var(--xbot-subtle);
+                background: var(--xbot-theme);
+                color: #fff;
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: background 0.15s, color 0.15s, transform 0.12s;
+                transition: background 0.15s, color 0.15s, transform 0.12s, filter 0.15s;
             }
             .xbot-send:hover {
-                color: var(--xbot-ink);
-                background: rgba(15, 23, 42, 0.06);
+                color: #fff;
+                background: var(--xbot-theme);
+                filter: brightness(0.92);
+            }
+            .xbot-send[hidden] {
+                display: none !important;
+            }
+            #xbot-audio.is-recording {
+                background: #ef4444 !important;
+                color: #fff !important;
+                filter: none !important;
+                animation: xbot-rec-pulse 1.15s ease-in-out infinite;
+            }
+            #xbot-audio.is-uploading {
+                pointer-events: none;
+                opacity: 0.9;
+            }
+            #xbot-audio.is-uploading svg {
+                animation: xbot-rec-spin 0.85s linear infinite;
             }
             .xbot-send:active { transform: scale(0.94); }
             .xbot-send:focus-visible {
@@ -6792,12 +6813,12 @@
             '<div class="xbot-compose-tools">' +
             '<button type="button" class="xbot-icon-btn" id="xbot-upload" aria-label="' + xbotChrome('attach') + '">' +
             XBOT_ICONS.attach +
-            '</button>' +
-            '<button type="button" class="xbot-icon-btn" id="xbot-audio" aria-label="' + xbotChrome('record') + '">' +
-            XBOT_ICONS.mic +
             '</button></div>' +
             '<textarea class="xbot-input" id="xbot-input" placeholder="' + xbotChrome('placeholder') + '" rows="1"></textarea>' +
-            '<button type="button" class="xbot-send" id="xbot-send" aria-label="' + xbotChrome('send') + '" tabindex="-1">' +
+            '<button type="button" class="xbot-send" id="xbot-audio" aria-label="' + xbotChrome('record') + '">' +
+            XBOT_ICONS.mic +
+            '</button>' +
+            '<button type="button" class="xbot-send" id="xbot-send" hidden aria-label="' + xbotChrome('send') + '" tabindex="-1">' +
             XBOT_ICONS.send +
             '</button></div></div>' +
             '<div class="xbot-footer">' +
@@ -7286,9 +7307,22 @@
             }
         });
 
+        function syncComposerPrimaryAction() {
+            var audioEl = document.getElementById('xbot-audio');
+            var sendEl = document.getElementById('xbot-send');
+            var inputEl = document.getElementById('xbot-input');
+            if (!audioEl || !sendEl || !inputEl) return;
+            var holdAudio = audioEl.classList.contains('is-recording') || audioEl.classList.contains('is-uploading');
+            var hasChars = String(inputEl.value || '').length > 0;
+            var showAudio = holdAudio || !hasChars;
+            audioEl.hidden = !showAudio;
+            sendEl.hidden = !hasChars || holdAudio;
+        }
+
         input.addEventListener('input', function () {
             input.style.height = 'auto';
             input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+            syncComposerPrimaryAction();
         });
 
         var mobileViewportListenersBound = false;
@@ -9974,6 +10008,7 @@
             if (input) {
                 input.value = '';
                 input.style.height = 'auto';
+                syncComposerPrimaryAction();
             }
             focusMessageInput();
             pollSessionInactivity();
@@ -10140,6 +10175,7 @@
             audioBtn.innerHTML = XBOT_ICONS.mic;
             audioBtn.setAttribute('aria-label', xbotChrome('record'));
             audioBtn.disabled = isPresentationComposerLocked();
+            syncComposerPrimaryAction();
         }
 
         function setAudioBtnRecording() {
@@ -10148,6 +10184,7 @@
             audioBtn.innerHTML = XBOT_ICONS.stop;
             audioBtn.setAttribute('aria-label', xbotChrome('stop'));
             audioBtn.disabled = false;
+            syncComposerPrimaryAction();
         }
 
         function setAudioBtnUploading() {
@@ -10156,6 +10193,7 @@
             audioBtn.innerHTML = XBOT_ICONS.spinner;
             audioBtn.setAttribute('aria-label', 'Enviando áudio');
             audioBtn.disabled = true;
+            syncComposerPrimaryAction();
         }
 
         function pickRecorderMime() {
