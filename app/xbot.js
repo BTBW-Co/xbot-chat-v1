@@ -6657,14 +6657,13 @@
             .xbot-powered {
                 font-size: 11px;
                 color: var(--xbot-subtle);
-                text-decoration: none;
                 letter-spacing: 0.02em;
+                cursor: default;
             }
             .xbot-powered strong {
                 color: var(--xbot-ink);
                 font-weight: 600;
             }
-            .xbot-powered:hover strong { color: var(--xbot-theme); }
 
             @media screen and (min-width: 601px) and (max-width: 900px) {
                 .xbot-chatbox {
@@ -6822,8 +6821,7 @@
             XBOT_ICONS.send +
             '</button></div></div>' +
             '<div class="xbot-footer">' +
-            '<a class="xbot-powered" href="https://www.xbotone.com" target="_blank" rel="noopener noreferrer">' +
-            'Powered by <strong>XBot</strong></a></div>';
+            '<span class="xbot-powered">Powered by <strong>XBot</strong></span></div>';
 
         chatbox.querySelector('.xbot-header-name').textContent = botName;
 
