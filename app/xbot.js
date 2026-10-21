@@ -524,6 +524,7 @@
         var lastBotPollAt = null;
         var lastBotMessageId = null;
         var seenBotMessageKeys = {};
+        var optimisticBotEcho = null;
         var pollTimer = null;
         /** Poll HTTP só como fallback quando SSE cair (evita dobrar carga na API). */
         var XCHAT_POLL_MS = 8000;
@@ -718,6 +719,7 @@
             lastBotPollAt = null;
             lastBotMessageId = null;
             seenBotMessageKeys = {};
+            optimisticBotEcho = null;
             closureNoticeRendered = false;
             try {
                 var pollKey = pollStorageKey();
@@ -1428,6 +1430,13 @@
             if (sessionEpisodeEnded && source !== 'history' && !meta.session_closed) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
             var dedupKey = isMedia ? ('media:' + mediaUrl + '|' + body) : body;
+            // O POST pinta a fala na hora. O stream reentrega a mesma linha, agora com id.
+            // Essa confirmação não desenha de novo. Outra fala igual, com outro id, continua aparecendo.
+            if (item && item.id && source !== 'history' && source !== 'hydrate' && source !== 'opening' && consumeOptimisticBotEcho(dedupKey)) {
+                rememberBotMessage(item, dedupKey);
+                saveLastBotMessageId(item.id);
+                return;
+            }
             // Dedup por conteúdo só para payloads sem id (otimista/local). Com id, mensagens
             // repetidas legítimas (ex.: "Como posso te ajudar?") precisam aparecer.
             if ((!item || !item.id) && seenBotMessageKeys['c:' + dedupKey]) return;
@@ -2288,14 +2297,34 @@
             }
         }
 
+        function ingestPostedReply(data, replyText) {
+            var posted = data && data.bot_message_id
+                ? { id: String(data.bot_message_id), content: replyText }
+                : null;
+            ingestBotPayload(posted, replyText, 'post');
+        }
+
+        function consumeOptimisticBotEcho(key) {
+            if (!optimisticBotEcho || optimisticBotEcho.key !== key) return false;
+            if (Date.now() > optimisticBotEcho.until) {
+                optimisticBotEcho = null;
+                return false;
+            }
+            optimisticBotEcho = null;
+            return true;
+        }
+
         function rememberBotMessage(item, content) {
+            var body = (content || '').trim();
             if (item && item.id) {
                 seenBotMessageKeys['id:' + item.id] = true;
                 if (item.created_at) saveLastBotPollAt(item.created_at);
                 return;
             }
-            var body = (content || '').trim();
-            if (body) seenBotMessageKeys['c:' + body] = true;
+            if (body) {
+                seenBotMessageKeys['c:' + body] = true;
+                optimisticBotEcho = { key: body, until: Date.now() + 60000 };
+            }
             if (item && item.created_at) saveLastBotPollAt(item.created_at);
         }
 
@@ -2481,6 +2510,7 @@
                 clearMessageRows(histContainer);
                 ensureEmptyStateEl();
                 seenBotMessageKeys = {};
+                optimisticBotEcho = null;
                 var hasUserInHistory = false;
                 var botOnlyCount = 0;
                 for (var h = 0; h < list.length; h++) {
@@ -9966,7 +9996,7 @@
                 }
                 if (data && data.reply) {
                     var replyText = String(data.reply).trim();
-                    if (replyText) ingestBotPayload(null, replyText, 'post');
+                    if (replyText) ingestPostedReply(data, replyText);
                     else finishWaitingForBot();
                 } else if (data && data.bot_reply_enabled) {
                     beginWaitingForBot();
@@ -10035,7 +10065,7 @@
                     finishWaitingForBot();
                 } else if (data.reply) {
                     var replyText = String(data.reply).trim();
-                    if (replyText) ingestBotPayload(null, replyText, 'post');
+                    if (replyText) ingestPostedReply(data, replyText);
                     else finishWaitingForBot();
                 } else if (data.bot_reply_enabled) {
                     beginWaitingForBot();
