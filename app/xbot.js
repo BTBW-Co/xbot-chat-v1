@@ -10166,7 +10166,30 @@
         let chunks = [];
         let isRecording = false;
         let isUploadingAudio = false;
+        let discardAudio = false;
         let recordingStream = null;
+
+        function discardAudioRecording() {
+            if (!isRecording || isUploadingAudio) return false;
+            discardAudio = true;
+            isRecording = false;
+            chunks = [];
+            try {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                    return true;
+                }
+            } catch (e) { /* ignore */ }
+            discardAudio = false;
+            if (recordingStream) {
+                try { recordingStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e2) {}
+                recordingStream = null;
+            }
+            isUploadingAudio = false;
+            setAudioBtnIdle();
+            return true;
+        }
+        window.__xbotDiscardRecording = discardAudioRecording;
 
         function setAudioBtnIdle() {
             audioBtn.classList.remove('is-recording', 'is-uploading');
@@ -10210,6 +10233,10 @@
             return { mimeType: '', filename: 'audio.webm', blobType: 'audio/webm' };
         }
 
+        audioBtn.addEventListener('xbot:discard-recording', function (ev) {
+            if (discardAudioRecording()) ev.preventDefault();
+        });
+
         audioBtn.addEventListener('click', async () => {
             if (isUploadingAudio) return;
             if (isPresentationComposerLocked() && !isRecording) return;
@@ -10238,6 +10265,18 @@
                     if (e.data && e.data.size) chunks.push(e.data);
                 };
                 mediaRecorder.onstop = async () => {
+                    if (discardAudio) {
+                        discardAudio = false;
+                        chunks = [];
+                        if (recordingStream) {
+                            try { recordingStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+                            recordingStream = null;
+                        }
+                        isUploadingAudio = false;
+                        isRecording = false;
+                        setAudioBtnIdle();
+                        return;
+                    }
                     resumeRealtimeAfterUserSend();
                     beginNewEpisodeFromUserMessage();
                     if (recordingStream) {
