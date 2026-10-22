@@ -10057,7 +10057,8 @@
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
                 if (data.message_id && userRow) {
-                    mountMessageReactions(userRow, data.message_id, [], 'user');
+                    var seed = data.reaction ? [{ from: 'assistant', emoji: data.reaction }] : [];
+                    mountMessageReactions(userRow, data.message_id, seed, 'user');
                 }
                 sendVisitorPresence({ chat_open: true, page_visible: true }, { force: true });
                 applyComposerLockedFlag(data.composer_locked);
@@ -10067,6 +10068,8 @@
                     var replyText = String(data.reply).trim();
                     if (replyText) ingestPostedReply(data, replyText);
                     else finishWaitingForBot();
+                } else if (data.reaction) {
+                    finishWaitingForBot();
                 } else if (data.bot_reply_enabled) {
                     beginWaitingForBot();
                 } else {
@@ -10100,6 +10103,23 @@
         fileInput.accept = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.doc,.docx';
         fileInput.style.display = 'none';
         document.body.appendChild(fileInput);
+
+        function finishUploadAssistant(userRow, data) {
+            if (data && data.message_id && userRow) {
+                var seed = data.reaction ? [{ from: 'assistant', emoji: data.reaction }] : [];
+                mountMessageReactions(userRow, data.message_id, seed, 'user');
+            }
+            if (data && data.reply && String(data.reply).trim()) {
+                ingestPostedReply(data, String(data.reply).trim());
+                return;
+            }
+            if (data && data.reaction) {
+                finishWaitingForBot();
+                return;
+            }
+            if (data && data.bot_reply_enabled) beginWaitingForBot();
+            else finishWaitingForBot();
+        }
 
         async function uploadUserFile(file) {
             if (!file) return null;
@@ -10145,7 +10165,7 @@
                     'file'
                 );
             }
-            appendMessage('', 'user', { domNode: mediaNode });
+            var userRow = appendMessage('', 'user', { domNode: mediaNode });
             beginWaitingForBot();
             pollSessionInactivity();
 
@@ -10161,11 +10181,7 @@
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
                 sendVisitorPresence({ chat_open: true, page_visible: true }, { force: true });
-                if (data.bot_reply_enabled) {
-                    beginWaitingForBot();
-                } else {
-                    finishWaitingForBot();
-                }
+                finishUploadAssistant(userRow, data);
                 return data;
             } catch (err) {
                 finishWaitingForBot();
@@ -10322,7 +10338,7 @@
 
                     setAudioBtnUploading();
                     var localAudioUrl = URL.createObjectURL(blob);
-                    appendMessage('', 'user', {
+                    var userRow = appendMessage('', 'user', {
                         domNode: wrapMediaWithDownload(
                             createXbotAudioPlayer(localAudioUrl),
                             localAudioUrl,
@@ -10349,11 +10365,7 @@
                         if (data.visitor_id && typeof localStorage !== 'undefined') {
                             try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                         }
-                        if (data.bot_reply_enabled) {
-                            beginWaitingForBot();
-                        } else {
-                            finishWaitingForBot();
-                        }
+                        finishUploadAssistant(userRow, data);
                         pollSessionInactivity();
                     } catch (err) {
                         finishWaitingForBot();
