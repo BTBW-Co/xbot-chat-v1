@@ -1,10 +1,13 @@
 {
   "name": "xbot-chat-v1",
   "private": true,
-  "version": "1.0.98",
+  "version": "1.0.99",
   "description": "Widget XChat embeddable",
   "scripts": {
     "build": "bash scripts/build-widget.sh",
     "build:min": "npx --yes terser app/xbot.js -c -m"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.15"
   }
 }

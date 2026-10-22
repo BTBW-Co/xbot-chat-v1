@@ -13,13 +13,15 @@ SITE_DEST="$ROOT/../xbot-site-v1/public/xchat/xbot.min.js"
 
 mkdir -p "$OUT_DIR" versions/latest
 TMP_SRC="$(mktemp)"
-# phoneCountries.js (catálogo do seletor) + xbot.js com versão injetada
+PHONE_BUNDLE="$(mktemp)"
+# libphonenumber (campo único de telefone, o mesmo do MOBA) + xbot.js com versão injetada
+npx --yes esbuild "$ROOT/app/phoneRuntimeEntry.js" --bundle --format=iife --outfile="$PHONE_BUNDLE"
 {
-  cat app/phoneCountries.js
+  cat "$PHONE_BUNDLE"
   sed "s/__XBOT_WIDGET_VERSION__/${VERSION}/g" app/xbot.js
 } > "$TMP_SRC"
 npx --yes terser "$TMP_SRC" -c -m -o "$OUT_FILE"
-rm -f "$TMP_SRC"
+rm -f "$TMP_SRC" "$PHONE_BUNDLE"
 cp "$OUT_FILE" "$LATEST"
 
 SHA="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
