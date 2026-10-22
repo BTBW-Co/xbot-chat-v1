@@ -1416,6 +1416,58 @@
             return card;
         }
 
+        function buildShareBlock(value) {
+            var wrap = document.createElement('div');
+            wrap.className = 'xbot-share-block';
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'xbot-share-copy';
+            btn.setAttribute('aria-label', 'Copiar');
+            var copyIcon = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
+            var doneIcon = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
+            btn.innerHTML = copyIcon;
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                copyPlainText(value).then(function () {
+                    btn.classList.add('is-copied');
+                    btn.setAttribute('aria-label', 'Copiado');
+                    btn.innerHTML = doneIcon;
+                    setTimeout(function () {
+                        if (!btn.isConnected) return;
+                        btn.classList.remove('is-copied');
+                        btn.setAttribute('aria-label', 'Copiar');
+                        btn.innerHTML = copyIcon;
+                    }, 1600);
+                }).catch(function () {});
+            });
+            var pre = document.createElement('pre');
+            var code = document.createElement('code');
+            code.textContent = value;
+            pre.appendChild(code);
+            wrap.appendChild(btn);
+            wrap.appendChild(pre);
+            return wrap;
+        }
+
+        function splitShareableText(text) {
+            var raw = String(text || '').trim();
+            if (!raw) return { prose: '', clips: [] };
+            var re = /https?:\/\/[^\s<>\]\)"']+/gi;
+            var clips = [];
+            var match;
+            while ((match = re.exec(raw))) {
+                var url = String(match[0] || '').replace(/[.,;:!?)\]]+$/, '');
+                if (url && clips.indexOf(url) < 0) clips.push(url);
+            }
+            if (!clips.length) return { prose: raw, clips: [] };
+            var prose = raw;
+            clips.forEach(function (url) { prose = prose.split(url).join(' '); });
+            prose = prose.replace(/\b(?:seu convite é|o link é)\b/gi, ' ');
+            prose = prose.replace(/\s+/g, ' ').replace(/^[\s.:-]+|[\s.:-]+$/g, '');
+            return { prose: prose, clips: clips };
+        }
+
         function ingestBotPayload(item, content, source) {
             var body = (content || '').trim();
             var meta = (item && item.metadata && typeof item.metadata === 'object') ? item.metadata : {};
@@ -1425,7 +1477,7 @@
             var actions = extractReplyActions(meta);
             var blocks = extractStructuredBlocks(meta);
             var linkOnly = !isMedia ? parseLinkOnlyMessage(body) : null;
-            if (linkOnly && seenBotMessageKeys['link:' + canonicalLinkUrl(linkOnly.url)]) return;
+            if (linkOnly && (!item || !item.id) && seenBotMessageKeys['link:' + canonicalLinkUrl(linkOnly.url)]) return;
             if (!body && !isMedia && !blocks.length && !actions.length) return;
             if (sessionEpisodeEnded && source !== 'history' && !meta.session_closed) return;
             if (item && item.id && seenBotMessageKeys['id:' + item.id]) return;
@@ -1480,16 +1532,24 @@
                     waitUntilVideoEnds: source !== 'history' && source !== 'hydrate' && isWaitUntilVideoEndsMeta(meta)
                 });
             } else {
-                appendMessage(body, 'bot', {
+                var shareSplit = !linkOnly ? splitShareableText(body) : null;
+                var displayBody = shareSplit && shareSplit.clips.length ? shareSplit.prose : body;
+                appendMessage(displayBody, 'bot', {
                     countUnread: source !== 'history' && source !== 'opening',
                     actions: actions,
                     blocks: blocks,
                     interactive: source !== 'history' && source !== 'opening',
-                    animateTyping: animateTyping,
+                    animateTyping: animateTyping && !(shareSplit && shareSplit.clips.length),
                     linkCard: linkOnly || null,
                     messageId: item && item.id ? item.id : null,
                     reactions: meta.reactions || []
                 });
+                if (shareSplit && shareSplit.clips.length) {
+                    shareSplit.clips.forEach(function (url) {
+                        appendMessage(url, 'bot', { shareBlock: true, animateTyping: false });
+                        seenBotMessageKeys['link:' + canonicalLinkUrl(url)] = 1;
+                    });
+                }
             }
             rememberBotMessage(item, dedupKey);
             if (linkOnly) seenBotMessageKeys['link:' + canonicalLinkUrl(linkOnly.url)] = 1;
@@ -2297,11 +2357,28 @@
             }
         }
 
+        function paintPostedClips(data) {
+            var clips = data && Array.isArray(data.clips) ? data.clips : [];
+            var painted = false;
+            clips.forEach(function (clip) {
+                var value = String(clip || '').trim();
+                if (!value) return;
+                var linkKey = 'link:' + canonicalLinkUrl(value);
+                if (seenBotMessageKeys[linkKey]) return;
+                appendMessage(value, 'bot', { shareBlock: true, animateTyping: false });
+                rememberBotMessage(null, value);
+                seenBotMessageKeys['link:' + canonicalLinkUrl(value)] = 1;
+                painted = true;
+            });
+            return painted;
+        }
+
         function ingestPostedReply(data, replyText) {
             var posted = data && data.bot_message_id
                 ? { id: String(data.bot_message_id), content: replyText }
                 : null;
             ingestBotPayload(posted, replyText, 'post');
+            paintPostedClips(data);
         }
 
         function consumeOptimisticBotEcho(key) {
@@ -6419,6 +6496,59 @@
                 overflow-wrap: anywhere;
                 word-break: break-all;
             }
+            .xbot-message-row--share {
+                width: 100%;
+                max-width: 92%;
+            }
+            .xbot-message-row--share .xbot-message.bot {
+                background: transparent;
+                border: 0;
+                box-shadow: none;
+                padding: 0;
+            }
+            .xbot-share-block {
+                position: relative;
+                width: 100%;
+                box-sizing: border-box;
+                margin: 0;
+                padding: 28px 12px 12px;
+                border: 1px solid var(--xbot-border);
+                border-radius: 12px;
+                background: var(--xbot-surface-alt, #f6f6f6);
+            }
+            .xbot-share-copy {
+                position: absolute;
+                top: 6px;
+                right: 6px;
+                width: 28px;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: 0;
+                border-radius: 8px;
+                background: transparent;
+                color: var(--xbot-muted, #64748b);
+                cursor: pointer;
+            }
+            .xbot-share-copy:hover,
+            .xbot-share-copy.is-copied {
+                background: rgba(var(--xbot-theme-rgb), 0.12);
+                color: var(--xbot-theme);
+            }
+            .xbot-share-block pre {
+                margin: 0;
+                white-space: pre-wrap;
+                word-break: break-all;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                font-size: 13px;
+                line-height: 1.45;
+                color: var(--xbot-ink, #0f172a);
+            }
+            .xbot-share-block code {
+                font-family: inherit;
+            }
 
             .xbot-typing {
                 padding: 2px 6px 6px;
@@ -7523,25 +7653,29 @@
 
         function copyPlainText(value) {
             var text = String(value || '');
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                return navigator.clipboard.writeText(text);
+            function legacyCopy() {
+                return new Promise(function (resolve, reject) {
+                    try {
+                        var area = document.createElement('textarea');
+                        area.value = text;
+                        area.setAttribute('readonly', '');
+                        area.style.position = 'fixed';
+                        area.style.left = '-9999px';
+                        document.body.appendChild(area);
+                        area.select();
+                        var ok = document.execCommand('copy');
+                        document.body.removeChild(area);
+                        if (!ok) reject(new Error('copy'));
+                        else resolve();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
             }
-            return new Promise(function (resolve, reject) {
-                try {
-                    var area = document.createElement('textarea');
-                    area.value = text;
-                    area.setAttribute('readonly', '');
-                    area.style.position = 'fixed';
-                    area.style.left = '-9999px';
-                    document.body.appendChild(area);
-                    area.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(area);
-                    resolve();
-                } catch (err) {
-                    reject(err);
-                }
-            });
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text).catch(legacyCopy);
+            }
+            return legacyCopy();
         }
 
         /** WhatsApp/Instagram (* _ ~) → Markdown para marked.parse. */
@@ -9749,8 +9883,13 @@
                 || String(text || '').indexOf('data-xbot="locate-grid"') !== -1
             );
             var linkCard = from === 'bot' ? (opts.linkCard || parseLinkOnlyMessage(text)) : null;
+            var bareLink = !!(linkCard && !String(linkCard.title || '').trim());
+            var shareValue = '';
+            if (from === 'bot' && opts.shareBlock) shareValue = String(text || '').trim();
+            else if (bareLink) shareValue = linkCard.url;
             if (hasCatalogGrid) row.classList.add('xbot-message-row--catalog');
-            if (linkCard) row.classList.add('xbot-message-row--link');
+            if (shareValue) row.classList.add('xbot-message-row--share');
+            else if (linkCard) row.classList.add('xbot-message-row--link');
             if (from === 'bot' && botAvatar) {
                 if (shouldShowBotAvatar()) {
                     row.appendChild(buildMsgAvatarEl(botAvatar));
@@ -9762,7 +9901,9 @@
             col.className = 'xbot-message-col';
             const msg = document.createElement('div');
             msg.className = `xbot-message ${from}`;
-            if (linkCard && !opts.domNode) {
+            if (shareValue && !opts.domNode) {
+                opts.domNode = buildShareBlock(shareValue);
+            } else if (linkCard && !opts.domNode) {
                 opts.domNode = buildLinkCardNode(linkCard);
             }
             if (opts.domNode) {
@@ -9994,10 +10135,13 @@
                 if (data && data.visitor_id && visitorId !== data.visitor_id && typeof localStorage !== 'undefined') {
                     try { localStorage.setItem('xbot_visitor_id', data.visitor_id); } catch (e) {}
                 }
-                if (data && data.reply) {
-                    var replyText = String(data.reply).trim();
+                if ((data && data.reply) || (data && data.clips && data.clips.length)) {
+                    var replyText = data.reply ? String(data.reply).trim() : '';
                     if (replyText) ingestPostedReply(data, replyText);
-                    else finishWaitingForBot();
+                    else {
+                        paintPostedClips(data);
+                        finishWaitingForBot();
+                    }
                 } else if (data && data.bot_reply_enabled) {
                     beginWaitingForBot();
                 } else {
@@ -10064,10 +10208,13 @@
                 applyComposerLockedFlag(data.composer_locked);
                 if (data.composer_locked) {
                     finishWaitingForBot();
-                } else if (data.reply) {
-                    var replyText = String(data.reply).trim();
+                } else if (data.reply || (data.clips && data.clips.length)) {
+                    var replyText = data.reply ? String(data.reply).trim() : '';
                     if (replyText) ingestPostedReply(data, replyText);
-                    else finishWaitingForBot();
+                    else {
+                        paintPostedClips(data);
+                        finishWaitingForBot();
+                    }
                 } else if (data.reaction) {
                     finishWaitingForBot();
                 } else if (data.bot_reply_enabled) {
@@ -10109,8 +10256,13 @@
                 var seed = data.reaction ? [{ from: 'assistant', emoji: data.reaction }] : [];
                 mountMessageReactions(userRow, data.message_id, seed, 'user');
             }
-            if (data && data.reply && String(data.reply).trim()) {
-                ingestPostedReply(data, String(data.reply).trim());
+            if ((data && data.reply && String(data.reply).trim()) || (data && data.clips && data.clips.length)) {
+                var uploadReply = data.reply ? String(data.reply).trim() : '';
+                if (uploadReply) ingestPostedReply(data, uploadReply);
+                else {
+                    paintPostedClips(data);
+                    finishWaitingForBot();
+                }
                 return;
             }
             if (data && data.reaction) {
