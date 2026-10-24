@@ -4922,6 +4922,11 @@
             .xbot-catalog-collapsed .xbot-catalog-footnote {
                 display: none !important;
             }
+            /* Saudação com cardápio: a grade fica no painel; a bolha só mostra o botão. */
+            .xbot-text [data-xbot="catalog-grid"][data-xbot-catalog-start="button"],
+            .xbot-text [data-xbot-catalog-start="button"] ~ [data-xbot-catalog-more] {
+                display: none;
+            }
             .xbot-catalog-reopen,
             .xbot-payment-reopen {
                 display: inline-flex;
@@ -10537,10 +10542,12 @@
                     });
                     window.addEventListener('resize', placeModal);
                     if (window.visualViewport) window.visualViewport.addEventListener('resize', placeModal);
-                    // Ao vivo o cardápio abre na hora. No histórico (atualizar a página)
-                    // a mensagem fica no botão, e o painel só abre no clique.
-                    setOpen(!!interactive);
-                    if (interactive) requestAnimationFrame(placeModal);
+                    // Ao vivo o cardápio abre na hora, salvo quando a mensagem pede
+                    // só o botão (saudação da etapa). No histórico o painel também
+                    // fica fechado até o clique.
+                    var startAsButton = grid.getAttribute('data-xbot-catalog-start') === 'button';
+                    setOpen(!!interactive && !startAsButton);
+                    if (interactive && !startAsButton) requestAnimationFrame(placeModal);
                 }
 
                 for (var c = 0; c < cards.length; c++) {
@@ -10914,6 +10921,7 @@
                     'controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt',
                     'role', 'tabindex', 'data-xbot', 'data-xbot-card', 'data-xbot-value',
                     'data-xbot-catalog-img', 'data-xbot-catalog-fallback', 'data-xbot-catalog-hidden', 'data-xbot-catalog-more',
+                    'data-xbot-catalog-start',
                     'data-xbot-section',
                     'data-xbot-page-size'
                 ]
