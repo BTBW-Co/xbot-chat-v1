@@ -4937,6 +4937,20 @@
                 background: var(--xbot-surface, #fff);
             }
             .xbot-catalog-modal[hidden] { display: none !important; }
+            /* No MOBA a conversa fica numa coluna central. O cardápio usa a mesma largura. */
+            .xbot-catalog-modal,
+            .xbot-catalog-detail {
+                left: 50%;
+                right: auto;
+                width: min(100%, 40rem);
+                transform: translateX(-50%);
+            }
+            @media screen and (min-width: 1024px) {
+                .xbot-catalog-modal,
+                .xbot-catalog-detail {
+                    width: min(100%, 48rem);
+                }
+            }
             .xbot-catalog-modal-bar {
                 display: flex;
                 align-items: center;
@@ -9588,6 +9602,12 @@
                 (function (img) {
                     if (!img.getAttribute('referrerpolicy')) img.setAttribute('referrerpolicy', 'no-referrer');
                     img.onerror = function () {
+                        var next = img.getAttribute('data-xbot-catalog-fallback');
+                        if (next && img.getAttribute('src') !== next) {
+                            img.removeAttribute('data-xbot-catalog-fallback');
+                            img.src = next;
+                            return;
+                        }
                         var ph = document.createElement('div');
                         ph.className = 'xbot-catalog-photo-fallback';
                         ph.textContent = 'Sem foto';
@@ -9988,6 +10008,15 @@
                         var big = document.createElement('img');
                         big.alt = img.getAttribute('alt') || '';
                         big.referrerPolicy = 'no-referrer';
+                        var fallbackSrc = img.getAttribute('data-xbot-catalog-fallback');
+                        if (fallbackSrc) big.setAttribute('data-xbot-catalog-fallback', fallbackSrc);
+                        big.onerror = function () {
+                            var next = big.getAttribute('data-xbot-catalog-fallback');
+                            if (next && big.getAttribute('src') !== next) {
+                                big.removeAttribute('data-xbot-catalog-fallback');
+                                big.src = next;
+                            }
+                        };
                         big.src = src;
                         photo.appendChild(big);
                     } else {
@@ -10691,7 +10720,7 @@
                 ADD_ATTR: [
                     'controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt',
                     'role', 'tabindex', 'data-xbot', 'data-xbot-card', 'data-xbot-value',
-                    'data-xbot-catalog-img', 'data-xbot-catalog-hidden', 'data-xbot-catalog-more',
+                    'data-xbot-catalog-img', 'data-xbot-catalog-fallback', 'data-xbot-catalog-hidden', 'data-xbot-catalog-more',
                     'data-xbot-section',
                     'data-xbot-page-size'
                 ]
