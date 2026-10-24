@@ -1453,6 +1453,10 @@
         function splitShareableText(text) {
             var raw = String(text || '').trim();
             if (!raw) return { prose: '', clips: [] };
+            // HTML (cardápio, foto, link) guarda a URL em src/href. Extrair o
+            // endereço esvazia o <img> — o card cai em "Sem foto" — e a URL
+            // escapada (&amp;) aparece como bolha de texto para copiar.
+            if (/<[a-z!][^>]*>/i.test(raw)) return { prose: raw, clips: [] };
             var re = /https?:\/\/[^\s<>\]\)"']+/gi;
             var clips = [];
             var match;
@@ -4552,34 +4556,30 @@
                 z-index: 8;
                 display: flex;
                 flex-direction: column;
-                justify-content: flex-end;
+                background: #fff;
             }
             .xbot-catalog-detail[hidden] { display: none !important; }
-            .xbot-catalog-detail-backdrop {
-                position: absolute;
-                inset: 0;
-                margin: 0;
-                padding: 0;
-                border: 0;
-                background: rgba(15, 23, 42, 0.45);
-                cursor: pointer;
-            }
             .xbot-catalog-detail-sheet {
                 position: relative;
                 z-index: 1;
                 display: flex;
                 flex-direction: column;
-                max-height: 88%;
-                overflow: auto;
-                background: var(--xbot-surface, #fff);
-                border-radius: 18px 18px 0 0;
-                box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.18);
-                padding-bottom: env(safe-area-inset-bottom, 0px);
+                height: 100%;
+                min-height: 0;
+                overflow: hidden;
+                background: #fff;
+            }
+            .xbot-catalog-detail-scroll {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
             }
             .xbot-catalog-detail-close {
                 position: absolute;
-                top: 10px;
-                right: 10px;
+                top: 12px;
+                left: 12px;
                 z-index: 2;
                 width: 36px;
                 height: 36px;
@@ -4587,20 +4587,20 @@
                 padding: 0;
                 border: 0;
                 border-radius: 999px;
-                background: #fff;
-                color: var(--xbot-ink);
-                font-size: 22px;
-                line-height: 1;
+                background: rgba(107, 114, 128, 0.92);
+                color: #fff;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
                 cursor: pointer;
-                box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
             }
             .xbot-catalog-detail-photo {
                 position: relative;
                 width: 100%;
-                aspect-ratio: 4 / 3;
-                max-height: min(46vh, 360px);
+                aspect-ratio: 1 / 1;
+                max-height: 42vh;
                 overflow: hidden;
-                background: #e2e8f0;
+                background: #f3f4f6;
             }
             .xbot-catalog-detail-photo img,
             .xbot-catalog-detail-fallback {
@@ -4611,11 +4611,11 @@
                 max-height: none;
                 margin: 0;
                 aspect-ratio: auto;
-                object-fit: cover;
+                object-fit: contain;
                 object-position: center;
                 display: block;
                 border-radius: 0;
-                background: #e2e8f0;
+                background: #f3f4f6;
             }
             .xbot-catalog-detail-fallback {
                 display: flex;
@@ -4624,43 +4624,135 @@
                 color: #64748b;
                 font-size: 14px;
             }
+            .xbot-catalog-detail-store {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: fit-content;
+                max-width: calc(100% - 32px);
+                margin: -22px 16px 0;
+                padding: 6px 12px 6px 6px;
+                position: relative;
+                z-index: 2;
+                background: #fff;
+                border-radius: 999px;
+                box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+            }
+            .xbot-catalog-detail-store[hidden] { display: none !important; }
+            .xbot-catalog-detail-store img,
+            .xbot-catalog-detail-store-mark {
+                width: 32px;
+                height: 32px;
+                border-radius: 999px;
+                object-fit: cover;
+                flex: 0 0 32px;
+                background: #111827;
+            }
+            .xbot-catalog-detail-store-mark {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                color: #fff;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            .xbot-catalog-detail-store strong {
+                font-size: 14px;
+                color: var(--xbot-ink);
+            }
             .xbot-catalog-detail-body {
-                padding: 14px 16px 18px;
+                margin-top: -8px;
+                padding: 20px 16px 24px;
+                border-radius: 16px 16px 0 0;
+                background: #fff;
             }
             .xbot-catalog-detail-title {
                 margin: 0;
-                font-size: 18px;
-                line-height: 1.3;
-                color: var(--xbot-ink);
-            }
-            .xbot-catalog-detail-price {
-                margin-top: 6px;
-                font-size: 16px;
-                font-weight: 700;
+                font-size: 22px;
+                line-height: 1.25;
+                font-weight: 750;
                 color: var(--xbot-ink);
             }
             .xbot-catalog-detail-desc {
-                margin: 10px 0 0;
-                font-size: 14px;
-                line-height: 1.45;
-                color: var(--xbot-muted);
+                margin: 4px 0 0;
+                font-size: 15px;
+                line-height: 1.4;
+                color: #64748b;
                 white-space: pre-wrap;
             }
             .xbot-catalog-detail-desc[hidden] { display: none !important; }
-            .xbot-catalog-detail .xbot-catalog-qty {
+            .xbot-catalog-detail-price {
                 margin-top: 16px;
-                justify-content: flex-start;
-                gap: 10px;
-            }
-            .xbot-catalog-detail .xbot-catalog-qty button {
-                width: 40px;
-                height: 40px;
-                border-radius: 10px;
-                font-size: 20px;
-            }
-            .xbot-catalog-detail .xbot-catalog-qty [data-qty-value] {
-                min-width: 1.6em;
                 font-size: 18px;
+                font-weight: 700;
+                color: var(--xbot-ink);
+            }
+            .xbot-catalog-detail-note-label {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                margin-top: 22px;
+                color: var(--xbot-ink);
+                font-size: 15px;
+                font-weight: 700;
+            }
+            .xbot-catalog-detail-note-title {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .xbot-catalog-detail-note-count {
+                color: #94a3b8;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            .xbot-catalog-detail-note {
+                box-sizing: border-box;
+                width: 100%;
+                min-height: 76px;
+                margin-top: 8px;
+                padding: 12px 14px;
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+                background: #fff;
+                color: var(--xbot-ink);
+                font: inherit;
+                font-size: 16px;
+                line-height: 1.4;
+                resize: none;
+            }
+            .xbot-catalog-detail-note::placeholder { color: #9ca3af; }
+            .xbot-catalog-detail-bar {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                flex-shrink: 0;
+                padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+                border-top: 1px solid #eef2f6;
+                background: #fff;
+            }
+            .xbot-catalog-detail-bar .xbot-catalog-qty {
+                margin: 0;
+                padding: 4px;
+                gap: 2px;
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+                justify-content: center;
+            }
+            .xbot-catalog-detail-bar .xbot-catalog-qty button {
+                width: 36px;
+                height: 36px;
+                border: 0;
+                background: transparent;
+                color: var(--xbot-theme, #ea1d2c);
+                font-size: 22px;
+            }
+            .xbot-catalog-detail-bar .xbot-catalog-qty [data-qty-value] {
+                min-width: 1.4em;
+                font-size: 16px;
+                font-weight: 700;
+                text-align: center;
             }
             .xbot-catalog-media > .xbot-catalog-select,
             .xbot-catalog-media > .xbot-catalog-qty {
@@ -4848,28 +4940,83 @@
             .xbot-catalog-modal-bar {
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
-                gap: 12px;
+                gap: 8px;
                 flex-shrink: 0;
-                padding: 12px 14px;
-                padding-top: calc(12px + env(safe-area-inset-top, 0px));
-                border-bottom: 1px solid var(--xbot-border);
+                padding: 8px 12px 6px;
+                padding-top: calc(8px + env(safe-area-inset-top, 0px));
             }
-            .xbot-catalog-modal-bar strong {
+            .xbot-catalog-modal-bar .xbot-catalog-modal-close {
+                flex: 0 0 auto;
+                width: 40px;
+                min-width: 40px;
+                height: 40px;
+                min-height: 40px;
+                padding: 0;
+                border: 0;
+                border-radius: 999px;
+                background: transparent;
+                color: var(--xbot-ink);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .xbot-catalog-modal-bar .xbot-catalog-search {
+                flex: 1 1 auto;
+                width: auto;
+                min-height: 40px;
+                margin: 0;
+                padding: 0 14px;
+                border: 0;
+                border-radius: 999px;
+                background: #f1f5f9;
                 font-size: 16px;
+            }
+            .xbot-catalog-sections {
+                display: flex;
+                gap: 18px;
+                flex-shrink: 0;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                padding: 0 16px;
+                border-bottom: 1px solid var(--xbot-border);
+                scrollbar-width: none;
+            }
+            .xbot-catalog-sections::-webkit-scrollbar { display: none; }
+            .xbot-catalog-section-chip {
+                flex: 0 0 auto;
+                margin: 0;
+                padding: 10px 0 8px;
+                border: 0;
+                border-bottom: 2px solid transparent;
+                background: transparent;
+                color: #64748b;
+                font: inherit;
+                font-size: 14px;
+                font-weight: 650;
+                white-space: nowrap;
+                cursor: pointer;
+            }
+            .xbot-catalog-section-chip.is-on {
+                color: var(--xbot-ink);
+                border-bottom-color: var(--xbot-ink);
+            }
+            .xbot-catalog-section {
+                margin: 18px 0 0;
+                padding: 0;
+                font-size: 18px;
+                font-weight: 750;
                 color: var(--xbot-ink);
             }
-            .xbot-catalog-modal-close {
-                border: 1px solid var(--xbot-border);
-                background: var(--xbot-surface, #fff);
-                color: var(--xbot-ink);
-            }
+            .xbot-catalog-section[hidden] { display: none !important; }
             .xbot-catalog-modal-scroll {
                 flex: 1 1 auto;
                 min-height: 0;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
                 padding: 8px 14px 12px;
+                container-type: inline-size;
+                container-name: xbotcatalogmodal;
             }
             .xbot-catalog-modal-scroll .xbot-catalog-search {
                 position: sticky;
@@ -4877,6 +5024,101 @@
                 z-index: 2;
                 margin-top: 0;
             }
+            /* Cardápio aberto: lista (texto à esquerda, foto à direita), não grade. */
+            .xbot-catalog-modal .xbot-catalog-grid,
+            .xbot-catalog-modal [data-xbot="catalog-grid"] {
+                display: flex !important;
+                flex-direction: column !important;
+                grid-template-columns: none !important;
+                gap: 0 !important;
+                margin: 0;
+            }
+            .xbot-catalog-modal .xbot-catalog-card,
+            .xbot-catalog-modal [data-xbot-card="catalog"] {
+                flex-direction: row;
+                align-items: center;
+                gap: 12px;
+                border: 0;
+                border-radius: 0;
+                border-bottom: 1px solid #eef2f6;
+                background: transparent;
+                padding: 14px 0;
+                box-shadow: none;
+            }
+            .xbot-catalog-modal .xbot-catalog-card--picked,
+            .xbot-catalog-modal [data-xbot-card="catalog"].xbot-catalog-card--picked {
+                border-color: transparent;
+                border-bottom-color: #eef2f6;
+                box-shadow: none;
+            }
+            .xbot-catalog-modal .xbot-catalog-body {
+                order: 0;
+                flex: 1 1 auto;
+                min-width: 0;
+                padding: 0;
+                gap: 2px;
+            }
+            .xbot-catalog-modal .xbot-catalog-media {
+                order: 1;
+                width: 96px;
+                height: 96px;
+                flex: 0 0 96px;
+                aspect-ratio: 1 / 1;
+                border-radius: 10px;
+                cursor: pointer;
+            }
+            .xbot-catalog-modal .xbot-catalog-title {
+                order: 1;
+                font-size: 15px;
+                font-weight: 700;
+                -webkit-line-clamp: 2;
+            }
+            .xbot-catalog-modal .xbot-catalog-desc {
+                order: 2;
+                display: -webkit-box !important;
+                margin-top: 2px;
+                font-size: 13px;
+                color: #64748b;
+                -webkit-line-clamp: 2;
+            }
+            .xbot-catalog-modal .xbot-catalog-price {
+                order: 3;
+                margin-top: 8px;
+                font-size: 15px;
+                font-weight: 700;
+            }
+            .xbot-catalog-modal .xbot-catalog-qty {
+                display: none;
+            }
+            .xbot-catalog-modal .xbot-catalog-card--picked .xbot-catalog-qty {
+                display: flex;
+                order: 4;
+                justify-content: flex-start;
+                gap: 8px;
+                padding-top: 8px;
+            }
+            .xbot-catalog-qty-badge {
+                display: none;
+            }
+            .xbot-catalog-modal .xbot-catalog-qty-badge {
+                display: inline-block;
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                z-index: 2;
+                min-width: 22px;
+                height: 22px;
+                padding: 0 6px;
+                border-radius: 999px;
+                background: var(--xbot-theme, #2563eb);
+                color: #fff;
+                font-size: 12px;
+                font-weight: 700;
+                line-height: 22px;
+                text-align: center;
+            }
+            .xbot-catalog-modal .xbot-catalog-qty-badge[hidden] { display: none !important; }
+            .xbot-catalog-modal .xbot-catalog-card { position: relative; }
             .xbot-catalog-modal-dock {
                 flex-shrink: 0;
                 padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
@@ -4893,6 +5135,55 @@
             }
             .xbot-catalog-modal-dock .xbot-catalog-close {
                 min-width: 9.5rem;
+                min-height: 44px;
+            }
+            .xbot-catalog-modal .xbot-catalog-qty button {
+                width: 32px;
+                height: 32px;
+            }
+            .xbot-catalog-detail-add {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                flex: 1 1 auto;
+                min-width: 0;
+                min-height: 48px;
+                margin: 0;
+                padding: 0 16px;
+                border: 0;
+                border-radius: 12px;
+                background: var(--xbot-theme, #ea1d2c);
+                color: #fff;
+                font: inherit;
+                font-weight: 700;
+                font-size: 16px;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .xbot-catalog-detail-add-price { font-weight: 700; }
+            .xbot-catalog-detail-add:disabled {
+                opacity: 0.45;
+                cursor: default;
+            }
+            @media screen and (max-width: 600px) {
+                .xbot-catalog-modal .xbot-catalog-qty button,
+                .xbot-catalog-detail-bar .xbot-catalog-qty button,
+                .xbot-catalog-detail-close {
+                    width: 44px;
+                    height: 44px;
+                    min-height: 44px;
+                }
+                .xbot-catalog-modal-bar .xbot-catalog-modal-close {
+                    width: 40px;
+                    min-width: 40px;
+                    height: 40px;
+                    min-height: 40px;
+                    padding: 0;
+                }
+                .xbot-catalog-detail-photo {
+                    max-height: 38vh;
+                }
             }
             .xbot-order-receipt {
                 display: flex;
@@ -9295,6 +9586,7 @@
             var imgs = root.querySelectorAll('.xbot-catalog-img, [data-xbot-catalog-img], .xbot-catalog-grid img, [data-xbot="catalog-grid"] img');
             for (var i = 0; i < imgs.length; i++) {
                 (function (img) {
+                    if (!img.getAttribute('referrerpolicy')) img.setAttribute('referrerpolicy', 'no-referrer');
                     img.onerror = function () {
                         var ph = document.createElement('div');
                         ph.className = 'xbot-catalog-photo-fallback';
@@ -9486,7 +9778,7 @@
 
             function mountCatalogBasket() {
                 root.classList.add('xbot-catalog-basket');
-                var detailHost = root.closest('.xbot-chatbox') || root;
+                var detailHost = chatbox || root.closest('.xbot-chatbox') || root;
                 var basketLocked = false;
                 function fold(text) {
                     return String(text || '')
@@ -9558,6 +9850,11 @@
                     }
                     if (label) label.textContent = String(next);
                     card.classList.toggle('xbot-catalog-card--picked', next > 0);
+                    var badge = card.querySelector(':scope > .xbot-catalog-qty-badge');
+                    if (badge) {
+                        badge.textContent = next > 0 ? String(next) : '';
+                        badge.hidden = next < 1;
+                    }
                     syncDetailQty(card);
                     renderDock();
                 }
@@ -9566,11 +9863,31 @@
                     sheet.hidden = true;
                     sheet._xbotCard = null;
                 }
+                function paintDetailBar() {
+                    var sheet = detailHost.querySelector(':scope > .xbot-catalog-detail');
+                    if (!sheet || sheet.hidden) return;
+                    var card = sheet._xbotCard;
+                    var draft = sheet._xbotDraft || 1;
+                    var label = sheet.querySelector('[data-qty-value]');
+                    if (label) label.textContent = String(draft);
+                    var nameEl = sheet.querySelector('.xbot-catalog-detail-add-label');
+                    var priceEl = sheet.querySelector('.xbot-catalog-detail-add-price');
+                    if (nameEl) nameEl.textContent = card && qtyOf(card) > 0 ? 'Atualizar' : 'Adicionar';
+                    if (priceEl) {
+                        var unit = card ? priceOf(card) : null;
+                        priceEl.textContent = unit == null ? '' : formatBRL(unit * draft);
+                        priceEl.hidden = unit == null;
+                    }
+                }
                 function syncDetailQty(card) {
                     var sheet = detailHost.querySelector(':scope > .xbot-catalog-detail');
                     if (!sheet || sheet.hidden || sheet._xbotCard !== card) return;
-                    var label = sheet.querySelector('[data-qty-value]');
-                    if (label) label.textContent = String(qtyOf(card));
+                    var qty = qtyOf(card);
+                    if (qty > 0) sheet._xbotDraft = qty;
+                    paintDetailBar();
+                }
+                function noteOf(card) {
+                    return String(card.getAttribute('data-xbot-note') || '').trim();
                 }
                 function ensureDetail() {
                     var sheet = detailHost.querySelector(':scope > .xbot-catalog-detail');
@@ -9579,36 +9896,68 @@
                     sheet.className = 'xbot-catalog-detail';
                     sheet.hidden = true;
                     sheet.innerHTML =
-                        '<button type="button" class="xbot-catalog-detail-backdrop" aria-label="Fechar"></button>' +
                         '<div class="xbot-catalog-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="xbot-catalog-detail-title">' +
-                        '<button type="button" class="xbot-catalog-detail-close" aria-label="Fechar">×</button>' +
-                        '<div class="xbot-catalog-detail-photo"></div>' +
+                        '<div class="xbot-catalog-detail-scroll">' +
+                        '<div class="xbot-catalog-detail-photo">' +
+                        '<button type="button" class="xbot-catalog-detail-close" aria-label="Voltar">' +
+                        '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' +
+                        '</button></div>' +
+                        '<div class="xbot-catalog-detail-store" hidden></div>' +
                         '<div class="xbot-catalog-detail-body">' +
                         '<h3 class="xbot-catalog-detail-title" id="xbot-catalog-detail-title"></h3>' +
-                        '<div class="xbot-catalog-detail-price"></div>' +
                         '<p class="xbot-catalog-detail-desc" hidden></p>' +
+                        '<div class="xbot-catalog-detail-price"></div>' +
+                        '<label class="xbot-catalog-detail-note-label">' +
+                        '<span class="xbot-catalog-detail-note-title">' +
+                        '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+                        'Alguma observação?</span>' +
+                        '<span class="xbot-catalog-detail-note-count">0/140</span>' +
+                        '</label>' +
+                        '<textarea class="xbot-catalog-detail-note" maxlength="140" rows="3" placeholder="Ex: tirar a cebola, maionese à parte etc."></textarea>' +
+                        '</div></div>' +
+                        '<div class="xbot-catalog-detail-bar">' +
                         '<div class="xbot-catalog-qty xbot-catalog-detail-qty">' +
                         '<button type="button" data-qty="minus" aria-label="Diminuir">−</button>' +
-                        '<span data-qty-value>0</span>' +
+                        '<span data-qty-value>1</span>' +
                         '<button type="button" data-qty="plus" aria-label="Aumentar">+</button>' +
-                        '</div></div></div>';
+                        '</div>' +
+                        '<button type="button" class="xbot-catalog-detail-add">' +
+                        '<span class="xbot-catalog-detail-add-label">Adicionar</span>' +
+                        '<span class="xbot-catalog-detail-add-price"></span>' +
+                        '</button></div></div>';
                     detailHost.appendChild(sheet);
-                    sheet.querySelector('.xbot-catalog-detail-backdrop').addEventListener('click', function () {
-                        closeDetail(sheet);
-                    });
                     sheet.querySelector('.xbot-catalog-detail-close').addEventListener('click', function (ev) {
                         ev.preventDefault();
                         ev.stopPropagation();
                         closeDetail(sheet);
                     });
+                    sheet.querySelector('.xbot-catalog-detail-note').addEventListener('input', function (ev) {
+                        var count = sheet.querySelector('.xbot-catalog-detail-note-count');
+                        if (count) count.textContent = String((ev.target.value || '').length) + '/140';
+                    });
                     sheet.querySelector('.xbot-catalog-detail-qty').addEventListener('click', function (ev) {
                         var btn = ev.target.closest ? ev.target.closest('button') : null;
-                        var openCard = sheet._xbotCard;
-                        if (!btn || !openCard || sessionEpisodeEnded) return;
+                        if (!btn || !sheet._xbotCard || sessionEpisodeEnded || basketLocked) return;
                         ev.preventDefault();
                         ev.stopPropagation();
                         var delta = btn.getAttribute('data-qty') === 'minus' ? -1 : 1;
-                        if (typeof openCard._xbotBump === 'function') openCard._xbotBump(delta);
+                        var next = (sheet._xbotDraft || 1) + delta;
+                        if (next < 1) next = 1;
+                        if (next > 99) next = 99;
+                        sheet._xbotDraft = next;
+                        paintDetailBar();
+                    });
+                    sheet.querySelector('.xbot-catalog-detail-add').addEventListener('click', function (ev) {
+                        var openCard = sheet._xbotCard;
+                        if (!openCard || sessionEpisodeEnded || basketLocked) return;
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        var noteEl = sheet.querySelector('.xbot-catalog-detail-note');
+                        var note = noteEl ? String(noteEl.value || '').trim().slice(0, 140) : '';
+                        if (note) openCard.setAttribute('data-xbot-note', note);
+                        else openCard.removeAttribute('data-xbot-note');
+                        setQty(openCard, sheet._xbotDraft || 1);
+                        closeDetail(sheet);
                     });
                     document.addEventListener('keydown', function (ev) {
                         if (ev.key === 'Escape' && sheet && !sheet.hidden) closeDetail(sheet);
@@ -9631,12 +9980,14 @@
                     var priceEl = card.querySelector('.xbot-catalog-price');
                     var descEl = card.querySelector('.xbot-catalog-desc');
                     var photo = sheet.querySelector('.xbot-catalog-detail-photo');
-                    photo.textContent = '';
+                    var stale = photo.querySelectorAll('img, .xbot-catalog-detail-fallback');
+                    for (var s = 0; s < stale.length; s++) stale[s].parentNode.removeChild(stale[s]);
                     var img = card.querySelector('.xbot-catalog-img');
                     var src = img && img.getAttribute('src');
                     if (src) {
                         var big = document.createElement('img');
                         big.alt = img.getAttribute('alt') || '';
+                        big.referrerPolicy = 'no-referrer';
                         big.src = src;
                         photo.appendChild(big);
                     } else {
@@ -9654,11 +10005,41 @@
                     var descOut = sheet.querySelector('.xbot-catalog-detail-desc');
                     descOut.textContent = descText;
                     descOut.hidden = !descText;
+                    var store = sheet.querySelector('.xbot-catalog-detail-store');
+                    var storeName = (typeof botName === 'string' && botName.trim()) ? botName.trim() : '';
+                    if (store) {
+                        store.textContent = '';
+                        store.hidden = !storeName;
+                        if (storeName) {
+                            var avatarUrl = (typeof botAvatar === 'string' && botAvatar.trim()) ? botAvatar.trim() : '';
+                            if (avatarUrl) {
+                                var avatar = document.createElement('img');
+                                avatar.alt = '';
+                                avatar.referrerPolicy = 'no-referrer';
+                                avatar.src = avatarUrl;
+                                store.appendChild(avatar);
+                            } else {
+                                var mark = document.createElement('span');
+                                mark.className = 'xbot-catalog-detail-store-mark';
+                                mark.textContent = storeName.charAt(0).toUpperCase();
+                                store.appendChild(mark);
+                            }
+                            var storeLabel = document.createElement('strong');
+                            storeLabel.textContent = storeName;
+                            store.appendChild(storeLabel);
+                        }
+                    }
+                    var savedNote = noteOf(card);
+                    var noteEl = sheet.querySelector('.xbot-catalog-detail-note');
+                    if (noteEl) noteEl.value = savedNote;
+                    var count = sheet.querySelector('.xbot-catalog-detail-note-count');
+                    if (count) count.textContent = savedNote.length + '/140';
+                    var scroll = sheet.querySelector('.xbot-catalog-detail-scroll');
+                    if (scroll) scroll.scrollTop = 0;
                     sheet._xbotCard = card;
+                    sheet._xbotDraft = qtyOf(card) > 0 ? qtyOf(card) : 1;
                     sheet.hidden = false;
-                    syncDetailQty(card);
-                    var closeBtn = sheet.querySelector('.xbot-catalog-detail-close');
-                    if (closeBtn && closeBtn.focus) closeBtn.focus();
+                    paintDetailBar();
                 }
                 function closeDetailIfMine() {
                     var sheet = detailHost.querySelector(':scope > .xbot-catalog-detail');
@@ -9676,11 +10057,14 @@
                             name: name,
                             qty: qty,
                             price: priceOf(cards[i]),
-                            priceLabel: priceLabelOf(cards[i])
+                            priceLabel: priceLabelOf(cards[i]),
+                            note: noteOf(cards[i])
                         });
                     }
                     return out;
                 }
+                var syncReopenLabel = function () {};
+                var reopenBtn = null;
                 function renderDock() {
                     var picked = lines();
                     var units = 0;
@@ -9696,19 +10080,44 @@
                         : (units === 1 ? '1 item' : units + ' itens');
                     totalEl.textContent = units > 0 && priced ? formatBRL(total) : '';
                     closeBtn.disabled = units < 1;
+                    syncReopenLabel();
                 }
+                var sectionFilter = '';
+                var menuFullyOpen = false;
                 function applySearch() {
                     var query = fold(search.value).trim();
                     var visible = 0;
                     for (var i = 0; i < cards.length; i++) {
                         var card = cards[i];
-                        var match = !query || fold(card.textContent).indexOf(query) !== -1;
-                        card.classList.toggle('xbot-catalog-card--nomatch', !!query && !match);
+                        var section = card.getAttribute('data-xbot-section') || '';
+                        var inSection = !sectionFilter || section === sectionFilter;
+                        var match = inSection && (!query || fold(card.textContent).indexOf(query) !== -1);
+                        card.classList.toggle('xbot-catalog-card--nomatch', !match);
                         card.classList.toggle('xbot-catalog-card--search-hit', !!query && match);
                         if (match) visible += 1;
                     }
-                    emptySearch.classList.toggle('is-on', !!query && visible === 0);
-                    if (moreBtn) moreBtn.style.display = query ? 'none' : '';
+                    if (grid) {
+                        var heads = grid.querySelectorAll('.xbot-catalog-section');
+                        for (var h = 0; h < heads.length; h++) {
+                            var title = heads[h].getAttribute('data-xbot-section-title') || '';
+                            var show = !sectionFilter || sectionFilter === title;
+                            if (show) {
+                                var sib = heads[h].nextElementSibling;
+                                var any = false;
+                                while (sib && !sib.classList.contains('xbot-catalog-section')) {
+                                    if (
+                                        sib.classList.contains('xbot-catalog-card') &&
+                                        !sib.classList.contains('xbot-catalog-card--nomatch')
+                                    ) any = true;
+                                    sib = sib.nextElementSibling;
+                                }
+                                show = any;
+                            }
+                            heads[h].hidden = !show;
+                        }
+                    }
+                    emptySearch.classList.toggle('is-on', (!!query || !!sectionFilter) && visible === 0);
+                    if (moreBtn) moreBtn.style.display = (query || sectionFilter || menuFullyOpen) ? 'none' : '';
                 }
                 function orderText() {
                     var picked = lines();
@@ -9718,6 +10127,7 @@
                     for (var i = 0; i < picked.length; i++) {
                         var row = picked[i].qty + 'x ' + picked[i].name;
                         if (picked[i].priceLabel) row += ' — ' + picked[i].priceLabel;
+                        if (picked[i].note) row += ' — obs.: ' + picked[i].note;
                         parts.push('- ' + row);
                         if (picked[i].price == null) priced = false;
                         else total += picked[i].price * picked[i].qty;
@@ -9741,6 +10151,174 @@
                         moreBtn.classList.add('is-disabled');
                         moreBtn.setAttribute('aria-disabled', 'true');
                     }
+                    var addBtns = detailHost.querySelectorAll('.xbot-catalog-detail-add');
+                    for (var a = 0; a < addBtns.length; a++) addBtns[a].disabled = true;
+                    if (reopenBtn) {
+                        reopenBtn.disabled = true;
+                        reopenBtn.hidden = false;
+                        reopenBtn.textContent = 'Pedido enviado';
+                    }
+                }
+                function arrangeMenuSections(modal, scroll) {
+                    if (!grid) return;
+                    var names = [];
+                    for (var i = 0; i < cards.length; i++) {
+                        var section = (cards[i].getAttribute('data-xbot-section') || '').trim();
+                        if (section && names.indexOf(section) === -1) names.push(section);
+                    }
+                    if (!names.length) return;
+                    var loose = [];
+                    var buckets = {};
+                    for (var n = 0; n < names.length; n++) buckets[names[n]] = [];
+                    for (var j = 0; j < cards.length; j++) {
+                        var key = (cards[j].getAttribute('data-xbot-section') || '').trim();
+                        if (buckets[key]) buckets[key].push(cards[j]);
+                        else loose.push(cards[j]);
+                    }
+                    var frag = document.createDocumentFragment();
+                    for (var u = 0; u < loose.length; u++) frag.appendChild(loose[u]);
+                    for (var t = 0; t < names.length; t++) {
+                        var list = buckets[names[t]];
+                        if (!list.length) continue;
+                        var heading = document.createElement('h2');
+                        heading.className = 'xbot-catalog-section';
+                        heading.setAttribute('data-xbot-section-title', names[t]);
+                        heading.textContent = names[t];
+                        frag.appendChild(heading);
+                        for (var k = 0; k < list.length; k++) frag.appendChild(list[k]);
+                    }
+                    grid.appendChild(frag);
+                    if (names.length < 2) return;
+                    var chips = document.createElement('div');
+                    chips.className = 'xbot-catalog-sections';
+                    chips.setAttribute('role', 'tablist');
+                    function addChip(label, value) {
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'xbot-catalog-section-chip' + (value ? '' : ' is-on');
+                        btn.setAttribute('role', 'tab');
+                        btn.setAttribute('aria-selected', value ? 'false' : 'true');
+                        btn.textContent = label;
+                        btn.addEventListener('click', function (ev) {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            sectionFilter = value;
+                            var all = chips.querySelectorAll('.xbot-catalog-section-chip');
+                            for (var c = 0; c < all.length; c++) {
+                                var on = all[c] === btn;
+                                all[c].classList.toggle('is-on', on);
+                                all[c].setAttribute('aria-selected', on ? 'true' : 'false');
+                            }
+                            applySearch();
+                            if (scroll) scroll.scrollTop = 0;
+                        });
+                        chips.appendChild(btn);
+                    }
+                    addChip('Tudo', '');
+                    for (var chip = 0; chip < names.length; chip++) addChip(names[chip], names[chip]);
+                    modal.insertBefore(chips, scroll);
+                }
+                function mountCatalogOrderModal() {
+                    // A grade é montada antes da bolha entrar no chat, então
+                    // root.closest ainda não alcança o painel. O chatbox já existe.
+                    var host = chatbox || root.closest('.xbot-chatbox');
+                    if (!host || !grid) return;
+                    var previous = host.querySelectorAll(':scope > .xbot-catalog-modal');
+                    for (var p = 0; p < previous.length; p++) {
+                        if (typeof previous[p]._xbotSetOpen === 'function') previous[p]._xbotSetOpen(false);
+                    }
+                    var modal = document.createElement('div');
+                    modal.className = 'xbot-catalog-modal xbot-catalog-basket';
+                    modal.innerHTML =
+                        '<div class="xbot-catalog-modal-bar">' +
+                        '<button type="button" class="xbot-catalog-modal-close" aria-label="Voltar">' +
+                        '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>' +
+                        '</button>' +
+                        '</div>' +
+                        '<div class="xbot-catalog-modal-scroll"></div>' +
+                        '<div class="xbot-catalog-modal-dock"></div>';
+                    var scroll = modal.querySelector('.xbot-catalog-modal-scroll');
+                    var dockSlot = modal.querySelector('.xbot-catalog-modal-dock');
+                    var bar = modal.querySelector('.xbot-catalog-modal-bar');
+                    var storeName = (typeof botName === 'string' && botName.trim()) ? botName.trim() : 'cardápio';
+                    search.placeholder = 'Buscar em ' + storeName;
+                    search.setAttribute('aria-label', 'Buscar em ' + storeName);
+                    bar.appendChild(search);
+                    menuFullyOpen = true;
+                    for (var revealed = 0; revealed < cards.length; revealed++) {
+                        cards[revealed].classList.remove('xbot-catalog-card--hidden');
+                        cards[revealed].removeAttribute('data-xbot-catalog-hidden');
+                    }
+                    if (moreBtn) moreBtn.style.display = 'none';
+                    arrangeMenuSections(modal, scroll);
+                    scroll.appendChild(emptySearch);
+                    scroll.appendChild(grid);
+                    if (moreBtn) scroll.appendChild(moreBtn);
+                    dockSlot.appendChild(dock);
+                    host.appendChild(modal);
+                    root._xbotModalScroll = scroll;
+
+                    reopenBtn = document.createElement('button');
+                    reopenBtn.type = 'button';
+                    reopenBtn.className = 'xbot-catalog-reopen';
+                    reopenBtn.hidden = true;
+                    reopenBtn.textContent = 'Abrir cardápio';
+                    root.appendChild(reopenBtn);
+
+                    function placeModal() {
+                        if (!modal.isConnected) return;
+                        var top = 0;
+                        var header = host.querySelector(':scope > .xbot-header');
+                        var notice = host.querySelector(':scope > .xbot-inactivity-bar');
+                        if (header) top += header.offsetHeight;
+                        if (notice && !notice.hidden) top += notice.offsetHeight;
+                        modal.style.top = top + 'px';
+                    }
+                    function setOpen(on) {
+                        if (root._xbotCatalogSent) on = false;
+                        modal.hidden = !on;
+                        if (reopenBtn && !root._xbotCatalogSent) reopenBtn.hidden = !!on;
+                        var stillOpen = host.querySelector(':scope > .xbot-catalog-modal:not([hidden])');
+                        host.classList.toggle('xbot-catalog-open', !!stillOpen);
+                        if (!on) closeDetailIfMine();
+                        else placeModal();
+                    }
+                    modal._xbotSetOpen = setOpen;
+                    root._xbotCloseCatalog = function () { setOpen(false); };
+                    syncReopenLabel = function () {
+                        if (!reopenBtn || root._xbotCatalogSent) return;
+                        var picked = lines();
+                        var units = 0;
+                        var total = 0;
+                        var priced = true;
+                        for (var i = 0; i < picked.length; i++) {
+                            units += picked[i].qty;
+                            if (picked[i].price == null) priced = false;
+                            else total += picked[i].price * picked[i].qty;
+                        }
+                        if (!units) {
+                            reopenBtn.textContent = 'Abrir cardápio';
+                            return;
+                        }
+                        var label = units === 1 ? '1 item no pedido' : (units + ' itens no pedido');
+                        if (priced) label += ' · ' + formatBRL(total);
+                        reopenBtn.textContent = label;
+                    };
+                    modal.querySelector('.xbot-catalog-modal-close').addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        setOpen(false);
+                    });
+                    reopenBtn.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        if (root._xbotCatalogSent || sessionEpisodeEnded) return;
+                        setOpen(true);
+                    });
+                    window.addEventListener('resize', placeModal);
+                    if (window.visualViewport) window.visualViewport.addEventListener('resize', placeModal);
+                    setOpen(true);
+                    requestAnimationFrame(placeModal);
                 }
 
                 for (var c = 0; c < cards.length; c++) {
@@ -9758,7 +10336,12 @@
                         var body = card.querySelector('.xbot-catalog-body') || card;
                         body.appendChild(qty);
                         card.setAttribute('data-xbot-qty', '0');
+                        var badge = document.createElement('span');
+                        badge.className = 'xbot-catalog-qty-badge';
+                        badge.hidden = true;
+                        card.appendChild(badge);
                         card._xbotBump = function (delta) { setQty(card, qtyOf(card) + delta); };
+                        card._xbotOpen = function () { openDetail(card); };
                         qty.addEventListener('click', function (ev) {
                             var btn = ev.target.closest ? ev.target.closest('button') : null;
                             if (!btn || sessionEpisodeEnded) return;
@@ -9800,8 +10383,10 @@
                     var text = orderText();
                     root._xbotCatalogSent = true;
                     lockBasket();
+                    if (typeof root._xbotCloseCatalog === 'function') root._xbotCloseCatalog();
                     sendUserText(text);
                 });
+                mountCatalogOrderModal();
                 renderDock();
 
                 root._xbotRevealBasket = function () {
@@ -9843,7 +10428,8 @@
                     }
                     ev.preventDefault();
                     ev.stopPropagation();
-                    if (typeof card._xbotBump === 'function') card._xbotBump(1);
+                    if (typeof card._xbotOpen === 'function') card._xbotOpen();
+                    else if (typeof card._xbotBump === 'function') card._xbotBump(1);
                     return;
                 }
                 ev.preventDefault();
@@ -10106,6 +10692,7 @@
                     'controls', 'playsinline', 'preload', 'src', 'style', 'loading', 'alt',
                     'role', 'tabindex', 'data-xbot', 'data-xbot-card', 'data-xbot-value',
                     'data-xbot-catalog-img', 'data-xbot-catalog-hidden', 'data-xbot-catalog-more',
+                    'data-xbot-section',
                     'data-xbot-page-size'
                 ]
             });
