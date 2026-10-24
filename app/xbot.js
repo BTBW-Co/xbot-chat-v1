@@ -9759,7 +9759,7 @@
                 grid &&
                 (grid.getAttribute('data-xbot') === 'locate-grid' || grid.classList.contains('xbot-locate-grid'))
             );
-            var basketMode = interactive && !isLocateGrid;
+            var basketMode = !isLocateGrid && !sessionEpisodeEnded;
 
             function disableAll() {
                 for (var j = 0; j < cards.length; j++) {
@@ -9800,6 +9800,18 @@
                 root.classList.add('xbot-catalog-basket');
                 var detailHost = chatbox || root.closest('.xbot-chatbox') || root;
                 var basketLocked = false;
+                function catalogChromeTop() {
+                    var top = 0;
+                    var header = detailHost.querySelector(':scope > .xbot-header');
+                    var notice = detailHost.querySelector(':scope > .xbot-inactivity-bar');
+                    if (header) top = header.offsetTop + header.offsetHeight;
+                    if (notice && !notice.hidden) top = Math.max(top, notice.offsetTop + notice.offsetHeight);
+                    return top + 12;
+                }
+                function placeCatalogPanel(panel) {
+                    if (!panel || !panel.isConnected) return;
+                    panel.style.top = catalogChromeTop() + 'px';
+                }
                 function fold(text) {
                     return String(text || '')
                         .toLowerCase()
@@ -10068,6 +10080,7 @@
                     sheet._xbotCard = card;
                     sheet._xbotDraft = qtyOf(card) > 0 ? qtyOf(card) : 1;
                     sheet.hidden = false;
+                    placeCatalogPanel(sheet);
                     paintDetailBar();
                 }
                 function closeDetailIfMine() {
@@ -10295,13 +10308,9 @@
                     root.appendChild(reopenBtn);
 
                     function placeModal() {
-                        if (!modal.isConnected) return;
-                        var top = 0;
-                        var header = host.querySelector(':scope > .xbot-header');
-                        var notice = host.querySelector(':scope > .xbot-inactivity-bar');
-                        if (header) top += header.offsetHeight;
-                        if (notice && !notice.hidden) top += notice.offsetHeight;
-                        modal.style.top = top + 'px';
+                        placeCatalogPanel(modal);
+                        var sheet = detailHost.querySelector(':scope > .xbot-catalog-detail');
+                        if (sheet && !sheet.hidden) placeCatalogPanel(sheet);
                     }
                     function setOpen(on) {
                         if (root._xbotCatalogSent) on = false;
@@ -10346,8 +10355,10 @@
                     });
                     window.addEventListener('resize', placeModal);
                     if (window.visualViewport) window.visualViewport.addEventListener('resize', placeModal);
-                    setOpen(true);
-                    requestAnimationFrame(placeModal);
+                    // Ao vivo o cardápio abre na hora. No histórico (atualizar a página)
+                    // a mensagem fica no botão, e o painel só abre no clique.
+                    setOpen(!!interactive);
+                    if (interactive) requestAnimationFrame(placeModal);
                 }
 
                 for (var c = 0; c < cards.length; c++) {
@@ -10446,7 +10457,7 @@
                         '.xbot-catalog-card, [data-xbot-card="catalog"], .xbot-locate-card, [data-xbot-card="locate"]'
                     )
                     : null;
-                if (!card || !catalogSurface.contains(card) || !interactive) return;
+                if (!card || !catalogSurface.contains(card) || (!interactive && !basketMode)) return;
                 if (basketMode) {
                     if (card.classList.contains('xbot-catalog-card--pending')) return;
                     if (
@@ -10498,7 +10509,7 @@
                         cards[k].setAttribute('tabindex', '0');
                     }
                 }
-                if (!interactive || sessionEpisodeEnded) {
+                if ((!interactive && !basketMode) || sessionEpisodeEnded) {
                     cards[k].classList.add('is-disabled');
                     cards[k].setAttribute('aria-disabled', 'true');
                     cards[k].removeAttribute('tabindex');
