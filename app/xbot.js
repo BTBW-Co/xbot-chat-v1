@@ -1518,8 +1518,12 @@
                 pendingDownloadStatus = false;
                 finishWaitingForBot();
             }
+            var paymentUi = false;
+            for (var pi = 0; pi < blocks.length; pi++) {
+                if (isPaymentUiBlock(blocks[pi])) { paymentUi = true; break; }
+            }
             // history/hydrate: instantâneo; opening/sse/poll/post: typewriter
-            var animateTyping = source !== 'history' && source !== 'hydrate' && !linkOnly;
+            var animateTyping = source !== 'history' && source !== 'hydrate' && !linkOnly && !paymentUi;
             if (isMedia) {
                 appendBotMedia(ct, mediaUrl, body, meta, {
                     countUnread: source !== 'history' && source !== 'opening',
@@ -1590,6 +1594,10 @@
                 }
             }
             return out;
+        }
+
+        function isPaymentUiBlock(block) {
+            return !!(block && block.kind === 'checkout');
         }
 
         function isCheckoutEmbedUrl(url) {
@@ -4888,7 +4896,8 @@
             }
             .xbot-catalog-close,
             .xbot-catalog-modal-close,
-            .xbot-catalog-reopen {
+            .xbot-catalog-reopen,
+            .xbot-payment-reopen {
                 min-height: 44px;
                 padding: 0 14px;
                 border-radius: 12px;
@@ -4913,7 +4922,8 @@
             .xbot-catalog-collapsed .xbot-catalog-footnote {
                 display: none !important;
             }
-            .xbot-catalog-reopen {
+            .xbot-catalog-reopen,
+            .xbot-payment-reopen {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -4922,9 +4932,12 @@
                 background: var(--xbot-surface, #fff);
                 color: var(--xbot-ink);
             }
-            .xbot-catalog-reopen[hidden] { display: none !important; }
+            .xbot-catalog-reopen[hidden],
+            .xbot-payment-reopen[hidden] { display: none !important; }
             .xbot-chatbox.xbot-catalog-open .xbot-compose,
-            .xbot-chatbox.xbot-catalog-open .xbot-footer {
+            .xbot-chatbox.xbot-catalog-open .xbot-footer,
+            .xbot-chatbox.xbot-payment-open .xbot-compose,
+            .xbot-chatbox.xbot-payment-open .xbot-footer {
                 display: none !important;
             }
             .xbot-catalog-modal {
@@ -4937,9 +4950,20 @@
                 background: var(--xbot-surface, #fff);
             }
             .xbot-catalog-modal[hidden] { display: none !important; }
-            /* No MOBA a conversa fica numa coluna central. O cardápio usa a mesma largura. */
+            .xbot-payment-modal {
+                position: absolute;
+                inset: 0;
+                z-index: 7;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                background: var(--xbot-surface, #fff);
+            }
+            .xbot-payment-modal[hidden] { display: none !important; }
+            /* No MOBA a conversa fica numa coluna central. Cardápio e pagamento usam a mesma largura. */
             .xbot-catalog-modal,
-            .xbot-catalog-detail {
+            .xbot-catalog-detail,
+            .xbot-payment-modal {
                 left: 50%;
                 right: auto;
                 width: min(100%, 40rem);
@@ -4947,9 +4971,68 @@
             }
             @media screen and (min-width: 1024px) {
                 .xbot-catalog-modal,
-                .xbot-catalog-detail {
+                .xbot-catalog-detail,
+                .xbot-payment-modal {
                     width: min(100%, 48rem);
                 }
+            }
+            .xbot-payment-bar {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-shrink: 0;
+                padding: 8px 12px 6px;
+            }
+            .xbot-payment-close {
+                flex: 0 0 auto;
+                width: 40px;
+                min-width: 40px;
+                height: 40px;
+                min-height: 40px;
+                margin: 0;
+                padding: 0;
+                border: 0;
+                border-radius: 999px;
+                background: transparent;
+                color: var(--xbot-ink);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+            }
+            .xbot-payment-title {
+                font-size: 16px;
+                font-weight: 700;
+                color: var(--xbot-ink);
+            }
+            .xbot-payment-scroll {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
+                padding: 8px 16px 24px;
+            }
+            .xbot-payment-modal .xbot-ui-blocks {
+                width: min(100%, 32rem);
+                margin-left: auto;
+                margin-right: auto;
+            }
+            .xbot-payment-modal.is-checkout .xbot-payment-scroll {
+                display: flex;
+                flex-direction: column;
+                padding: 0;
+                overflow: hidden;
+            }
+            .xbot-payment-modal.is-checkout .xbot-ui-blocks,
+            .xbot-payment-modal.is-checkout .xbot-checkout-frame {
+                width: 100%;
+                max-width: none;
+                flex: 1 1 auto;
+                min-height: 0;
+                height: 100%;
+                margin: 0;
+                border-radius: 0;
             }
             .xbot-catalog-modal-bar {
                 display: flex;
@@ -7488,7 +7571,11 @@
 
         function scrollMessagesToBottom(opts) {
             opts = opts || {};
-            if (chatbox && chatbox.classList.contains('xbot-catalog-open') && !opts.force) return;
+            if (
+                chatbox &&
+                (chatbox.classList.contains('xbot-catalog-open') || chatbox.classList.contains('xbot-payment-open')) &&
+                !opts.force
+            ) return;
             var el = document.getElementById('xbot-messages');
             if (!el) return;
             if (opts.force) {
@@ -9272,10 +9359,105 @@
             return form;
         }
 
+        function mountPaymentSheet(messageHost, blocks, interactive) {
+            if (!messageHost || !blocks || !blocks.length) return;
+            if (messageHost.getAttribute('data-xbot-payment') === '1') return;
+            var host = chatbox || (messageHost.closest && messageHost.closest('.xbot-chatbox'));
+            if (!host) return;
+            messageHost.setAttribute('data-xbot-payment', '1');
+            var checkout = false;
+            var title = 'Pagamento';
+            var reopenLabel = 'Abrir pagamento';
+            for (var i = 0; i < blocks.length; i++) {
+                if (blocks[i] && blocks[i].kind === 'checkout') {
+                    checkout = true;
+                    if (blocks[i].method === 'credit_card') {
+                        title = 'Cartão';
+                        reopenLabel = 'Abrir pagamento com cartão';
+                    } else {
+                        title = 'PIX';
+                        reopenLabel = 'Abrir pagamento PIX';
+                    }
+                    break;
+                }
+            }
+            var previous = host.querySelectorAll(':scope > .xbot-payment-modal');
+            for (var p = 0; p < previous.length; p++) {
+                if (typeof previous[p]._xbotSetOpen === 'function') previous[p]._xbotSetOpen(false);
+            }
+            var reopen = document.createElement('button');
+            reopen.type = 'button';
+            reopen.className = 'xbot-payment-reopen';
+            reopen.textContent = reopenLabel;
+            messageHost.appendChild(reopen);
+            var modal = document.createElement('div');
+            modal.className = 'xbot-payment-modal' + (checkout ? ' is-checkout' : '');
+            modal.innerHTML =
+                '<div class="xbot-payment-bar">' +
+                '<button type="button" class="xbot-payment-close" aria-label="Voltar">' +
+                '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>' +
+                '</button>' +
+                '<strong class="xbot-payment-title"></strong>' +
+                '</div>' +
+                '<div class="xbot-payment-scroll"></div>';
+            modal.querySelector('.xbot-payment-title').textContent = title;
+            var scroll = modal.querySelector('.xbot-payment-scroll');
+            host.appendChild(modal);
+            mountStructuredBlocks(scroll, blocks, { interactive: interactive, paymentInline: true });
+            function place() {
+                if (!modal.isConnected) return;
+                var top = 0;
+                var header = host.querySelector(':scope > .xbot-header');
+                var notice = host.querySelector(':scope > .xbot-inactivity-bar');
+                if (header) top = header.offsetTop + header.offsetHeight;
+                if (notice && !notice.hidden) top = Math.max(top, notice.offsetTop + notice.offsetHeight);
+                top += 12;
+                modal.style.top = top + 'px';
+            }
+            function setOpen(on) {
+                modal.hidden = !on;
+                reopen.hidden = !!on;
+                var still = host.querySelector(':scope > .xbot-payment-modal:not([hidden])');
+                host.classList.toggle('xbot-payment-open', !!still);
+                if (!on) return;
+                var catalogs = host.querySelectorAll(':scope > .xbot-catalog-modal');
+                for (var c = 0; c < catalogs.length; c++) {
+                    if (typeof catalogs[c]._xbotSetOpen === 'function') catalogs[c]._xbotSetOpen(false);
+                }
+                place();
+            }
+            modal._xbotSetOpen = setOpen;
+            modal.querySelector('.xbot-payment-close').addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                setOpen(false);
+            });
+            reopen.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                setOpen(true);
+            });
+            window.addEventListener('resize', place);
+            if (window.visualViewport) window.visualViewport.addEventListener('resize', place);
+            setOpen(!!interactive);
+            if (interactive) requestAnimationFrame(place);
+        }
+
         function mountStructuredBlocks(host, blocks, opts) {
             if (!host || !Array.isArray(blocks) || !blocks.length) return;
-            if (host.querySelector && host.querySelector('.xbot-ui-blocks')) return;
             var interactive = !opts || opts.interactive !== false;
+            if (!opts || opts.paymentInline !== true) {
+                var pay = [];
+                var rest = [];
+                for (var bi = 0; bi < blocks.length; bi++) {
+                    if (isPaymentUiBlock(blocks[bi])) pay.push(blocks[bi]);
+                    else rest.push(blocks[bi]);
+                }
+                if (pay.length) mountPaymentSheet(host, pay, interactive);
+                blocks = rest;
+                if (!blocks.length) return;
+            }
+            if (host.querySelector && host.querySelector('.xbot-ui-blocks')) return;
             var wrap = document.createElement('div');
             wrap.className = 'xbot-ui-blocks';
             wrap.setAttribute('data-xbot', 'ui-blocks');
