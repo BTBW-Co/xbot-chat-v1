@@ -65,6 +65,8 @@
     
     window.__xbotConfig = null;
     window.__xbotAppearanceReady = true;
+    /** 404 em widget-config: canal inexistente ou inativo — não monta o launcher. */
+    window.__xbotChannelUnavailable = false;
 
     function fetchWidgetAppearance() {
       const cfg = window.__xbotConfig || {};
@@ -84,9 +86,16 @@
         headers['X-XBot-Widget-Version'] = XBOT_WIDGET_VERSION;
       }
       return fetch(url, { headers })
-        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (res) {
+          if (res && res.status === 404) {
+            window.__xbotChannelUnavailable = true;
+            widgetLog('canal inexistente ou inativo — widget não exibido no site');
+            return null;
+          }
+          return res.ok ? res.json() : null;
+        })
         .then(function (data) {
-          if (!data) return;
+          if (window.__xbotChannelUnavailable || !data) return;
           window.__xbotConfig = applyXbotAssetDefaults(
             Object.assign({}, cfg, {
               themeColor: data.theme_color || cfg.themeColor,
@@ -149,6 +158,7 @@
       window.__xbotConfig = applyXbotAssetDefaults(
         Object.assign({}, config, { channelId: normalizedChannelId || rawChannelId })
       );
+      window.__xbotChannelUnavailable = false;
       window.__xbotAppearanceReady = false;
       widgetLog(
         'init',
@@ -281,6 +291,10 @@
 
     function waitForLibs(callback) {
       const interval = setInterval(() => {
+        if (window.__xbotChannelUnavailable) {
+          clearInterval(interval);
+          return;
+        }
         if (window.marked && window.DOMPurify && window.__xbotConfig && window.__xbotAppearanceReady) {
           clearInterval(interval);
           callback();
