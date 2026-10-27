@@ -1285,9 +1285,22 @@
                     es: 'O envía un mensaje…',
                     zh: '或发送一条消息…',
                 },
+                dismiss: { pt: 'Fechar', en: 'Dismiss', es: 'Cerrar', zh: '关闭' },
             };
             var row = table[key] || {};
             return row[lang] || row.en || row.pt || '';
+        }
+
+        function xbotPrivacyHtml() {
+            var lang = xbotUiLang();
+            var href = 'https://xbotone.com/privacy';
+            var link = function (label) {
+                return '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+            };
+            if (lang === 'pt') return 'Ao conversar, você concorda com a nossa ' + link('política de privacidade') + '.';
+            if (lang === 'es') return 'Al chatear, aceptas nuestra ' + link('política de privacidad') + '.';
+            if (lang === 'zh') return '开始聊天即表示你同意我们的' + link('隐私政策') + '。';
+            return 'By chatting, you agree to our ' + link('privacy policy') + '.';
         }
 
         function stopThinkingStatusCycle(el) {
@@ -2770,13 +2783,20 @@
         }
         var rgb = hexToRgb(themeColor);
         var themeRgb = rgb.r + ', ' + rgb.g + ', ' + rgb.b;
+        var themeLuma = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+        var onTheme = themeLuma > 0.72 ? '#111111' : '#ffffff';
+        const WIDGET_WIDTH = 406;
+        const WIDGET_HEIGHT = 765;
+        const WIDGET_LAUNCHER_GAP = 14;
+        const windowBottom = offset + LAUNCHER_SIZE + WIDGET_LAUNCHER_GAP;
 
         var XBOT_ICONS = {
             close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
             send: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.468 6.058C.265 4.988 1.02 3 2.63 3H21.28c1.343 0 2.185 1.45 1.52 2.617l-9.146 16.038c-.789 1.383-2.864 1.08-3.225-.47l-2.062-8.853 6.608-3.677a.75.75 0 0 0-.729-1.31L7.276 11.22z"/></svg>',
             attach: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>',
             copy: '<svg class="xbot-copy-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
-            mic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>',
+            mic: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 7V11C17 13.7614 14.7614 16 12 16C9.23858 16 7 13.7614 7 11V7C7 4.23858 9.23858 2 12 2C14.7614 2 17 4.23858 17 7Z"/><path d="M20 11C20 15.4183 16.4183 19 12 19M12 19C7.58172 19 4 15.4183 4 11M12 19V22M12 22H14.5M12 22H9.5"/></svg>',
+            mark: '<svg class="xbot-powered-mark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2.2 2.4h11.6c.7 0 1.2.5 1.2 1.2v6.2c0 .7-.5 1.2-1.2 1.2H8.4L5.2 14v-2.9H2.2c-.7 0-1.2-.6-1.2-1.2V3.6c0-.7.5-1.2 1.2-1.2z"/></svg>',
             stop: '<span class="xbot-rec-dot" aria-hidden="true"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
             spinner: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 019 9"/></svg>',
             play: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
@@ -3505,7 +3525,8 @@
             .xbot-root {
                 --xbot-theme: ${themeColor};
                 --xbot-theme-rgb: ${themeRgb};
-                --xbot-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                --xbot-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                --xbot-on-theme: ${onTheme};
                 --xbot-ink: #0f172a;
                 --xbot-text: #334155;
                 --xbot-muted: #64748b;
@@ -3711,15 +3732,19 @@
 
             .xbot-chatbox {
                 position: fixed;
-                bottom: ${offset}px;
+                bottom: ${windowBottom}px;
                 ${posH}: ${sideOffset}px;
-                width: min(23.75rem, calc(100vw - 2rem));
-                height: min(30rem, calc(100vh - ${offset + 24}px));
-                height: min(30rem, calc(100dvh - ${offset + 24}px));
+                width: min(${WIDGET_WIDTH}px, calc(100vw - 32px));
+                height: min(${WIDGET_HEIGHT}px, calc(100vh - ${windowBottom + 16}px));
+                height: min(${WIDGET_HEIGHT}px, calc(100dvh - ${windowBottom + 16}px));
                 background: var(--xbot-surface);
-                border-radius: var(--xbot-radius-xl);
-                border: 1px solid rgba(15, 23, 42, 0.06);
-                box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.03);
+                border-radius: 20px;
+                border: none;
+                box-shadow:
+                    rgba(0, 0, 0, 0.04) 0px 10px 23px 0px,
+                    rgba(0, 0, 0, 0.03) 0px 42px 42px 0px,
+                    rgba(0, 0, 0, 0.02) 0px 94px 56px 0px,
+                    rgba(0, 0, 0, 0.01) 0px 166px 67px 0px;
                 display: none;
                 flex-direction: column;
                 overflow: hidden;
@@ -3741,52 +3766,57 @@
             }
 
             .xbot-header {
-                background: var(--xbot-header-bg);
-                color: var(--xbot-ink);
-                padding: 12px 14px;
-                padding-top: calc(12px + env(safe-area-inset-top, 0px));
+                background:
+                    linear-gradient(0deg, rgba(255, 255, 255, 0) 29.14%, rgba(255, 255, 255, 0.16) 100%),
+                    var(--xbot-theme);
+                color: var(--xbot-on-theme);
+                height: 64px;
+                min-height: 64px;
+                padding: 0 20px;
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                border-bottom: 1px solid var(--xbot-border);
-                box-shadow: inset 0 -2px 0 rgba(var(--xbot-theme-rgb), 0.85);
+                border-bottom: none;
+                box-shadow: none;
                 flex-shrink: 0;
             }
             .xbot-header img {
-                width: 36px;
-                height: 36px;
-                border-radius: 50%;
+                width: 32px;
+                height: 32px;
+                border-radius: 9999px;
                 object-fit: cover;
-                border: 1px solid var(--xbot-border);
+                border: none;
             }
             .xbot-header-text { flex: 1; min-width: 0; }
             .xbot-header-name {
                 display: block;
                 font-size: 14px;
                 font-weight: 600;
-                letter-spacing: -0.02em;
-                color: var(--xbot-ink);
+                letter-spacing: -0.025em;
+                color: var(--xbot-on-theme);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
             .xbot-header-minimize {
-                width: 40px;
-                height: 40px;
+                width: 36px;
+                height: 36px;
                 flex-shrink: 0;
                 border: none;
-                border-radius: 50%;
-                background: var(--xbot-field);
-                color: var(--xbot-muted);
+                border-radius: 8px;
+                background: transparent;
+                color: var(--xbot-on-theme);
+                opacity: 0.64;
                 cursor: pointer;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: background 0.15s, color 0.15s;
+                transition: opacity 0.15s;
             }
             .xbot-header-minimize:hover {
-                background: #e2e8f0;
-                color: var(--xbot-ink);
+                background: transparent;
+                color: var(--xbot-on-theme);
+                opacity: 1;
             }
             .xbot-header-minimize:focus-visible {
                 outline: 2px solid rgba(var(--xbot-theme-rgb), 0.55);
@@ -3832,11 +3862,11 @@
 
             .xbot-messages {
                 flex: 1;
-                padding: 16px;
+                padding: 20px 20px 8px;
                 overflow-y: auto;
                 display: flex;
                 flex-direction: column;
-                gap: 10px;
+                gap: 12px;
                 scroll-behavior: auto;
                 background: var(--xbot-surface);
                 position: relative;
@@ -3863,7 +3893,7 @@
                 gap: 8px;
                 max-width: 92%;
             }
-            .xbot-message-row.bot { align-self: flex-start; max-width: 92%; }
+            .xbot-message-row.bot { align-self: flex-start; max-width: min(100%, 65ch); }
             .xbot-message-row.bot.xbot-message-row--catalog {
                 max-width: 100%;
                 width: 100%;
@@ -3891,12 +3921,11 @@
                 container-type: inline-size;
                 container-name: xbotcatalog;
             }
-            .xbot-message-row.user { align-self: flex-end; max-width: 85%; }
-            .xbot-message-row.bot.xbot-message-row--no-avatar {
-                padding-left: 36px;
-            }
+            .xbot-message-row.user { align-self: flex-end; max-width: min(85%, 65ch); }
+            .xbot-message-row.bot.xbot-message-row--no-avatar,
             .xbot-message-row.user.xbot-message-row--no-avatar {
-                padding-right: 36px;
+                padding-left: 0;
+                padding-right: 0;
             }
             .xbot-reaction-bar {
                 display: flex;
@@ -3945,7 +3974,7 @@
                 background: #fff;
             }
             .xbot-msg-avatar-wrap {
-                display: inline-flex;
+                display: none;
                 width: 28px;
                 height: 28px;
                 border-radius: 50%;
@@ -3974,10 +4003,11 @@
             .xbot-message-row.bot .xbot-message-col { align-items: flex-start; }
 
             .xbot-message {
-                padding: 10px 14px;
-                border-radius: var(--xbot-radius-lg);
-                font-size: 14px;
-                line-height: 1.45;
+                padding: 12px 16px;
+                border-radius: 20px;
+                font-size: 16px;
+                line-height: 1.5;
+                letter-spacing: -0.025em;
                 opacity: 0;
                 transform: translateY(8px);
                 animation: xbotFadeIn 0.28s ease forwards;
@@ -4211,17 +4241,29 @@
                 }
             }
             .xbot-message.user {
-                background: rgba(var(--xbot-theme-rgb), 0.12);
-                border: 1px solid rgba(var(--xbot-theme-rgb), 0.22);
-                color: var(--xbot-ink);
+                background: var(--xbot-theme);
+                border: none;
+                color: var(--xbot-on-theme);
+                border-radius: 20px;
                 border-bottom-right-radius: 4px;
             }
+            .xbot-message.user a {
+                color: var(--xbot-on-theme);
+                border-bottom-color: currentColor;
+            }
             .xbot-message.bot {
-                background: var(--xbot-surface);
-                border: 1px solid var(--xbot-border);
-                color: var(--xbot-text);
-                border-bottom-left-radius: 4px;
-                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+                background: #f4f4f5;
+                border: none;
+                color: #171717;
+                border-radius: 20px;
+                box-shadow: none;
+            }
+            .xbot-message.bot:has(.xbot-choice-list),
+            .xbot-message.bot:has(.xbot-catalog-grid),
+            .xbot-message.bot:has([data-xbot="catalog-grid"]),
+            .xbot-message-row--catalog .xbot-message.bot {
+                background: transparent;
+                padding: 0;
             }
             .xbot-message-content {
                 display: flex;
@@ -4941,8 +4983,10 @@
             .xbot-payment-reopen[hidden] { display: none !important; }
             .xbot-chatbox.xbot-catalog-open .xbot-compose,
             .xbot-chatbox.xbot-catalog-open .xbot-footer,
+            .xbot-chatbox.xbot-catalog-open .xbot-privacy,
             .xbot-chatbox.xbot-payment-open .xbot-compose,
-            .xbot-chatbox.xbot-payment-open .xbot-footer {
+            .xbot-chatbox.xbot-payment-open .xbot-footer,
+            .xbot-chatbox.xbot-payment-open .xbot-privacy {
                 display: none !important;
             }
             .xbot-catalog-modal {
@@ -6930,6 +6974,12 @@
                 background: var(--xbot-theme);
                 filter: none;
             }
+            #xbot-send:disabled {
+                opacity: 1;
+                cursor: default;
+                background: var(--xbot-theme);
+                color: var(--xbot-on-theme);
+            }
             .xbot-time {
                 font-size: 10px;
                 line-height: 1;
@@ -7088,35 +7138,38 @@
             }
 
             .xbot-compose {
-                padding: 10px 14px 8px;
+                position: relative;
+                z-index: 2;
+                padding: 0 16px 16px;
                 border-top: none;
-                background: var(--xbot-surface);
+                background: transparent;
                 flex-shrink: 0;
             }
             .xbot-compose-inner {
                 display: flex;
                 align-items: flex-end;
-                gap: 4px;
+                gap: 0;
                 background: var(--xbot-surface);
-                border: none;
+                border: 1.5px solid #171717;
                 border-radius: 24px;
-                padding: 4px 6px 4px 10px;
-                box-shadow: var(--xbot-compose-shadow);
-                transition: box-shadow 0.15s;
+                padding: 8px;
+                box-shadow: rgba(0, 0, 0, 0.04) 0px 4px 16px 0px, rgba(0, 0, 0, 0.02) 0px 2px 2px 0px;
+                transition: border-color 0.15s, box-shadow 0.15s;
             }
             .xbot-compose-inner:focus-within {
-                box-shadow: var(--xbot-compose-shadow), 0 0 0 3px rgba(var(--xbot-theme-rgb), 0.12);
+                border-color: #0a0a0a;
+                box-shadow: rgba(0, 0, 0, 0.06) 0px 4px 16px 0px, rgba(0, 0, 0, 0.03) 0px 2px 2px 0px;
             }
             .xbot-compose-tools {
                 display: flex;
                 flex-direction: row;
-                align-items: center;
-                gap: 0;
+                align-items: flex-end;
+                gap: 4px;
                 flex-shrink: 0;
             }
             .xbot-icon-btn {
-                width: 36px;
-                height: 36px;
+                width: 32px;
+                height: 32px;
                 border: none;
                 border-radius: 50%;
                 background: transparent;
@@ -7251,9 +7304,9 @@
                 flex: 1;
                 border: none;
                 background: transparent;
-                padding: 10px 4px;
-                font-size: 16px;
-                line-height: 1.45;
+                padding: 6px 8px;
+                font-size: 14px;
+                line-height: 20px;
                 resize: none;
                 max-height: 120px;
                 outline: none;
@@ -7262,8 +7315,8 @@
             }
             .xbot-input::placeholder { color: var(--xbot-subtle); }
             .xbot-send {
-                width: 36px;
-                height: 36px;
+                width: 32px;
+                height: 32px;
                 flex-shrink: 0;
                 border: none;
                 border-radius: 50%;
@@ -7303,27 +7356,88 @@
             }
 
             .xbot-footer {
-                padding: 6px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+                margin: 2px 0 16px;
+                padding: 0;
                 text-align: center;
-                background: var(--xbot-surface);
+                background: transparent;
                 flex-shrink: 0;
             }
             .xbot-powered {
-                font-size: 11px;
-                color: var(--xbot-subtle);
-                letter-spacing: 0.02em;
-                cursor: default;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+                font-size: 12px;
+                line-height: 16px;
+                color: #a3a3a3;
+                letter-spacing: 0;
             }
+            .xbot-powered-mark {
+                display: block;
+                height: 16px;
+                width: auto;
+                color: #a3a3a3;
+            }
+            .xbot-powered a {
+                margin-left: 4px;
+                color: #737373;
+                text-decoration: none;
+            }
+            .xbot-powered a:hover { color: #404040; }
             .xbot-powered strong {
-                color: var(--xbot-ink);
-                font-weight: 600;
+                color: inherit;
+                font-weight: 500;
             }
+            .xbot-privacy {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                align-items: flex-start;
+                gap: 8px;
+                margin: 0 16px -16px;
+                padding: 12px 12px 28px;
+                border-radius: 8px 8px 0 0;
+                background: #f4f4f5;
+                color: #525252;
+                font-size: 12px;
+                font-weight: 500;
+                line-height: 20px;
+                flex-shrink: 0;
+            }
+            .xbot-privacy[hidden] { display: none !important; }
+            .xbot-privacy-copy {
+                flex: 1;
+                min-width: 0;
+                max-height: 15vh;
+                overflow: auto;
+            }
+            .xbot-privacy-copy p { margin: 0; }
+            .xbot-privacy a {
+                color: #171717;
+                text-decoration: underline;
+                cursor: pointer;
+            }
+            .xbot-privacy-dismiss {
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 16px;
+                height: 20px;
+                margin: 0;
+                padding: 0;
+                border: none;
+                background: transparent;
+                color: #a3a3a3;
+                cursor: pointer;
+            }
+            .xbot-privacy-dismiss:hover { color: #737373; }
 
             @media screen and (min-width: 601px) and (max-width: 900px) {
                 .xbot-chatbox {
-                    width: min(27.5rem, calc(100vw - 2rem));
-                    height: min(32rem, calc(100vh - ${offset + 24}px));
-                    height: min(32rem, calc(100dvh - ${offset + 24}px));
+                    width: min(${WIDGET_WIDTH}px, calc(100vw - 32px));
+                    height: min(${WIDGET_HEIGHT}px, calc(100vh - ${windowBottom + 16}px));
+                    height: min(${WIDGET_HEIGHT}px, calc(100dvh - ${windowBottom + 16}px));
                 }
             }
 
@@ -7350,22 +7464,25 @@
                     border-radius: 0 !important;
                     z-index: 2147483001;
                 }
-                .xbot-chatbox.xbot-keyboard-open .xbot-footer {
+                .xbot-chatbox.xbot-keyboard-open .xbot-footer,
+                .xbot-chatbox.xbot-keyboard-open .xbot-privacy {
                     display: none !important;
                 }
                 .xbot-chatbox.xbot-keyboard-open .xbot-compose {
                     padding-bottom: 8px;
                 }
                 .xbot-header {
-                    padding: 12px 14px;
-                    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+                    height: auto;
+                    min-height: calc(64px + env(safe-area-inset-top, 0px));
+                    padding: 0 16px;
+                    padding-top: env(safe-area-inset-top, 0px);
                 }
                 .xbot-header-minimize {
                     width: 44px;
                     height: 44px;
                 }
                 .xbot-messages {
-                    padding: 14px 12px;
+                    padding: 20px 20px 8px;
                 }
                 .xbot-message-row.user { max-width: 88%; }
                 .xbot-media-wrap {
@@ -7376,22 +7493,19 @@
                     width: min(78vw, 16rem);
                 }
                 .xbot-compose {
-                    padding: 10px 12px 8px;
+                    padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
                 }
-                .xbot-icon-btn {
-                    width: 44px;
-                    height: 44px;
-                }
+                .xbot-icon-btn,
                 .xbot-send {
-                    width: 44px;
-                    height: 44px;
+                    width: 36px;
+                    height: 36px;
                 }
                 .xbot-input {
                     font-size: 16px;
-                    padding: 12px 4px;
+                    padding: 8px;
                 }
                 .xbot-footer {
-                    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+                    padding-bottom: 8px;
                 }
                 .xbot-launcher {
                     bottom: calc(${mobileLauncherOffset}px + env(safe-area-inset-bottom, 0px));
@@ -7412,6 +7526,14 @@
                 }
             }
         `;
+
+        if (!document.getElementById('xbot-font-inter')) {
+            var interFont = document.createElement('link');
+            interFont.id = 'xbot-font-inter';
+            interFont.rel = 'stylesheet';
+            interFont.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
+            document.head.appendChild(interFont);
+        }
 
         document.head.appendChild(style);
     
@@ -7461,6 +7583,14 @@
             '<div class="xbot-empty" id="xbot-empty">' +
             '<p class="xbot-empty-text" id="xbot-empty-text"></p>' +
             '</div></div>' +
+            '<div class="xbot-footer">' +
+            '<p class="xbot-powered">' + XBOT_ICONS.mark +
+            '<a href="https://xbotone.com" target="_blank" rel="noopener noreferrer">Powered by <strong>XBot</strong></a></p></div>' +
+            '<div class="xbot-privacy" id="xbot-privacy" role="status">' +
+            '<div class="xbot-privacy-copy"><p>' + xbotPrivacyHtml() + '</p></div>' +
+            '<button type="button" class="xbot-privacy-dismiss" id="xbot-privacy-dismiss" aria-label="' + xbotChrome('dismiss') + '">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+            '</button></div>' +
             '<div class="xbot-compose">' +
             '<div class="xbot-compose-inner">' +
             '<div class="xbot-compose-tools">' +
@@ -7468,19 +7598,32 @@
             XBOT_ICONS.attach +
             '</button></div>' +
             '<textarea class="xbot-input" id="xbot-input" placeholder="' + xbotChrome('placeholder') + '" rows="1"></textarea>' +
-            '<button type="button" class="xbot-send" id="xbot-audio" aria-label="' + xbotChrome('record') + '">' +
+            '<div class="xbot-compose-tools">' +
+            '<button type="button" class="xbot-icon-btn" id="xbot-audio" aria-label="' + xbotChrome('record') + '">' +
             XBOT_ICONS.mic +
             '</button>' +
-            '<button type="button" class="xbot-send" id="xbot-send" hidden aria-label="' + xbotChrome('send') + '" tabindex="-1">' +
+            '<button type="button" class="xbot-send" id="xbot-send" disabled aria-label="' + xbotChrome('send') + '" tabindex="-1">' +
             XBOT_ICONS.send +
-            '</button></div></div>' +
-            '<div class="xbot-footer">' +
-            '<span class="xbot-powered">Powered by <strong>XBot</strong></span></div>';
+            '</button></div></div></div>';
 
         chatbox.querySelector('.xbot-header-name').textContent = botName;
 
         document.body.appendChild(launcher);
         document.body.appendChild(chatbox);
+
+        var privacyEl = chatbox.querySelector('#xbot-privacy');
+        var privacyDismiss = chatbox.querySelector('#xbot-privacy-dismiss');
+        try {
+            if (privacyEl && localStorage.getItem('xbot-widget-privacy-dismissed') === '1') {
+                privacyEl.hidden = true;
+            }
+        } catch (e) { /* storage indisponível */ }
+        if (privacyEl && privacyDismiss) {
+            privacyDismiss.addEventListener('click', function () {
+                privacyEl.hidden = true;
+                try { localStorage.setItem('xbot-widget-privacy-dismissed', '1'); } catch (e) { /* ignore */ }
+            });
+        }
 
         var savedViewportContent = null;
 
@@ -7967,12 +8110,18 @@
             var audioEl = document.getElementById('xbot-audio');
             var sendEl = document.getElementById('xbot-send');
             var inputEl = document.getElementById('xbot-input');
+            var compose = document.querySelector('.xbot-compose');
             if (!audioEl || !sendEl || !inputEl) return;
             var holdAudio = audioEl.classList.contains('is-recording') || audioEl.classList.contains('is-uploading');
-            var hasChars = String(inputEl.value || '').length > 0;
-            var showAudio = holdAudio || !hasChars;
-            audioEl.hidden = !showAudio;
-            sendEl.hidden = !hasChars || holdAudio;
+            var hasChars = String(inputEl.value || '').trim().length > 0;
+            var locked = !!(compose && (
+                compose.classList.contains('is-presentation-locked') ||
+                compose.classList.contains('is-choice-locked') ||
+                compose.classList.contains('is-sleep-locked')
+            ));
+            audioEl.hidden = false;
+            sendEl.hidden = !!holdAudio;
+            if (!locked) sendEl.disabled = !hasChars || holdAudio;
         }
 
         input.addEventListener('input', function () {
